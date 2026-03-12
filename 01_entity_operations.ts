@@ -49,13 +49,12 @@ printOps(deleteOps, '.', 'change_space_delete_ops.txt');
 // ─── 4. Merge Entities ──────────────────────────────────────────────────────
 // Works for both same-space and cross-space — just provide each secondary's space.
 // Automatically identifies property entities and updates property references in any spaces that you have membership or editor status
-/*
+
 const ops = await mergeEntities({
-  mainEntityId: 'REPLACE_WITH_MAIN_ENTITY_ID',
-  mainSpaceId:  'REPLACE_WITH_MAIN_SPACE_ID',
+  mainEntityId: 'fce8953f56af4e42a869725ed0b024f0',
+  mainSpaceId:  'a19c345ab9866679b001d7d2138d88a1',
   secondaries: [
-    { entityId: 'REPLACE_WITH_SECONDARY_1', spaceId: 'REPLACE_WITH_SPACE_A' },
-    { entityId: 'REPLACE_WITH_SECONDARY_2', spaceId: 'REPLACE_WITH_SPACE_B' },
+    { entityId: '1ff591322d574671934a7b662e3cf66a', spaceId: 'b5a31f8182b042437ede0f84ee02f104' },
   ],
   //dryRun: true,
   //appendRelations: true; //Setting append relations to true appends extra relations from the secondary entity (in same space) to the main entity

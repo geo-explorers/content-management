@@ -83,20 +83,31 @@ interface ValueRecord {
 
 interface RelationRecord {
   id: string;
+  entityId: string;
   typeId: string;
   toEntityId: string;
   toEntity: { name: string } | null;
   typeEntity: { name: string } | null;
   toSpaceId: string | null;
+  fromSpaceId: string | null;
+  toVersionId: string | null;
+  fromVersionId: string | null;
+  position: string | null;
 }
 
 interface BacklinkRecord {
   id: string;
+  entityId: string;
   typeId: string;
   fromEntityId: string;
   fromEntity: { name: string } | null;
   typeEntity: { name: string } | null;
   spaceId: string;
+  toSpaceId: string | null;
+  fromSpaceId: string | null;
+  toVersionId: string | null;
+  fromVersionId: string | null;
+  position: string | null;
 }
 
 interface EntityData {
@@ -121,11 +132,16 @@ async function queryEntityData(entityId: string, spaceId: string): Promise<Entit
       spaceId: { is: "${spaceId}" }
     }) {
       id
+      entityId
       typeId
       toEntityId
       toEntity { name }
       typeEntity { name }
       toSpaceId
+      fromSpaceId
+      toVersionId
+      fromVersionId
+      position
     }
   }`);
 
@@ -142,11 +158,17 @@ async function queryBacklinks(entityId: string): Promise<BacklinkRecord[]> {
       toEntityId: { is: "${entityId}" }
     }) {
       id
+      entityId
       typeId
       fromEntityId
       fromEntity { name }
       typeEntity { name }
       spaceId
+      toSpaceId
+      fromSpaceId
+      toVersionId
+      fromVersionId
+      position
     }
   }`);
   return data.relations ?? [];
@@ -160,11 +182,17 @@ async function queryBacklinksInSpace(entityId: string, spaceId: string): Promise
       spaceId: { is: "${spaceId}" }
     }) {
       id
+      entityId
       typeId
       fromEntityId
       fromEntity { name }
       typeEntity { name }
       spaceId
+      toSpaceId
+      fromSpaceId
+      toVersionId
+      fromVersionId
+      position
     }
   }`);
   return data.relations ?? [];
@@ -174,6 +202,17 @@ async function queryBacklinksInSpace(entityId: string, spaceId: string): Promise
 async function hasBacklinks(entityId: string): Promise<boolean> {
   const backlinks = await queryBacklinks(entityId);
   return backlinks.length > 0;
+}
+
+/** Extract optional relation fields (spaces, versions, position) for passing to Graph.createRelation. */
+function optionalRelationFields(r: Pick<RelationRecord | BacklinkRecord, 'toSpaceId' | 'fromSpaceId' | 'toVersionId' | 'fromVersionId' | 'position'>) {
+  return {
+    ...(r.toSpaceId ? { toSpace: r.toSpaceId } : {}),
+    ...(r.fromSpaceId ? { fromSpace: r.fromSpaceId } : {}),
+    ...(r.toVersionId ? { toVersion: r.toVersionId } : {}),
+    ...(r.fromVersionId ? { fromVersion: r.fromVersionId } : {}),
+    ...(r.position ? { position: r.position } : {}),
+  };
 }
 
 // ─── Delete Entity ──────────────────────────────────────────────────────────
@@ -305,12 +344,14 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
     }
   }
 
-  // Recreate all outgoing relations from the new entity
+  // Recreate all outgoing relations from the new entity, reusing the same relation entity
   for (const r of relations) {
     const result = Graph.createRelation({
       fromEntity: newEntityId,
       toEntity: r.toEntityId,
       type: r.typeId,
+      entityId: r.entityId,
+      ...optionalRelationFields(r),
     });
     ops.push(...result.ops);
   }
@@ -327,6 +368,8 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
       fromEntity: bl.fromEntityId,
       toEntity: newEntityId,
       type: bl.typeId,
+      entityId: bl.entityId,
+      ...optionalRelationFields(bl),
     });
     ops.push(...createResult.ops);
   }
@@ -387,12 +430,14 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
     }
   }
 
-  // Recreate relations in the new space
+  // Recreate relations in the new space, reusing the same relation entity
   for (const r of relations) {
     const result = Graph.createRelation({
       fromEntity: entityId,
       toEntity: r.toEntityId,
       type: r.typeId,
+      entityId: r.entityId,
+      ...optionalRelationFields(r),
     });
     createOps.push(...result.ops);
   }
@@ -413,6 +458,8 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
       fromEntity: bl.fromEntityId,
       toEntity: entityId,
       type: bl.typeId,
+      entityId: bl.entityId,
+      ...optionalRelationFields(bl),
     });
     createOps.push(...createResult.ops);
   }
@@ -533,6 +580,8 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
               fromEntity: mainEntityId,
               toEntity: r.toEntityId,
               type: r.typeId,
+              entityId: r.entityId,
+              ...optionalRelationFields(r),
             });
             allOps.push(...result.ops);
             mainRelationKeys.add(key);
@@ -555,6 +604,8 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
             fromEntity: bl.fromEntityId,
             toEntity: mainEntityId,
             type: bl.typeId,
+            entityId: bl.entityId,
+            ...optionalRelationFields(bl),
           });
           allOps.push(...createResult.ops);
         }
@@ -711,17 +762,10 @@ function convertValue(value: any, fromType: string, toType: string): any {
     return intVal;
   }
 
-  // Numeric → text
-  if (['integer', 'float', 'boolean'].includes(fromType) && toType === 'text') {
+  // Any type → text
+  if (toType === 'text') {
     const textVal = String(value);
-    console.log(`      Converting ${fromType} → text: ${value} → "${textVal}"`);
-    return textVal;
-  }
-
-  // date/datetime/time → text
-  if (['date', 'datetime', 'time'].includes(fromType) && toType === 'text') {
-    const textVal = String(value);
-    console.log(`      Converting ${fromType} → text: "${value}" → "${textVal}"`);
+    console.log(`      Converting ${fromType} → text: ${JSON.stringify(value)} → "${textVal}"`);
     return textVal;
   }
 
@@ -915,8 +959,14 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
         spaceId: { is: "${spaceId}" }
       }) {
         id
+        entityId
         fromEntityId
         toEntityId
+        toSpaceId
+        fromSpaceId
+        toVersionId
+        fromVersionId
+        position
       }
     }`);
 
@@ -932,6 +982,8 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
           fromEntity: r.fromEntityId,
           toEntity: r.toEntityId,
           type: newPropertyId,
+          entityId: r.entityId,
+          ...optionalRelationFields(r),
         });
         ops.push(...createResult.ops);
       }
