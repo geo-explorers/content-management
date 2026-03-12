@@ -2,6 +2,27 @@ import { Graph, type Op, type PropertyValueParam } from '@geoprotocol/geo-sdk';
 import { gql, publishOps } from './functions.ts';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './constants.ts';
 
+// ─── Ops Batching ──────────────────────────────────────────────────────────
+
+/** Map of spaceId → accumulated ops. Pass to functions to defer publishing. */
+export type OpsBatch = Map<string, Op[]>;
+
+/** Either publish ops immediately or accumulate them into a batch. */
+async function publishOrBatch(
+  ops: Op[],
+  editName: string,
+  spaceId: string,
+  opsBatch?: OpsBatch,
+): Promise<void> {
+  if (opsBatch) {
+    const existing = opsBatch.get(spaceId) ?? [];
+    existing.push(...ops);
+    opsBatch.set(spaceId, existing);
+  } else {
+    await publishOps(ops, editName, spaceId);
+  }
+}
+
 // ─── Value Conversion Helper ────────────────────────────────────────────────
 
 /** GQL value fields fragment — include in any query that fetches values for copying. */
@@ -228,6 +249,8 @@ export interface DeleteEntityOptions {
   skipOrphanCleanup?: boolean;
   /** Entity IDs to exclude from orphan detection (e.g. a new entity that still references them) */
   excludeFromOrphanCheck?: string[];
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
 }
 
 /**
@@ -239,7 +262,7 @@ export interface DeleteEntityOptions {
  * Returns the generated ops (and publishes them unless dryRun is set).
  */
 export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> {
-  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [] } = options;
+  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch } = options;
 
   console.log(`\n[deleteEntity] Querying entity ${entityId} in space ${spaceId}...`);
   const { values, relations } = await queryEntityData(entityId, spaceId);
@@ -297,7 +320,7 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
   console.log(`  Generated ${ops.length} delete ops.`);
 
   if (!dryRun) {
-    await publishOps(ops, `Delete entity ${entityId}`, spaceId);
+    await publishOrBatch(ops, `Delete entity ${entityId}`, spaceId, opsBatch);
   }
 
   return ops;
@@ -314,6 +337,8 @@ export interface ChangeEntityIdOptions {
   spaceId: string;
   /** If true, generate ops but don't publish */
   dryRun?: boolean;
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
 }
 
 /**
@@ -321,7 +346,7 @@ export interface ChangeEntityIdOptions {
  * updating all backlinks to point to the new ID, then deleting the old entity.
  */
 export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op[]> {
-  const { oldEntityId, newEntityId, spaceId, dryRun = false } = options;
+  const { oldEntityId, newEntityId, spaceId, dryRun = false, opsBatch } = options;
 
   console.log(`\n[changeEntityId] ${oldEntityId} → ${newEntityId} in space ${spaceId}`);
   const { values, relations } = await queryEntityData(oldEntityId, spaceId);
@@ -386,7 +411,7 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
   console.log(`  Generated ${ops.length} total ops for changeEntityId.`);
 
   if (!dryRun) {
-    await publishOps(ops, `Move entity ${oldEntityId} → ${newEntityId}`, spaceId);
+    await publishOrBatch(ops, `Move entity ${oldEntityId} → ${newEntityId}`, spaceId, opsBatch);
   }
 
   return ops;
@@ -403,6 +428,8 @@ export interface ChangeSpaceOptions {
   toSpaceId: string;
   /** If true, generate ops but don't publish */
   dryRun?: boolean;
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
 }
 
 /**
@@ -411,7 +438,7 @@ export interface ChangeSpaceOptions {
  * Backlinks with toSpaceId set to the old space are updated to point to the new space.
  */
 export async function changeSpace(options: ChangeSpaceOptions): Promise<{ createOps: Op[]; deleteOps: Op[] }> {
-  const { entityId, fromSpaceId, toSpaceId, dryRun = false } = options;
+  const { entityId, fromSpaceId, toSpaceId, dryRun = false, opsBatch } = options;
 
   console.log(`\n[changeSpace] Entity ${entityId}: space ${fromSpaceId} → ${toSpaceId}`);
   const { values, relations } = await queryEntityData(entityId, fromSpaceId);
@@ -476,8 +503,8 @@ export async function changeSpace(options: ChangeSpaceOptions): Promise<{ create
 
   if (!dryRun) {
     // Publish creation in the new space first, then deletion in the old space
-    await publishOps(createOps, `Move entity ${entityId} to space ${toSpaceId}`, toSpaceId);
-    await publishOps(deleteOps, `Remove entity ${entityId} from space ${fromSpaceId}`, fromSpaceId);
+    await publishOrBatch(createOps, `Move entity ${entityId} to space ${toSpaceId}`, toSpaceId, opsBatch);
+    await publishOrBatch(deleteOps, `Remove entity ${entityId} from space ${fromSpaceId}`, fromSpaceId, opsBatch);
   }
 
   return { createOps, deleteOps };
@@ -496,6 +523,8 @@ export interface MergeEntitiesOptions {
   dryRun?: boolean;
   /** If true, copy non-duplicate relations from secondaries onto the main entity (default: false) */
   appendRelations?: boolean;
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
 }
 
 /**
@@ -514,7 +543,7 @@ export interface MergeEntitiesOptions {
  * - No cross-space property deduplication — each space keeps its own properties
  */
 export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]> {
-  const { mainEntityId, mainSpaceId, secondaries, dryRun = false, appendRelations = false } = options;
+  const { mainEntityId, mainSpaceId, secondaries, dryRun = false, appendRelations = false, opsBatch } = options;
 
   console.log(`\n[mergeEntities] Merging ${secondaries.length} entities into ${mainEntityId} (space ${mainSpaceId})`);
 
@@ -638,6 +667,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
         mainSpaceId: otherSpaceId,
         secondaries: entityIds.slice(1).map(id => ({ entityId: id, spaceId: otherSpaceId })),
         dryRun,
+        opsBatch,
       });
       allOps.push(...withinOps);
     }
@@ -649,13 +679,14 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       newEntityId: mainEntityId,
       spaceId: otherSpaceId,
       dryRun,
+      opsBatch,
     });
     allOps.push(...moveOps);
   }
 
   // Publish the merge ops (before property migration, which publishes per-space)
   if (!dryRun && allOps.length > 0 && sameSpaceIds && sameSpaceIds.length > 0 && bySpace.size === 0) {
-    await publishOps(allOps, `Merge ${secondaries.length} entities into ${mainEntityId}`, mainSpaceId);
+    await publishOrBatch(allOps, `Merge ${secondaries.length} entities into ${mainEntityId}`, mainSpaceId, opsBatch);
   }
 
   // ── Property entity: migrate references from old secondary IDs to main ──
@@ -667,6 +698,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
         oldPropertyId,
         newPropertyId: mainEntityId,
         dryRun,
+        opsBatch,
       });
       allOps.push(...migrationOps);
     }
@@ -784,6 +816,8 @@ export interface MigratePropertyIdOptions {
   newPropertyId: string;
   /** If true, generate ops but don't publish */
   dryRun?: boolean;
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
 }
 
 /**
@@ -793,7 +827,7 @@ export interface MigratePropertyIdOptions {
  * - Logs a warning for spaces that need updates but we can't write to
  */
 export async function migratePropertyReferences(options: MigratePropertyIdOptions): Promise<Op[]> {
-  const { oldPropertyId, newPropertyId, dryRun = false } = options;
+  const { oldPropertyId, newPropertyId, dryRun = false, opsBatch } = options;
 
   console.log(`\n[migratePropertyReferences] ${oldPropertyId} → ${newPropertyId} (scanning all spaces)`);
 
@@ -993,7 +1027,7 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
       if (!hasWriteAccess) {
         console.error(`    ⚠ Space ${spaceId} needs ${ops.length} property migration ops but you are not a member/editor — skipping publish`);
       } else if (!dryRun) {
-        await publishOps(ops, `Migrate property ${oldPropertyId} → ${newPropertyId}`, spaceId);
+        await publishOrBatch(ops, `Migrate property ${oldPropertyId} → ${newPropertyId}`, spaceId, opsBatch);
       }
       allOps.push(...ops);
     }

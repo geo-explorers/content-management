@@ -15,6 +15,10 @@ export const TYPES = {
   text_block: "76474f2f00894e77a0410b39fb17d0bf",  // Text Block — rich markdown content
   data_block: "b8803a8665de412bbb357e0c84adf473",  // Data Block — renders query or collection results
   image:      "ba4e41460010499da0a3caaa7f579d0e",  // Image — media entity with IPFS URL
+  role:      "e4e366e9d5554b6892bf7358e824afd2",  
+  skill:      "9ca6ab1f3a114e49bbaf72e0c9a985cf", 
+  topic:      "5ef5a5860f274d8e8f6c59ae5b3e89e2", 
+  claim:      "96f859efa1ca4b229372c86ad58b694b", 
 };
 
 // ─── Property IDs ────────────────────────────────────────────────────────────

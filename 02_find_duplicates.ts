@@ -100,8 +100,10 @@ async function countBacklinks(entityId: string): Promise<number> {
 
 async function main() {
   const categories = [
-    { label: 'Type', typeId: TYPES.type },
-    { label: 'Property', typeId: TYPES.property },
+    //{ label: 'Type', typeId: TYPES.type },
+    //{ label: 'Property', typeId: TYPES.property },
+    { label: 'Role', typeId: "e4e366e9d5554b6892bf7358e824afd2" },
+    { label: 'Skill', typeId: "9ca6ab1f3a114e49bbaf72e0c9a985cf" },
   ];
 
   for (const { label, typeId } of categories) {

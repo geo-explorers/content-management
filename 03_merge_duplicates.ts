@@ -1,22 +1,22 @@
-import { gql } from './src/functions.js';
+import { gql, publishOps } from './src/functions.js';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './src/constants.js';
-import { mergeEntities } from './src/entity_ops.js';
+import { mergeEntities, type OpsBatch } from './src/entity_ops.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 // Finds duplicate Type and Property entities and merges them automatically.
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
 // Run with: bun run 03_merge_duplicates.ts
 
-const DRY_RUN = true; // Set to false to actually publish merges
+const DRY_RUN = false; // Set to false to actually publish merges
 
 // Spaces in ranked order (highest priority first)
 const SPACES = [
   { name: 'Root',          id: 'a19c345ab9866679b001d7d2138d88a1' },
+  { name: 'Podcasts',      id: 'b5a31f8182b042437ede0f84ee02f104' },
   { name: 'Geo Education', id: '784bfddae3f3976118c561bf28195b44' },
   { name: 'Crypto',        id: 'c9f267dcb0d270718c2a3c45a64afd32' },
   { name: 'AI',            id: '41e851610e13a19441c4d980f2f2ce6b' },
   { name: 'Health',        id: '52c7ae149838b6d47ce0f3b2a5974546' },
-  { name: 'Podcasts',      id: 'b5a31f8182b042437ede0f84ee02f104' },
   { name: 'Software',      id: '9b611b848b12491b9b6b43f3cf019b8b' },
   { name: 'Technology',    id: '870e3b3068661e6280fad2ab456829bc' },
   { name: 'Industries',    id: 'd69608290513c2a91102c939b3265bd7' },
@@ -195,10 +195,15 @@ async function main() {
   const categories = [
     { label: 'Type', typeId: TYPES.type },
     { label: 'Property', typeId: TYPES.property },
+    { label: 'Role', typeId: TYPES.role },
+    { label: 'Skill', typeId: TYPES.skill },
+    { label: 'Topic', typeId: TYPES.topic },
+    { label: 'Claim', typeId: TYPES.claim },
   ];
 
   let mergedCount = 0;
   let skippedCount = 0;
+  const opsBatch: OpsBatch = new Map();
 
   for (const { label, typeId } of categories) {
     const groups = await findDuplicates(label, typeId);
@@ -240,6 +245,7 @@ async function main() {
           mainSpaceId: group.main.spaceId,
           secondaries: group.secondaries.map(s => ({ entityId: s.id, spaceId: s.spaceId })),
           dryRun: DRY_RUN,
+          opsBatch,
         });
         mergedCount++;
         console.log(`  Done.\n`);
@@ -248,6 +254,18 @@ async function main() {
         skippedCount++;
       }
     }
+  }
+
+  // Publish all accumulated ops, once per space
+  if (!DRY_RUN) {
+    let totalOps = 0;
+    for (const [spaceId, ops] of opsBatch) {
+      if (ops.length === 0) continue;
+      totalOps += ops.length;
+      console.log(`\nPublishing ${ops.length} ops to space ${spaceId} (${spaceName.get(spaceId) ?? 'unknown'})...`);
+      await publishOps(ops, `Batch merge duplicates`, spaceId);
+    }
+    console.log(`\nPublished ${totalOps} total ops across ${opsBatch.size} space(s).`);
   }
 
   console.log(`\n${'='.repeat(80)}`);
