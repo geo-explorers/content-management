@@ -12,7 +12,7 @@ const DRY_RUN = false; // Set to false to actually publish merges
 // Spaces in ranked order (highest priority first)
 const SPACES = [
   { name: 'Root',          id: 'a19c345ab9866679b001d7d2138d88a1' },
-  { name: 'Podcasts',      id: 'b5a31f8182b042437ede0f84ee02f104' },
+  { name: 'Podcasts',      id: 'b5a31f8182b042437ede0f84ee02f104' }, 
   { name: 'Geo Education', id: '784bfddae3f3976118c561bf28195b44' },
   { name: 'Crypto',        id: 'c9f267dcb0d270718c2a3c45a64afd32' },
   { name: 'AI',            id: '41e851610e13a19441c4d980f2f2ce6b' },

@@ -35,6 +35,8 @@ printOps(ops, '.', 'change_entity_id_ops.txt');
 /**/
 
 // ─── 3. Move Entity: Change Space ──────────────────────────────────────────
+// Double check that this handles properties correctly
+
 /*
 const { createOps, deleteOps } = await changeSpace({
   entityId:    'REPLACE_WITH_ENTITY_ID',
@@ -49,15 +51,23 @@ printOps(deleteOps, '.', 'change_space_delete_ops.txt');
 // ─── 4. Merge Entities ──────────────────────────────────────────────────────
 // Works for both same-space and cross-space — just provide each secondary's space.
 // Automatically identifies property entities and updates property references in any spaces that you have membership or editor status
+// Choose the main entity (1. space rank, 2. # of backlinks, 3. # of properties)
+//  - Note: # of properties - count the number of properties filled out and number of relations on the entity. If the number of backlinks is equal, choose the enitity with more properties / relations defined. Otherwise just choose randomly. 
+// If merging any entities in the same space, choose a main entity (criteria 2 and 3 above)
+//  - Identify main entity state (properties / relations)
+//  - value properties on the main entity remain unchanged
+//  - value properties that exist on secondary entity, but not on main entity, should get added to main entity
+//  - relations that exist on secondary properties but not on main entity, should be added to main entity
+//  - When adding a relation, need to check whether that relation already exists on the main entity (same to entity). Should also check whether the to entity has a duplicate (e.g. to entity has same name and type as a to entity already existing on the main entity's property) 
 
 const ops = await mergeEntities({
-  mainEntityId: 'fce8953f56af4e42a869725ed0b024f0',
-  mainSpaceId:  'a19c345ab9866679b001d7d2138d88a1',
+  mainEntityId: '09cb8a3406a4407ca6698a03d9e9b7c4',
+  mainSpaceId:  'f3dab79cb5a3d9d1759656dd5361d1c6',
   secondaries: [
-    { entityId: '1ff591322d574671934a7b662e3cf66a', spaceId: 'b5a31f8182b042437ede0f84ee02f104' },
+    { entityId: '73c5bfaf39dd435d9af38fd63f2ddaee', spaceId: 'f3dab79cb5a3d9d1759656dd5361d1c6' },
   ],
-  //dryRun: true,
-  //appendRelations: true; //Setting append relations to true appends extra relations from the secondary entity (in same space) to the main entity
+  // dryRun: true,
+  // addPropertiesToMain: false //Setting append relations to true appends extra relations from the secondary entity (in same space) to the main entity
 });
 printOps(ops, '.', 'merge_entities_ops.txt');
 /**/

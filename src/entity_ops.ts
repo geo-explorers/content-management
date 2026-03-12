@@ -107,7 +107,7 @@ interface RelationRecord {
   entityId: string;
   typeId: string;
   toEntityId: string;
-  toEntity: { name: string } | null;
+  toEntity: { name: string; typeIds: string[] } | null;
   typeEntity: { name: string } | null;
   toSpaceId: string | null;
   fromSpaceId: string | null;
@@ -156,7 +156,7 @@ async function queryEntityData(entityId: string, spaceId: string): Promise<Entit
       entityId
       typeId
       toEntityId
-      toEntity { name }
+      toEntity { name typeIds }
       typeEntity { name }
       toSpaceId
       fromSpaceId
@@ -521,8 +521,8 @@ export interface MergeEntitiesOptions {
   secondaries: Array<{ entityId: string; spaceId: string }>;
   /** If true, generate ops but don't publish */
   dryRun?: boolean;
-  /** If true, copy non-duplicate relations from secondaries onto the main entity (default: false) */
-  appendRelations?: boolean;
+  /** If true, add missing value properties and non-duplicate relations from secondaries onto the main entity (default: true) */
+  addPropertiesToMain?: boolean;
   /** If provided, accumulate ops into this batch instead of publishing */
   opsBatch?: OpsBatch;
 }
@@ -543,13 +543,13 @@ export interface MergeEntitiesOptions {
  * - No cross-space property deduplication — each space keeps its own properties
  */
 export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]> {
-  const { mainEntityId, mainSpaceId, secondaries, dryRun = false, appendRelations = false, opsBatch } = options;
+  const { mainEntityId: inputMainEntityId, mainSpaceId, secondaries, dryRun = false, addPropertiesToMain = true, opsBatch } = options;
 
-  console.log(`\n[mergeEntities] Merging ${secondaries.length} entities into ${mainEntityId} (space ${mainSpaceId})`);
+  console.log(`\n[mergeEntities] Merging ${secondaries.length} entities into ${inputMainEntityId} (space ${mainSpaceId})`);
 
   // Check if the main entity is a Property type — if so, we'll auto-migrate property references
   const mainEntityData = await gql(`{
-    entities(filter: { id: { is: "${mainEntityId}" } }) { typeIds }
+    entities(filter: { id: { is: "${inputMainEntityId}" } }) { typeIds }
   }`);
   const typeIds: string[] = mainEntityData.entities?.[0]?.typeIds ?? [];
   const isPropertyEntity = typeIds.includes(TYPES.property);
@@ -566,12 +566,46 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   }
 
   const allOps: Op[] = [];
-  const allSecondaryIds = secondaries.map(s => s.entityId);
+
+  // ── Same-space: auto-select main entity by backlinks, then properties+relations ──
+  let mainEntityId = inputMainEntityId;
+  const initialSameSpace = bySpace.get(mainSpaceId);
+  if (initialSameSpace && initialSameSpace.length > 0) {
+    // All same-space candidates (including the original main)
+    const candidates = [inputMainEntityId, ...initialSameSpace];
+
+    // Query entity data and backlinks for each candidate in parallel
+    const candidateInfo = await Promise.all(candidates.map(async (id) => {
+      const [entityData, backlinks] = await Promise.all([
+        queryEntityData(id, mainSpaceId),
+        queryBacklinks(id),
+      ]);
+      const propCount = entityData.values.length + entityData.relations.length;
+      return { id, entityData, backlinkCount: backlinks.length, propCount };
+    }));
+
+    // Sort: most backlinks first, then most properties+relations
+    candidateInfo.sort((a, b) => {
+      if (b.backlinkCount !== a.backlinkCount) return b.backlinkCount - a.backlinkCount;
+      return b.propCount - a.propCount;
+    });
+
+    mainEntityId = candidateInfo[0].id;
+    if (mainEntityId !== inputMainEntityId) {
+      console.log(`  Auto-selected main entity: ${mainEntityId} (backlinks: ${candidateInfo[0].backlinkCount}, props+rels: ${candidateInfo[0].propCount})`);
+    }
+
+    // Rebuild sameSpaceSecondaries to exclude the chosen main
+    const sameSpaceSecondaryIds = candidates.filter(id => id !== mainEntityId);
+    bySpace.set(mainSpaceId, sameSpaceSecondaryIds);
+  }
+
+  const allSecondaryIds = [...(bySpace.get(mainSpaceId) ?? []), ...secondaries.filter(s => s.spaceId !== mainSpaceId).map(s => s.entityId)];
 
   // ── Same-space secondaries: merge properties, relations, backlinks ────
-  const sameSpaceIds = bySpace.get(mainSpaceId);
-  if (sameSpaceIds && sameSpaceIds.length > 0) {
-    console.log(`\n  Same-space merge: ${sameSpaceIds.length} entities in space ${mainSpaceId}`);
+  const sameSpaceSecondaries = bySpace.get(mainSpaceId);
+  if (sameSpaceSecondaries && sameSpaceSecondaries.length > 0) {
+    console.log(`\n  Same-space merge: ${sameSpaceSecondaries.length} entities in space ${mainSpaceId}`);
 
     const mainData = await queryEntityData(mainEntityId, mainSpaceId);
     const mainPropertyIds = new Set(mainData.values.map(v => v.propertyId));
@@ -579,43 +613,88 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       mainData.relations.map(r => `${r.typeId}:${r.toEntityId}`)
     );
 
-    for (const secondaryId of sameSpaceIds) {
+    for (const secondaryId of sameSpaceSecondaries) {
       console.log(`\n    Processing secondary: ${secondaryId}`);
       const secondaryData = await queryEntityData(secondaryId, mainSpaceId);
 
-      // Add missing value properties to main
-      const missingPropertyIds = [...new Set(secondaryData.values.map(v => v.propertyId))]
-        .filter(pid => !mainPropertyIds.has(pid));
-
-      if (missingPropertyIds.length > 0) {
-        const valueParams = await queryValueParams(secondaryId, mainSpaceId, missingPropertyIds);
-
-        if (valueParams.length > 0) {
-          console.log(`      Adding ${valueParams.length} missing properties to main entity`);
-          const result = Graph.updateEntity({ id: mainEntityId, values: valueParams });
-          allOps.push(...result.ops);
-          for (const p of valueParams) mainPropertyIds.add(p.property as string);
-        }
-      }
-
-      // Optionally add non-duplicate relations from secondary to main
       const movedRelationTargets: string[] = [];
-      if (appendRelations) {
-        for (const r of secondaryData.relations) {
-          const key = `${r.typeId}:${r.toEntityId}`;
-          if (!mainRelationKeys.has(key)) {
-            console.log(`      Adding relation: ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
-            const result = Graph.createRelation({
-              fromEntity: mainEntityId,
-              toEntity: r.toEntityId,
-              type: r.typeId,
-              entityId: r.entityId,
-              ...optionalRelationFields(r),
-            });
+      if (addPropertiesToMain) {
+        // Add missing value properties to main
+        const missingPropertyIds = [...new Set(secondaryData.values.map(v => v.propertyId))]
+          .filter(pid => !mainPropertyIds.has(pid));
+
+        if (missingPropertyIds.length > 0) {
+          const valueParams = await queryValueParams(secondaryId, mainSpaceId, missingPropertyIds);
+
+          if (valueParams.length > 0) {
+            console.log(`      Adding ${valueParams.length} missing properties to main entity`);
+            const result = Graph.updateEntity({ id: mainEntityId, values: valueParams });
             allOps.push(...result.ops);
-            mainRelationKeys.add(key);
-            movedRelationTargets.push(r.toEntityId);
+            for (const p of valueParams) mainPropertyIds.add(p.property as string);
           }
+        }
+
+        // Add non-duplicate relations from secondary to main
+        // Build a lookup of main entity's existing relation targets by property (typeId)
+        // keyed by typeId → array of { entityId, name (lowercase), typeIds }
+        const mainRelTargetsByProp = new Map<string, Array<{ entityId: string; name: string; typeIds: string[] }>>();
+        for (const mr of mainData.relations) {
+          const list = mainRelTargetsByProp.get(mr.typeId) ?? [];
+          list.push({
+            entityId: mr.toEntityId,
+            name: (mr.toEntity?.name ?? '').toLowerCase(),
+            typeIds: mr.toEntity?.typeIds ?? [],
+          });
+          mainRelTargetsByProp.set(mr.typeId, list);
+        }
+
+        for (const r of secondaryData.relations) {
+          // Never append a different Data Type relation onto a Property entity
+          if (isPropertyEntity && r.typeId === DATA_TYPE_PROPERTY) {
+            console.log(`      Skipping Data Type relation on Property entity: ${r.toEntity?.name ?? r.toEntityId}`);
+            continue;
+          }
+
+          const key = `${r.typeId}:${r.toEntityId}`;
+          // Check exact entity match
+          if (mainRelationKeys.has(key)) {
+            console.log(`      Skipping duplicate relation (same entity): ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
+            continue;
+          }
+
+          // Check for a "soft duplicate" — same property, same name (case-insensitive) and same type
+          const existingTargets = mainRelTargetsByProp.get(r.typeId) ?? [];
+          const candidateName = (r.toEntity?.name ?? '').toLowerCase();
+          const candidateTypeIds = r.toEntity?.typeIds ?? [];
+          const softDup = candidateName && existingTargets.some(t =>
+            t.name === candidateName &&
+            t.typeIds.length > 0 && candidateTypeIds.length > 0 &&
+            t.typeIds.some(tid => candidateTypeIds.includes(tid))
+          );
+
+          if (softDup) {
+            console.log(`      Skipping duplicate relation (same name+type): ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
+            continue;
+          }
+
+          console.log(`      Adding relation: ${r.typeEntity?.name ?? r.typeId} → ${r.toEntity?.name ?? r.toEntityId}`);
+          const result = Graph.createRelation({
+            fromEntity: mainEntityId,
+            toEntity: r.toEntityId,
+            type: r.typeId,
+            entityId: r.entityId,
+            ...optionalRelationFields(r),
+          });
+          allOps.push(...result.ops);
+          mainRelationKeys.add(key);
+          // Also add to the soft-duplicate lookup so subsequent secondaries are checked correctly
+          existingTargets.push({
+            entityId: r.toEntityId,
+            name: candidateName,
+            typeIds: candidateTypeIds,
+          });
+          mainRelTargetsByProp.set(r.typeId, existingTargets);
+          movedRelationTargets.push(r.toEntityId);
         }
       }
 
@@ -685,7 +764,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   }
 
   // Publish the merge ops (before property migration, which publishes per-space)
-  if (!dryRun && allOps.length > 0 && sameSpaceIds && sameSpaceIds.length > 0 && bySpace.size === 0) {
+  if (!dryRun && allOps.length > 0 && sameSpaceSecondaries && sameSpaceSecondaries.length > 0 && bySpace.size === 0) {
     await publishOrBatch(allOps, `Merge ${secondaries.length} entities into ${mainEntityId}`, mainSpaceId, opsBatch);
   }
 

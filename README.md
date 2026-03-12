@@ -59,6 +59,21 @@ const { createOps, deleteOps } = await changeSpace({
 
 Merge one or more secondary entities into a main entity. Handles both same-space and cross-space merges. If the main entity is a Property type, automatically migrates property references across all accessible spaces.
 
+**Same-space merge logic:**
+- Auto-selects the main entity among same-space candidates by backlink count, then by property+relation count
+- Value properties on the main entity remain unchanged
+- Missing value properties from secondaries are added to the main entity
+- Non-duplicate relations from secondaries are appended to the main entity
+- Duplicate relation detection checks both exact entity ID matches and "soft duplicates" (same name + type on the target entity)
+- Backlinks pointing to secondaries are redirected to the main entity
+- Secondary entities are deleted after merging
+
+**Cross-space merge logic:**
+- Multiple secondaries in the same foreign space are merged within that space first
+- Each remaining foreign secondary is moved to the main entity's ID via `changeEntityId`
+
+**Ops batching:** All operations accept an optional `opsBatch` parameter (`Map<string, Op[]>`) to accumulate ops across multiple merges and publish once per space at the end.
+
 ```ts
 const ops = await mergeEntities({
   mainEntityId: 'MAIN_ENTITY_ID',
@@ -68,14 +83,34 @@ const ops = await mergeEntities({
     { entityId: 'SECONDARY_2', spaceId: 'SPACE_B' },
   ],
   // dryRun: true,
-  // appendRelations: true, // append extra relations from secondaries to main
+  // addPropertiesToMain: false, // skip copying properties/relations from secondaries
 });
 ```
+
+## Find Duplicates
+
+`02_find_duplicates.ts` scans a ranked list of spaces for Type and Property entities with duplicate names (case-insensitive). For each duplicate group it identifies a main entity (by space rank, then backlink count) and lists secondaries. For Property entities it also displays the data type and flags mismatches.
+
+```bash
+bun run 02_find_duplicates.ts
+```
+
+## Auto-Merge Duplicates
+
+`03_merge_duplicates.ts` combines duplicate detection with automatic merging. It finds all duplicate Type and Property entities, then calls `mergeEntities` for each group. Property duplicates with data type mismatches are skipped. All ops are batched and published once per space.
+
+```bash
+bun run 03_merge_duplicates.ts
+```
+
+Set `DRY_RUN = true` at the top of the file to preview without publishing.
 
 ## Project Structure
 
 ```
 01_entity_operations.ts     # Entry point — uncomment an operation and run
+02_find_duplicates.ts       # Find duplicate Type/Property entities across spaces
+03_merge_duplicates.ts      # Auto-merge detected duplicates
 src/
   entity_ops.ts             # Core operation logic (delete, move, merge, migrate)
   constants.ts              # Ontology IDs (types, properties, data types, views)
