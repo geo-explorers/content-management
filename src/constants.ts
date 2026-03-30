@@ -10,6 +10,7 @@ export const ROOT_SPACE_ID = "a19c345ab9866679b001d7d2138d88a1";
 // ─── Spaces (ranked, highest priority first) ────────────────────────────────
 
 export const SPACES = [
+  
   { name: 'Root',           id: 'a19c345ab9866679b001d7d2138d88a1' },
   { name: 'Podcasts',       id: 'b5a31f8182b042437ede0f84ee02f104' },
   { name: 'Geo Education',  id: '784bfddae3f3976118c561bf28195b44' },
@@ -20,8 +21,8 @@ export const SPACES = [
   { name: 'Technology',     id: '870e3b3068661e6280fad2ab456829bc' },
   { name: 'Industries',     id: 'd69608290513c2a91102c939b3265bd7' },
   { name: 'World Affairs',  id: '89bd89bf28ff8a0963faf92a8c905e20' },
-  { name: 'Podcasts',  id: '24cd3c3b36efb0e13ea53fead3f7d2b9' },
-  { name: 'Podcasts',  id: 'bd5529695e011fdf76637d4addca733a' },
+  //{ name: 'Podcasts',  id: '24cd3c3b36efb0e13ea53fead3f7d2b9' },
+  //{ name: 'Podcasts',  id: 'bd5529695e011fdf76637d4addca733a' },
   
 ];
 
@@ -40,6 +41,10 @@ export const TYPES = {
   person:     "7ed45f2bc48b419e8e4664d5ff680b0d", 
   podcast:    "4c81561d1f9541319cdddd20ab831ba2", 
   episode:    "972d201ad78045689e01543f67b26bee", 
+  exercise:    "1362f6523665771634fafe2cd9a5854f", 
+  muscle_group:    "ace998708d25f56dbc8e72a784526a11", 
+  training_category:    "ef193dcb3282afebe466b46b8441c479", 
+  excercise_equipment:    "ed834cda5168124075774c543866e81d", 
 };
 
 // ─── Property IDs ────────────────────────────────────────────────────────────

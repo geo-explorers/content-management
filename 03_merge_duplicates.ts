@@ -41,31 +41,31 @@ interface DuplicateGroup {
 
 async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<EntityHit[]> {
   const hits: EntityHit[] = [];
-  let offset = 0;
-  const PAGE = 500;
+  let cursor: string | null = null;
 
   while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
     const data = await gql(`{
-      entities(
+      entitiesConnection(
         spaceId: "${spaceId}"
         typeId: "${typeId}"
-        first: ${PAGE}
-        offset: ${offset}
+        first: 500
+        ${afterClause}
       ) {
-        id
-        name
+        edges { node { id name } }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
 
-    const entities = data.entities ?? [];
-    for (const e of entities) {
-      const name = (e.name ?? '').trim();
+    const conn = data.entitiesConnection;
+    for (const edge of conn?.edges ?? []) {
+      const name = (edge.node.name ?? '').trim();
       if (!name) continue;
-      hits.push({ id: e.id, name, spaceId });
+      hits.push({ id: edge.node.id, name, spaceId });
     }
 
-    if (entities.length < PAGE) break;
-    offset += PAGE;
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
   return hits;
@@ -202,50 +202,68 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
 
     if (typeId === TYPES.property) {
       // For properties: count values and relations using this property ID
-      let offset = 0;
-      while (true) {
-        const data = await gql(`{
-          values(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
-            propertyId
-            spaceId
-          }
-          relations(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
-            typeId
-            fromEntity { spaceIds }
-          }
-        }`);
+      let valCursor: string | null = null;
+      let relCursor: string | null = null;
+      let valDone = false;
+      let relDone = false;
 
-        const values = data.values ?? [];
-        const relations = data.relations ?? [];
-
-        for (const v of values) {
-          const counts = backlinkCounts.get(v.propertyId)!;
-          counts.total++;
-          if (v.spaceId && !knownSpaceIds.has(v.spaceId)) counts.external++;
+      while (!valDone || !relDone) {
+        const parts: string[] = [];
+        if (!valDone) {
+          const afterClause = valCursor ? `after: "${valCursor}"` : '';
+          parts.push(`valConn: valuesConnection(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { propertyId spaceId } }
+            pageInfo { hasNextPage endCursor }
+          }`);
         }
-        for (const rel of relations) {
-          const counts = backlinkCounts.get(rel.typeId)!;
-          counts.total++;
-          const sids: string[] = rel.fromEntity?.spaceIds ?? [];
-          if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
+        if (!relDone) {
+          const afterClause = relCursor ? `after: "${relCursor}"` : '';
+          parts.push(`relConn: relationsConnection(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { typeId fromEntity { spaceIds } } }
+            pageInfo { hasNextPage endCursor }
+          }`);
         }
+        const data = await gql(`{ ${parts.join('\n')} }`);
 
-        if (values.length < BULK_PAGE && relations.length < BULK_PAGE) break;
-        offset += BULK_PAGE;
+        if (!valDone) {
+          const conn = data.valConn;
+          for (const edge of conn?.edges ?? []) {
+            const v = edge.node;
+            const counts = backlinkCounts.get(v.propertyId)!;
+            counts.total++;
+            if (v.spaceId && !knownSpaceIds.has(v.spaceId)) counts.external++;
+          }
+          if (!conn?.pageInfo?.hasNextPage) valDone = true;
+          else valCursor = conn.pageInfo.endCursor;
+        }
+        if (!relDone) {
+          const conn = data.relConn;
+          for (const edge of conn?.edges ?? []) {
+            const rel = edge.node;
+            const counts = backlinkCounts.get(rel.typeId)!;
+            counts.total++;
+            const sids: string[] = rel.fromEntity?.spaceIds ?? [];
+            if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
+          }
+          if (!conn?.pageInfo?.hasNextPage) relDone = true;
+          else relCursor = conn.pageInfo.endCursor;
+        }
       }
     } else {
       // For non-property types: count backlinks (relations pointing TO each entity)
-      let offset = 0;
+      let cursor: string | null = null;
       while (true) {
+        const afterClause = cursor ? `after: "${cursor}"` : '';
         const data = await gql(`{
-          relations(filter: { toEntityId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
-            toEntityId
-            fromEntity { spaceIds }
+          relationsConnection(filter: { toEntityId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { toEntityId fromEntity { spaceIds } } }
+            pageInfo { hasNextPage endCursor }
           }
         }`);
 
-        const rels = data.relations ?? [];
-        for (const rel of rels) {
+        const conn = data.relationsConnection;
+        for (const edge of conn?.edges ?? []) {
+          const rel = edge.node;
           const counts = backlinkCounts.get(rel.toEntityId);
           if (!counts) continue;
           counts.total++;
@@ -253,8 +271,8 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
           if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
         }
 
-        if (rels.length < BULK_PAGE) break;
-        offset += BULK_PAGE;
+        if (!conn?.pageInfo?.hasNextPage) break;
+        cursor = conn.pageInfo.endCursor;
       }
     }
   }
@@ -719,7 +737,11 @@ async function main() {
     //{ label: 'Claim', typeId: TYPES.claim },
     //{ label: 'Person', typeId: TYPES.person },
     //{ label: 'Podcast', typeId: TYPES.podcast },
-    { label: 'Episode', typeId: TYPES.episode },
+    //{ label: 'Episode', typeId: TYPES.episode },
+    //{ label: 'Exercise', typeId: TYPES.exercise },
+    //{ label: 'Muscle group', typeId: TYPES.muscle_group },
+    { label: 'Training category', typeId: TYPES.training_category },
+    //{ label: 'Excercise equipment', typeId: TYPES.excercise_equipment },
   ];
 
   let mergedCount = 0;

@@ -82,42 +82,41 @@ function optionalRelationFields(r: StaleRelation) {
 // ─── Phase 1: Detect ────────────────────────────────────────────────────────
 
 async function getAllEntityIdsInSpace(spaceId: string): Promise<string[]> {
-  // Split by typeId so each sub-query stays well under 2000 results,
-  // working around the API's offset ≤ 1000 hard cap.
-  const knownTypeIds = [
-    ...Object.values(TYPES),
-    TEXT_BLOCK_TYPE,
-    IMAGE_TYPE,
-    VIDEO_TYPE,
-  ];
+  const ids: string[] = [];
+  let cursor: string | null = null;
 
-  const seen = new Set<string>();
-  const PAGE = 1000;
+  while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
+    const data = await gql(`{
+      entitiesConnection(
+        spaceId: "${spaceId}"
+        filter: {relations: {some: {
+        spaceId: {is: "${spaceId}"}, 
+        toEntity: {
+          values: { none: { propertyId: { is: "${NAME_PROP}" }, text: { isNull: false } } }
+          relations: { none: { typeId: { is: "${PROPERTIES.types}" }, toEntityId: { in: ["${TEXT_BLOCK_TYPE}", "${IMAGE_TYPE}", "${VIDEO_TYPE}"] } } }
+        }}}}
+        first: 50
+        ${afterClause}
+      ) {
+        nodes { id }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
 
-  for (const typeId of knownTypeIds) {
-    let offset = 0;
-    while (true) {
-      const data = await gql(`{
-        entities(spaceId: "${spaceId}" typeId: "${typeId}" first: ${PAGE} offset: ${offset}) { id }
-      }`);
-      const entities = data.entities ?? [];
-      for (const e of entities) seen.add(e.id);
-      if (entities.length < PAGE) break;
-      offset += PAGE;
-      if (offset > 1000) break; // API hard cap
-    }
+    const conn = data.entitiesConnection;
+    for (const node of conn?.nodes ?? []) ids.push(node.id);
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
-  return [...seen];
+  return ids;
 }
 
 async function findStaleRelationsInSpace(spaceId: string): Promise<{ stale: StaleRelation[], nameFixes: NameFix[] }> {
   const stale: StaleRelation[] = [];
   const nameFixes: NameFix[] = [];
 
-  // Paginate entity IDs first, then query relations per-batch of entities.
-  // This avoids the API's offset ≤ 1000 cap on the relations query itself,
-  // since no single entity will have anywhere near 2000 outgoing relations.
   const entityIds = await getAllEntityIdsInSpace(spaceId);
 
   const BATCH = 20;
@@ -125,36 +124,40 @@ async function findStaleRelationsInSpace(spaceId: string): Promise<{ stale: Stal
     const batch = entityIds.slice(i, i + BATCH);
     const filterIds = batch.map(id => `"${id}"`).join(', ');
 
-    let offset = 0;
-    const PAGE = 1000;
+    let cursor: string | null = null;
     while (true) {
+      const afterClause = cursor ? `after: "${cursor}"` : '';
       const data = await gql(`{
-        relations(
+        relationsConnection(
           filter: {
             spaceId: { is: "${spaceId}" }
             fromEntityId: { in: [${filterIds}] }
           }
-          first: ${PAGE}
-          offset: ${offset}
+          first: 1000
+          ${afterClause}
         ) {
-          id
-          entityId
-          fromEntityId
-          fromEntity { name }
-          toEntityId
-          toEntity { name typeIds }
-          typeId
-          typeEntity { name }
-          toSpaceId
-          fromSpaceId
-          toVersionId
-          fromVersionId
-          position
+          edges { node {
+            id
+            entityId
+            fromEntityId
+            fromEntity { name }
+            toEntityId
+            toEntity { name typeIds }
+            typeId
+            typeEntity { name }
+            toSpaceId
+            fromSpaceId
+            toVersionId
+            fromVersionId
+            position
+          } }
+          pageInfo { hasNextPage endCursor }
         }
       }`);
 
-      const rels = data.relations ?? [];
-      for (const r of rels) {
+      const conn = data.relationsConnection;
+      for (const edge of conn?.edges ?? []) {
+        const r = edge.node;
         const toName = (r.toEntity?.name ?? '').trim();
         if (toName) continue;
 
@@ -204,8 +207,8 @@ async function findStaleRelationsInSpace(spaceId: string): Promise<{ stale: Stal
         });
       }
 
-      if (rels.length < PAGE) break;
-      offset += PAGE;
+      if (!conn?.pageInfo?.hasNextPage) break;
+      cursor = conn.pageInfo.endCursor;
     }
   }
 
@@ -326,30 +329,30 @@ async function resolveViaVersionHistory(stale: StaleRelation): Promise<FixCase |
   // so we query each (typeId × space) combination and match by name client-side.
   const searchTypeIds = typeIds.length > 0 ? typeIds : [null];
   const candidates: Array<{ id: string; name: string }> = [];
-  const PAGE = 500;
 
   outer:
   for (const tid of searchTypeIds) {
     for (const space of SPACES) {
       const typeArg = tid ? `typeId: "${tid}"` : '';
-      let offset = 0;
+      let cursor: string | null = null;
       while (true) {
+        const afterClause = cursor ? `after: "${cursor}"` : '';
         const data = await gql(`{
-          entities(spaceId: "${space.id}" ${typeArg} first: ${PAGE} offset: ${offset}) {
-            id
-            name
+          entitiesConnection(spaceId: "${space.id}" ${typeArg} first: 500 ${afterClause}) {
+            edges { node { id name } }
+            pageInfo { hasNextPage endCursor }
           }
         }`);
-        const entities = data.entities ?? [];
-        for (const e of entities) {
-          const eName = (e.name ?? '').trim();
-          if (eName === oldName && e.id !== stale.toEntityId) {
-            candidates.push({ id: e.id, name: eName });
+        const conn = data.entitiesConnection;
+        for (const edge of conn?.edges ?? []) {
+          const eName = (edge.node.name ?? '').trim();
+          if (eName === oldName && edge.node.id !== stale.toEntityId) {
+            candidates.push({ id: edge.node.id, name: eName });
             break outer;
           }
         }
-        if (entities.length < PAGE) break;
-        offset += PAGE;
+        if (!conn?.pageInfo?.hasNextPage) break;
+        cursor = conn.pageInfo.endCursor;
       }
     }
   }

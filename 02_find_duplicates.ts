@@ -22,31 +22,31 @@ interface EntityHit {
 
 async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<EntityHit[]> {
   const hits: EntityHit[] = [];
-  let offset = 0;
-  const PAGE = 100;
+  let cursor: string | null = null;
 
   while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
     const data = await gql(`{
-      entities(
+      entitiesConnection(
         spaceId: "${spaceId}"
         typeId: "${typeId}"
-        first: ${PAGE}
-        offset: ${offset}
+        first: 100
+        ${afterClause}
       ) {
-        id
-        name
+        edges { node { id name } }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
 
-    const entities = data.entities ?? [];
-    for (const e of entities) {
-      const name = (e.name ?? '').trim();
+    const conn = data.entitiesConnection;
+    for (const edge of conn?.edges ?? []) {
+      const name = (edge.node.name ?? '').trim();
       if (!name) continue;
-      hits.push({ id: e.id, name, spaceId });
+      hits.push({ id: edge.node.id, name, spaceId });
     }
 
-    if (entities.length < PAGE) break;
-    offset += PAGE;
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
   return hits;

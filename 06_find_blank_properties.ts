@@ -22,26 +22,26 @@ interface BlankPropertyHit {
 
 async function fetchTypeEntities(spaceId: string): Promise<Array<{ id: string; name: string }>> {
   const all: Array<{ id: string; name: string }> = [];
-  let offset = 0;
-  const PAGE = 100;
+  let cursor: string | null = null;
 
   while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
     const data = await gql(`{
-      entities(
+      entitiesConnection(
         spaceId: "${spaceId}"
         typeId: "${TYPE_TYPE_ID}"
-        first: ${PAGE}
-        offset: ${offset}
+        first: 100
+        ${afterClause}
       ) {
-        id
-        name
+        edges { node { id name } }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
 
-    const entities = data.entities ?? [];
-    all.push(...entities);
-    if (entities.length < PAGE) break;
-    offset += PAGE;
+    const conn = data.entitiesConnection;
+    for (const edge of conn?.edges ?? []) all.push(edge.node);
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
   return all;
@@ -49,38 +49,38 @@ async function fetchTypeEntities(spaceId: string): Promise<Array<{ id: string; n
 
 async function getBlankPropertyTargets(typeEntityId: string, spaceId: string): Promise<string[]> {
   const blankIds: string[] = [];
-  let offset = 0;
-  const PAGE = 100;
+  let cursor: string | null = null;
 
   while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
     const data = await gql(`{
-      relations(
+      relationsConnection(
         filter: {
           fromEntityId: { is: "${typeEntityId}" }
           typeId: { is: "${PROPERTIES_PROPERTY_ID}" }
           spaceId: { is: "${spaceId}" }
         }
-        first: ${PAGE}
-        offset: ${offset}
+        first: 100
+        ${afterClause}
       ) {
-        toEntityId
-        toEntity { name }
+        edges { node {
+          toEntityId
+          toEntity { name }
+        } }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
 
-    const rels = data.relations ?? [];
-    for (const rel of rels) {
-      //const targetSpaces: string[] = rel.toEntity?.spaceIds ?? [];
-      //if (!targetSpaces.includes(spaceId)) continue;
-
-      const name = (rel.toEntity?.name ?? '').trim();
+    const conn = data.relationsConnection;
+    for (const edge of conn?.edges ?? []) {
+      const name = (edge.node.toEntity?.name ?? '').trim();
       if (!name) {
-        blankIds.push(rel.toEntityId);
+        blankIds.push(edge.node.toEntityId);
       }
     }
 
-    if (rels.length < PAGE) break;
-    offset += PAGE;
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
   return blankIds;

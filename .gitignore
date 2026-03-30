@@ -1,6 +1,8 @@
 .env
 .claude
 .DS_Store
+CLAUDE.md
+docs/
 node_modules
 *.txt
 test_csvs/

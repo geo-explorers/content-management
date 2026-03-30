@@ -18,24 +18,34 @@ const TESTNET_RPC_URL = "https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz";
 
 const API_URL = "https://testnet-api.geobrowser.io/graphql";
 
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
 export async function gql(query: string, variables?: Record<string, any>) {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+    });
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API error: ${res.status} ${res.statusText}\n${body}`);
-  }
+    if (!res.ok) {
+      const body = await res.text();
+      if (res.status >= 500 && attempt < MAX_RETRIES) {
+        console.warn(`  Retrying (${attempt + 1}/${MAX_RETRIES}) after ${res.status}...`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        continue;
+      }
+      throw new Error(`API error: ${res.status} ${res.statusText}\n${body}`);
+    }
 
-  const json = await res.json();
-  if (json.errors) {
-    console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
-    throw new Error(`GraphQL: ${json.errors[0].message}`);
+    const json = await res.json();
+    if (json.errors) {
+      console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
+      throw new Error(`GraphQL: ${json.errors[0].message}`);
+    }
+    return json.data;
   }
-  return json.data;
 }
 
 // ─── Membership Check ────────────────────────────────────────────────────────

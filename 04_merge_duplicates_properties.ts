@@ -9,7 +9,7 @@ import path from 'node:path';
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
 // Run with: bun run 04_merge_duplicates_properties.ts
 
-const DRY_RUN = false; // Set to false to actually publish merges
+const DRY_RUN = true; // Set to false to actually publish merges
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
@@ -34,25 +34,25 @@ interface DuplicateGroup {
 
 async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<EntityHit[]> {
   const hits: EntityHit[] = [];
-  let offset = 0;
-  const PAGE = 1000;
+  let cursor: string | null = null;
 
   while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : '';
     const data = await gql(`{
-      entities(
+      entitiesConnection(
         spaceId: "${spaceId}"
         typeId: "${typeId}"
-        first: ${PAGE}
-        offset: ${offset}
+        first: 1000
+        ${afterClause}
       ) {
-        id
-        name
-        spaceIds
+        edges { node { id name spaceIds } }
+        pageInfo { hasNextPage endCursor }
       }
     }`);
 
-    const entities = data.entities ?? [];
-    for (const e of entities) {
+    const conn = data.entitiesConnection;
+    for (const edge of conn?.edges ?? []) {
+      const e = edge.node;
       const name = (e.name ?? '').trim();
       if (!name) continue;
       // Record the entity for its primary space
@@ -65,9 +65,8 @@ async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<Ent
       }
     }
 
-    if (entities.length < PAGE) break;
-    offset += PAGE;
-    if (offset > 1000) break; // API offset cap
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
   }
 
   return hits;
@@ -223,62 +222,68 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
 
     if (typeId === TYPES.property) {
       // For properties: count values and relations using this property ID
-      // Paginate values and relations independently
-      let valOffset = 0;
-      let relOffset = 0;
+      let valCursor: string | null = null;
+      let relCursor: string | null = null;
       let valDone = false;
       let relDone = false;
+
       while (!valDone || !relDone) {
         const parts: string[] = [];
         if (!valDone) {
-          parts.push(`values(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${valOffset}) {
-            propertyId
-            spaceId
+          const afterClause = valCursor ? `after: "${valCursor}"` : '';
+          parts.push(`valConn: valuesConnection(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { propertyId spaceId } }
+            pageInfo { hasNextPage endCursor }
           }`);
         }
         if (!relDone) {
-          parts.push(`relations(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${relOffset}) {
-            typeId
-            fromEntity { spaceIds }
+          const afterClause = relCursor ? `after: "${relCursor}"` : '';
+          parts.push(`relConn: relationsConnection(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { typeId fromEntity { spaceIds } } }
+            pageInfo { hasNextPage endCursor }
           }`);
         }
         const data = await gql(`{ ${parts.join('\n')} }`);
 
         if (!valDone) {
-          const values = data.values ?? [];
-          for (const v of values) {
+          const conn = data.valConn;
+          for (const edge of conn?.edges ?? []) {
+            const v = edge.node;
             const counts = backlinkCounts.get(v.propertyId)!;
             counts.total++;
             if (v.spaceId && !knownSpaceIds.has(v.spaceId)) counts.external++;
           }
-          valOffset += BULK_PAGE;
-          if (values.length < BULK_PAGE || valOffset > 1000) valDone = true;
+          if (!conn?.pageInfo?.hasNextPage) valDone = true;
+          else valCursor = conn.pageInfo.endCursor;
         }
         if (!relDone) {
-          const relations = data.relations ?? [];
-          for (const rel of relations) {
+          const conn = data.relConn;
+          for (const edge of conn?.edges ?? []) {
+            const rel = edge.node;
             const counts = backlinkCounts.get(rel.typeId)!;
             counts.total++;
             const sids: string[] = rel.fromEntity?.spaceIds ?? [];
             if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
           }
-          relOffset += BULK_PAGE;
-          if (relations.length < BULK_PAGE || relOffset > 1000) relDone = true;
+          if (!conn?.pageInfo?.hasNextPage) relDone = true;
+          else relCursor = conn.pageInfo.endCursor;
         }
       }
     } else {
       // For non-property types: count backlinks
-      let offset = 0;
+      let cursor: string | null = null;
       while (true) {
+        const afterClause = cursor ? `after: "${cursor}"` : '';
         const data = await gql(`{
-          relations(filter: { toEntityId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
-            toEntityId
-            fromEntity { spaceIds }
+          relationsConnection(filter: { toEntityId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, ${afterClause}) {
+            edges { node { toEntityId fromEntity { spaceIds } } }
+            pageInfo { hasNextPage endCursor }
           }
         }`);
 
-        const rels = data.relations ?? [];
-        for (const rel of rels) {
+        const conn = data.relationsConnection;
+        for (const edge of conn?.edges ?? []) {
+          const rel = edge.node;
           const counts = backlinkCounts.get(rel.toEntityId);
           if (!counts) continue;
           counts.total++;
@@ -286,9 +291,8 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
           if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
         }
 
-        if (rels.length < BULK_PAGE) break;
-        offset += BULK_PAGE;
-        if (offset > 1000) break; // API offset cap
+        if (!conn?.pageInfo?.hasNextPage) break;
+        cursor = conn.pageInfo.endCursor;
       }
     }
   }
