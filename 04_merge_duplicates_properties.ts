@@ -1,14 +1,15 @@
-import { gql, publishOps } from './src/functions.js';
+import { gql, publishOps, printOps, getPublishableSpaceIds, getSpaceOwnerInfo } from './src/functions.js';
 import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK, SPACES } from './src/constants.js';
 import { mergeEntities, type OpsBatch, type EntityData, type BacklinkRecord, ENTITY_INLINE_FIELDS, parseInlineEntity } from './src/entity_ops.js';
 import * as fs from 'fs';
+import path from 'node:path';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 // Finds duplicate Property entities and merges them automatically.
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
 // Run with: bun run 04_merge_duplicates_properties.ts
 
-const DRY_RUN = false; // Set to false to actually publish merges
+const DRY_RUN = true; // Set to false to actually publish merges
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
@@ -34,7 +35,7 @@ interface DuplicateGroup {
 async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<EntityHit[]> {
   const hits: EntityHit[] = [];
   let offset = 0;
-  const PAGE = 500;
+  const PAGE = 1000;
 
   while (true) {
     const data = await gql(`{
@@ -46,6 +47,7 @@ async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<Ent
       ) {
         id
         name
+        spaceIds
       }
     }`);
 
@@ -53,15 +55,26 @@ async function fetchEntitiesOfType(typeId: string, spaceId: string): Promise<Ent
     for (const e of entities) {
       const name = (e.name ?? '').trim();
       if (!name) continue;
+      // Record the entity for its primary space
       hits.push({ id: e.id, name, spaceId });
+      // Also track any external spaces this entity appears in
+      for (const sid of e.spaceIds ?? []) {
+        if (sid !== spaceId) {
+          discoveredExternalSpaces.add(sid);
+        }
+      }
     }
 
     if (entities.length < PAGE) break;
     offset += PAGE;
+    if (offset > 1000) break; // API offset cap
   }
 
   return hits;
 }
+
+// External spaces discovered from entity spaceIds — searched in a second pass
+const discoveredExternalSpaces = new Set<string>();
 
 const knownSpaceIds = new Set(SPACES.map(s => s.id));
 
@@ -114,7 +127,8 @@ async function countExternalPropertyUsages(propertyId: string): Promise<{ total:
 async function findDuplicates(label: string, typeId: string): Promise<DuplicateGroup[]> {
   console.log(`\nSearching for duplicate ${label} entities across ${SPACES.length} spaces...\n`);
 
-  // Parallel space fetches
+  // Phase 1: Fetch from known spaces
+  discoveredExternalSpaces.clear();
   const allHits: EntityHit[] = [];
   const spaceResults = await Promise.all(
     SPACES.map(async space => {
@@ -127,6 +141,32 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
     allHits.push(...hits);
   }
 
+  console.log(`  Total from known spaces: ${allHits.length}`);
+
+  // Phase 2: Search discovered external spaces for same-named entities
+  const externalSpaces = [...discoveredExternalSpaces].filter(id => !knownSpaceIds.has(id));
+  if (externalSpaces.length > 0) {
+    const knownNames = new Set(allHits.map(h => h.name.toLowerCase()));
+    console.log(`\n  Scanning ${externalSpaces.length} external space(s) for matching ${label} names...`);
+    const extResults = await Promise.all(
+      externalSpaces.map(async spaceId => {
+        const hits = await fetchEntitiesOfType(typeId, spaceId);
+        return { spaceId, hits };
+      })
+    );
+    let extCount = 0;
+    for (const { spaceId, hits } of extResults) {
+      // Only include entities whose name matches one we already know
+      const matching = hits.filter(h => knownNames.has(h.name.toLowerCase()));
+      if (matching.length > 0) {
+        console.log(`    ${spaceId}: ${matching.length} matching ${label} entities`);
+        allHits.push(...matching);
+        extCount += matching.length;
+      }
+    }
+    console.log(`  Found ${extCount} additional entities in external spaces`);
+  }
+
   console.log(`  Total: ${allHits.length}`);
 
   // Group by lowercase name
@@ -136,6 +176,16 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
     const list = byName.get(key) ?? [];
     list.push(hit);
     byName.set(key, list);
+  }
+
+  // Hard-coded alias: merge "Related topics" into "Topics"
+  const relatedTopics = byName.get('related topics');
+  if (relatedTopics) {
+    const topics = byName.get('topics') ?? [];
+    topics.push(...relatedTopics);
+    byName.set('topics', topics);
+    byName.delete('related topics');
+    console.log(`  Merged "Related topics" (${relatedTopics.length} entities) into "Topics" group`);
   }
 
   // Deduplicate: same entity ID across multiple spaces
@@ -173,36 +223,48 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
 
     if (typeId === TYPES.property) {
       // For properties: count values and relations using this property ID
-      let offset = 0;
-      while (true) {
-        const data = await gql(`{
-          values(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
+      // Paginate values and relations independently
+      let valOffset = 0;
+      let relOffset = 0;
+      let valDone = false;
+      let relDone = false;
+      while (!valDone || !relDone) {
+        const parts: string[] = [];
+        if (!valDone) {
+          parts.push(`values(filter: { propertyId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${valOffset}) {
             propertyId
             spaceId
-          }
-          relations(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${offset}) {
+          }`);
+        }
+        if (!relDone) {
+          parts.push(`relations(filter: { typeId: { in: [${filterIds}] } }, first: ${BULK_PAGE}, offset: ${relOffset}) {
             typeId
             fromEntity { spaceIds }
+          }`);
+        }
+        const data = await gql(`{ ${parts.join('\n')} }`);
+
+        if (!valDone) {
+          const values = data.values ?? [];
+          for (const v of values) {
+            const counts = backlinkCounts.get(v.propertyId)!;
+            counts.total++;
+            if (v.spaceId && !knownSpaceIds.has(v.spaceId)) counts.external++;
           }
-        }`);
-
-        const values = data.values ?? [];
-        const relations = data.relations ?? [];
-
-        for (const v of values) {
-          const counts = backlinkCounts.get(v.propertyId)!;
-          counts.total++;
-          if (v.spaceId && !knownSpaceIds.has(v.spaceId)) counts.external++;
+          valOffset += BULK_PAGE;
+          if (values.length < BULK_PAGE || valOffset > 1000) valDone = true;
         }
-        for (const rel of relations) {
-          const counts = backlinkCounts.get(rel.typeId)!;
-          counts.total++;
-          const sids: string[] = rel.fromEntity?.spaceIds ?? [];
-          if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
+        if (!relDone) {
+          const relations = data.relations ?? [];
+          for (const rel of relations) {
+            const counts = backlinkCounts.get(rel.typeId)!;
+            counts.total++;
+            const sids: string[] = rel.fromEntity?.spaceIds ?? [];
+            if (sids.length > 0 && sids.every((s: string) => !knownSpaceIds.has(s))) counts.external++;
+          }
+          relOffset += BULK_PAGE;
+          if (relations.length < BULK_PAGE || relOffset > 1000) relDone = true;
         }
-
-        if (values.length < BULK_PAGE && relations.length < BULK_PAGE) break;
-        offset += BULK_PAGE;
       }
     } else {
       // For non-property types: count backlinks
@@ -226,6 +288,7 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
 
         if (rels.length < BULK_PAGE) break;
         offset += BULK_PAGE;
+        if (offset > 1000) break; // API offset cap
       }
     }
   }
@@ -302,6 +365,381 @@ async function findDuplicates(label: string, typeId: string): Promise<DuplicateG
   }
 
   return groups;
+}
+
+// ─── Fix Package Export ─────────────────────────────────────────────────────
+
+function exportMergeFixPackage(
+  spaceId: string,
+  name: string,
+  ops: import('@geoprotocol/geo-sdk').Op[],
+  merges: Array<{ name: string; label: string; main: EntityHit; secondaries: EntityHit[] }>,
+) {
+  const dirName = name.replace(/\s+/g, '_');
+  const dir = path.join('output', 'fix_properties', dirName);
+  fs.mkdirSync(dir, { recursive: true });
+
+  // 1. Write ops JSON
+  printOps(ops, dir, 'ops.json');
+
+  // 2. Write report
+  const report: string[] = [
+    `Fix Package: ${name}`,
+    `Space ID: ${spaceId}`,
+    `Generated: ${new Date().toISOString()}`,
+    `Total ops: ${ops.length}`,
+    '',
+    '═'.repeat(70),
+    'What this fixes:',
+    '═'.repeat(70),
+    '',
+  ];
+  for (const m of merges) {
+    report.push(`  Merge "${m.name}" [${m.label}]`);
+    report.push(`    Main:      entityId=${m.main.id}  space=${spaceName.get(m.main.spaceId) ?? m.main.spaceId}`);
+    for (const sec of m.secondaries) {
+      report.push(`    Secondary: entityId=${sec.id}  space=${spaceName.get(sec.spaceId) ?? sec.spaceId}`);
+    }
+    report.push('');
+  }
+  fs.writeFileSync(path.join(dir, 'report.txt'), report.join('\n'));
+
+  // 3. Write README
+  const readme = `# Fix Package: ${name}
+
+This folder contains a set of pre-generated operations to merge duplicate
+entities in the **${name}** space (\`${spaceId}\`).
+
+## Contents
+
+| File | Description |
+|------|-------------|
+| \`README.md\` | This file |
+| \`report.txt\` | Detailed list of every merge being performed |
+| \`ops.json\` | The raw operations to publish (${ops.length} ops) |
+| \`publish.ts\` | A self-contained script that publishes the ops on-chain |
+
+## Prerequisites
+
+- [Bun](https://bun.sh) installed
+- You must be an **editor** of the ${name} space
+- A smart wallet private key (\`PK_SW\`) with access to that space
+
+## How to run
+
+1. Clone or copy the \`content_management\` project (this folder relies on its
+   \`node_modules\` for the Geo SDK).
+
+2. Install dependencies from the project root if you haven't already:
+   \`\`\`
+   bun install
+   \`\`\`
+
+3. Create a \`.env\` file in the project root (or add to an existing one) with
+   your smart wallet private key:
+   \`\`\`
+   PK_SW=0xYOUR_PRIVATE_KEY_HERE
+   \`\`\`
+
+4. Run the publish script:
+   \`\`\`
+   bun run output/fix_properties/${dirName}/publish.ts
+   \`\`\`
+
+5. The script will:
+   - Load the ops from \`ops.json\`
+   - Detect your space membership and editor status
+   - Submit a proposal to the DAO (or publish directly for personal spaces)
+   - If you are an editor, it will also auto-vote YES to approve the proposal
+
+## What gets fixed
+
+See \`report.txt\` for the full list. In summary: **${merges.length}** merge(s)
+across **${ops.length}** operations.
+
+## Questions?
+
+If something goes wrong, check that:
+- Your \`PK_SW\` is correct and the associated wallet is an editor of this space
+- You have run \`bun install\` from the project root
+- The Geo testnet API is reachable (\`https://testnet-api.geobrowser.io/graphql\`)
+`;
+  fs.writeFileSync(path.join(dir, 'README.md'), readme);
+
+  // 4. Write standalone publish script
+  const script = `#!/usr/bin/env bun
+/**
+ * Fix Package Publisher — ${name}
+ * Space ID: ${spaceId}
+ *
+ * This script publishes pre-generated merge ops to the "${name}" space.
+ * You must be an editor of this space to run it.
+ */
+import { daoSpace, getSmartAccountWalletClient, personalSpace, type Op } from '@geoprotocol/geo-sdk';
+import dotenv from 'dotenv';
+import * as fs from 'fs';
+import path from 'node:path';
+
+dotenv.config();
+
+const TESTNET_RPC_URL = 'https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz';
+const SPACE_ID = '${spaceId}';
+const SPACE_NAME = '${name}';
+
+async function gql(query: string, variables?: Record<string, any>) {
+  const res = await fetch('https://testnet-api.geobrowser.io/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(\`API error: \${res.status} \${res.statusText}\\n\${body}\`);
+  }
+  const json = await res.json();
+  if (json.errors) {
+    console.error('GraphQL errors:', JSON.stringify(json.errors, null, 2));
+    throw new Error(\`GraphQL: \${json.errors[0].message}\`);
+  }
+  return json.data;
+}
+
+async function main() {
+  const privateKey = process.env.PK_SW as \`0x\${string}\`;
+  if (!privateKey) throw new Error('PK_SW not set in .env');
+
+  // Load ops and restore UUID hex strings to Uint8Array(16)
+  const opsPath = path.join(path.dirname(new URL(import.meta.url).pathname), 'ops.json');
+  const raw = JSON.parse(fs.readFileSync(opsPath, 'utf-8'));
+  const hexToBytes = (hex: string): Uint8Array => {
+    const bytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    return bytes;
+  };
+  const restoreUuids = (obj: any): any => {
+    if (typeof obj === 'string' && /^[0-9a-f]{32}$/i.test(obj)) return hexToBytes(obj);
+    if (Array.isArray(obj)) return obj.map(restoreUuids);
+    if (obj && typeof obj === 'object') {
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = restoreUuids(v);
+      return out;
+    }
+    return obj;
+  };
+  const ops: Op[] = restoreUuids(raw);
+  console.log(\`Loaded \${ops.length} ops for space "\${SPACE_NAME}" (\${SPACE_ID})\`);
+
+  const client = await getSmartAccountWalletClient({ privateKey, rpcUrl: TESTNET_RPC_URL });
+  const author = client.account.address;
+
+  const personalSpaceData = await gql(\`{ spaces(filter: { address: { is: "\${author}" } }) { id type } }\`);
+  const callerSpace = personalSpaceData.spaces?.find((s: any) => s.type === 'PERSONAL');
+  if (!callerSpace) throw new Error(\`No personal space found for wallet \${author}.\`);
+  const callerSpaceId: string = callerSpace.id;
+
+  const spaceData = await gql(\`{
+    space(id: "\${SPACE_ID}") { type address editorsList { memberSpaceId } }
+  }\`);
+  if (!spaceData.space) throw new Error(\`Space \${SPACE_ID} not found\`);
+
+  const { type: spaceType, address: daoAddress } = spaceData.space;
+  console.log(\`Space type: \${spaceType}\`);
+
+  let to: \`0x\${string}\`;
+  let calldata: \`0x\${string}\`;
+
+  if (spaceType === 'PERSONAL') {
+    if (SPACE_ID !== callerSpaceId) throw new Error('This is not your personal space.');
+    const result = await personalSpace.publishEdit({
+      name: 'Batch merge duplicates',
+      spaceId: SPACE_ID,
+      ops,
+      author: SPACE_ID,
+      network: 'TESTNET',
+    });
+    console.log('CID:', result.cid);
+    console.log('Edit ID:', result.editId);
+    to = result.to;
+    calldata = result.calldata;
+  } else {
+    const editors: Array<{ memberSpaceId: string }> = spaceData.space.editorsList ?? [];
+    const isEditor = editors.some((e: any) => e.memberSpaceId === callerSpaceId);
+    console.log(\`Caller space: \${callerSpaceId}, is editor: \${isEditor}\`);
+
+    const result = await daoSpace.proposeEdit({
+      name: 'Batch merge duplicates',
+      ops,
+      author: callerSpaceId,
+      network: 'TESTNET',
+      callerSpaceId: \`0x\${callerSpaceId}\` as \`0x\${string}\`,
+      daoSpaceId: \`0x\${SPACE_ID}\` as \`0x\${string}\`,
+      daoSpaceAddress: daoAddress as \`0x\${string}\`,
+    });
+    console.log('Proposal ID:', result.proposalId);
+    console.log('CID:', result.cid);
+    console.log('Edit ID:', result.editId);
+    to = result.to;
+    calldata = result.calldata;
+
+    const txHash = await client.sendTransaction({ to, data: calldata });
+    console.log('Proposal TX:', txHash);
+
+    if (isEditor) {
+      const voteResult = daoSpace.voteProposal({
+        authorSpaceId: callerSpaceId,
+        spaceId: SPACE_ID,
+        proposalId: result.proposalId,
+        vote: 'YES',
+      });
+      const voteTx = await client.sendTransaction({ to: voteResult.to, data: voteResult.calldata });
+      console.log('Vote TX:', voteTx);
+    }
+
+    console.log('\\nDone!');
+    return;
+  }
+
+  const txHash = await client.sendTransaction({ to, data: calldata });
+  console.log('TX:', txHash);
+  console.log('\\nDone!');
+}
+
+main().catch(console.error);
+`;
+  fs.writeFileSync(path.join(dir, 'publish.ts'), script);
+}
+
+// ─── Assignment Summary ─────────────────────────────────────────────────────
+
+function generateAssignmentSummary(
+  outputDir: string,
+  spaceInfos: import('./src/functions.js').SpaceOwnerInfo[],
+  opsCountBySpace: Map<string, number>,
+) {
+  // Group spaces by person (editor or personal space owner)
+  const byPerson = new Map<string, Array<{ spaceId: string; spaceName: string; opsCount: number; folderName: string }>>();
+
+  for (const info of spaceInfos) {
+    const opsCount = opsCountBySpace.get(info.spaceId) ?? 0;
+    const folderName = (spaceName.get(info.spaceId) ?? info.spaceId).replace(/\s+/g, '_');
+
+    if (info.spaceType === 'PERSONAL') {
+      const personName = info.spaceName;
+      const list = byPerson.get(personName) ?? [];
+      list.push({ spaceId: info.spaceId, spaceName: info.spaceName, opsCount, folderName });
+      byPerson.set(personName, list);
+    } else {
+      // DAO space — assign to each editor
+      for (const editor of info.editors) {
+        const list = byPerson.get(editor.name) ?? [];
+        list.push({ spaceId: info.spaceId, spaceName: info.spaceName, opsCount, folderName });
+        byPerson.set(editor.name, list);
+      }
+      if (info.editors.length === 0) {
+        const list = byPerson.get('(no editors found)') ?? [];
+        list.push({ spaceId: info.spaceId, spaceName: info.spaceName, opsCount, folderName });
+        byPerson.set('(no editors found)', list);
+      }
+    }
+  }
+
+  // Generate markdown
+  const sortedPeople = [...byPerson.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+  let assignmentsSection = '';
+  for (const [personName, spaces] of sortedPeople) {
+    assignmentsSection += `### ${personName}\n\n`;
+    for (const s of spaces) {
+      assignmentsSection += `- **${s.spaceName}** — ${s.opsCount} operations to apply\n`;
+      assignmentsSection += `  - Space ID: \`${s.spaceId}\`\n`;
+      assignmentsSection += `  - Run this command in your terminal:\n`;
+      assignmentsSection += `    \`\`\`\n`;
+      assignmentsSection += `    bun run output/${outputDir}/${s.folderName}/publish.ts\n`;
+      assignmentsSection += `    \`\`\`\n`;
+    }
+    assignmentsSection += '\n';
+  }
+
+  const md = `# Fix Assignments
+
+> Generated: ${new Date().toISOString()}
+
+Some spaces in the Geo knowledge graph have duplicate property entities that need to be merged. Because we don't have editor access to every space, we've generated ready-to-run fix packages. Each person listed below has one or more spaces that need attention.
+
+---
+
+## Quick Start (for everyone)
+
+If you've never used a terminal or code editor before, follow these steps carefully. If you get stuck, ask for help in the team chat.
+
+### 1. Install the tools
+
+You need two things installed on your computer:
+
+- **Bun** (a JavaScript runtime) — install it by opening your terminal and pasting this command:
+  \`\`\`
+  curl -fsSL https://bun.sh/install | bash
+  \`\`\`
+  Then close and reopen your terminal so the \`bun\` command is available.
+
+- **A code editor** (optional but helpful) — [VS Code](https://code.visualstudio.com/) is free and works on Mac, Windows, and Linux. You can also just use your terminal directly.
+
+### 2. Get the project
+
+Clone the repository (or ask someone to share the project folder with you):
+\`\`\`
+git clone <REPO_URL>
+cd content_management
+\`\`\`
+
+If you received the project as a zip file, unzip it and open a terminal in the \`content_management\` folder.
+
+### 3. Install dependencies
+
+Run this once from the \`content_management\` folder:
+\`\`\`
+bun install
+\`\`\`
+
+### 4. Set up your private key
+
+Create a file called \`.env\` in the \`content_management\` folder (or edit it if it already exists) and add your smart wallet private key:
+\`\`\`
+PK_SW=0xYOUR_PRIVATE_KEY_HERE
+\`\`\`
+
+> **Where do I find my private key?** Go to [geobrowser.io/export-wallet](https://www.geobrowser.io/export-wallet) (make sure you are logged in). Click **Export wallet**, then click **Copy key**. Paste it after \`PK_SW=\`. Keep this key secret — don't share it with anyone.
+
+### 5. Run your fix script
+
+Find your name in the list below, then run the command shown for each of your spaces. For example:
+\`\`\`
+bun run output/${outputDir}/<your_folder>/publish.ts
+\`\`\`
+
+The script will submit a proposal (or publish directly if you are an editor). You should see a "Done!" message when it finishes.
+
+---
+
+## Assignments
+
+${assignmentsSection}---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| \`bun: command not found\` | Close and reopen your terminal after installing Bun, or run \`source ~/.bashrc\` |
+| \`PK_SW not set in .env\` | Make sure you created the \`.env\` file in the \`content_management\` folder (not a subfolder) |
+| \`No personal space found\` | Your private key may be wrong — double-check it in Geo browser Settings |
+| \`You are not a member or editor\` | You need editor access to the space — ask the space owner to add you |
+| \`API error: 400\` | The Geo testnet API may be temporarily down — wait a few minutes and try again |
+`;
+
+  const outDir = path.join('output', outputDir);
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.writeFileSync(path.join(outDir, 'ASSIGNMENTS.md'), md);
+  console.log(`  Assignment summary written to output/${outputDir}/ASSIGNMENTS.md`);
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
@@ -455,11 +893,13 @@ async function main() {
       }
 
       try {
+        // Always pass dryRun: false so ops accumulate into opsBatch.
+        // Actual publish vs dry-run is controlled at the script level below.
         await mergeEntities({
           mainEntityId: group.main.id,
           mainSpaceId: group.main.spaceId,
           secondaries: group.secondaries.map(s => ({ entityId: s.id, spaceId: s.spaceId })),
-          dryRun: DRY_RUN,
+          dryRun: false,
           opsBatch,
           entityDataCache,
           backlinksCache,
@@ -476,16 +916,42 @@ async function main() {
     }
   }
 
-  // Publish all accumulated ops, once per space
-  if (!DRY_RUN) {
+  // Publish or export fix packages per space
+  const exportedSpaceIds: string[] = [];
+  const exportedSpaceOps = new Map<string, number>();
+  {
+    const spaceIdsWithOps = [...opsBatch.keys()].filter(id => (opsBatch.get(id)?.length ?? 0) > 0);
+    const publishable = await getPublishableSpaceIds(spaceIdsWithOps);
+
     let totalOps = 0;
     for (const [spaceId, ops] of opsBatch) {
       if (ops.length === 0) continue;
       totalOps += ops.length;
-      console.log(`\nPublishing ${ops.length} ops to space ${spaceId} (${spaceName.get(spaceId) ?? 'unknown'})...`);
-      await publishOps(ops, `Batch merge duplicates`, spaceId);
+      const name = spaceName.get(spaceId) ?? spaceId;
+
+      if (!publishable.has(spaceId)) {
+        console.log(`\n${name}: ${ops.length} ops — NO EDITOR ACCESS, exporting fix package...`);
+        exportedSpaceIds.push(spaceId);
+        exportedSpaceOps.set(spaceId, ops.length);
+        exportMergeFixPackage(spaceId, name, ops, reportMerged.filter(m =>
+          m.main.spaceId === spaceId || m.secondaries.some(s => s.spaceId === spaceId)
+        ));
+        console.log(`  Exported to output/fix_properties/${name.replace(/\s+/g, '_')}/`);
+      } else if (DRY_RUN) {
+        console.log(`\n${name}: ${ops.length} ops (dry run)`);
+      } else {
+        console.log(`\nPublishing ${ops.length} ops to space ${name}...`);
+        await publishOps(ops, `Batch merge duplicates`, spaceId);
+      }
     }
-    console.log(`\nPublished ${totalOps} total ops across ${opsBatch.size} space(s).`);
+    console.log(`\n${DRY_RUN ? 'Generated' : 'Published'} ${totalOps} total ops across ${opsBatch.size} space(s).`);
+
+    // Generate assignment summary for exported fix packages
+    if (exportedSpaceIds.length > 0) {
+      console.log(`\nGenerating fix assignment summary...`);
+      const spaceInfos = await getSpaceOwnerInfo(exportedSpaceIds);
+      generateAssignmentSummary('fix_properties', spaceInfos, exportedSpaceOps);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -1,5 +1,6 @@
-import { Graph, type Op } from '@geoprotocol/geo-sdk';
-import { gql, publishOps } from './src/functions.js';
+import { Graph, Position, type Op } from '@geoprotocol/geo-sdk';
+import { gql, publishOps, printOps, getPublishableSpaceIds } from './src/functions.js';
+import path from 'node:path';
 import { SPACES, TYPES, PROPERTIES } from './src/constants.js';
 import * as fs from 'fs';
 
@@ -51,6 +52,21 @@ interface FixCase {
   correctAlreadyExists: boolean;
 }
 
+// ─── Skip constants ─────────────────────────────────────────────────────────
+
+const TEXT_BLOCK_TYPE = '76474f2f00894e77a0410b39fb17d0bf';
+const IMAGE_TYPE      = 'ba4e41460010499da0a3caaa7f579d0e';
+const VIDEO_TYPE      = 'd7a4817c9795405b93e212df759c43f8';
+const MARKDOWN_PROP   = 'e3e363d1dd294ccb8e6ff3b76d99bc33';
+const IPFS_URL_PROP   = '8a743832c0944a62b6650c3cc2f9c7bc';
+const NAME_PROP       = 'a126ca530c8e48d5b88882c734c38935';
+
+interface NameFix {
+  entityId: string;
+  spaceId: string;
+  name: string;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function optionalRelationFields(r: StaleRelation) {
@@ -65,43 +81,112 @@ function optionalRelationFields(r: StaleRelation) {
 
 // ─── Phase 1: Detect ────────────────────────────────────────────────────────
 
-async function findStaleRelationsInSpace(spaceId: string): Promise<StaleRelation[]> {
+async function getAllEntityIdsInSpace(spaceId: string): Promise<string[]> {
+  // Split by typeId so each sub-query stays well under 2000 results,
+  // working around the API's offset ≤ 1000 hard cap.
+  const knownTypeIds = [
+    ...Object.values(TYPES),
+    TEXT_BLOCK_TYPE,
+    IMAGE_TYPE,
+    VIDEO_TYPE,
+  ];
+
+  const seen = new Set<string>();
+  const PAGE = 1000;
+
+  for (const typeId of knownTypeIds) {
+    let offset = 0;
+    while (true) {
+      const data = await gql(`{
+        entities(spaceId: "${spaceId}" typeId: "${typeId}" first: ${PAGE} offset: ${offset}) { id }
+      }`);
+      const entities = data.entities ?? [];
+      for (const e of entities) seen.add(e.id);
+      if (entities.length < PAGE) break;
+      offset += PAGE;
+      if (offset > 1000) break; // API hard cap
+    }
+  }
+
+  return [...seen];
+}
+
+async function findStaleRelationsInSpace(spaceId: string): Promise<{ stale: StaleRelation[], nameFixes: NameFix[] }> {
   const stale: StaleRelation[] = [];
-  let offset = 0;
-  const PAGE = 100;
-  //-- fromEntity: {typeIds: {anyEqualTo: "${TYPES.topic}"}}
-  while (true) {
-    const data = await gql(`{
-      relations(
-        filter: { 
-          spaceId: { is: "${spaceId}" }        
+  const nameFixes: NameFix[] = [];
+
+  // Paginate entity IDs first, then query relations per-batch of entities.
+  // This avoids the API's offset ≤ 1000 cap on the relations query itself,
+  // since no single entity will have anywhere near 2000 outgoing relations.
+  const entityIds = await getAllEntityIdsInSpace(spaceId);
+
+  const BATCH = 20;
+  for (let i = 0; i < entityIds.length; i += BATCH) {
+    const batch = entityIds.slice(i, i + BATCH);
+    const filterIds = batch.map(id => `"${id}"`).join(', ');
+
+    let offset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const data = await gql(`{
+        relations(
+          filter: {
+            spaceId: { is: "${spaceId}" }
+            fromEntityId: { in: [${filterIds}] }
+          }
+          first: ${PAGE}
+          offset: ${offset}
+        ) {
+          id
+          entityId
+          fromEntityId
+          fromEntity { name }
+          toEntityId
+          toEntity { name typeIds }
+          typeId
+          typeEntity { name }
+          toSpaceId
+          fromSpaceId
+          toVersionId
+          fromVersionId
+          position
         }
-        first: ${PAGE}
-        offset: ${offset}
-      ) {
-        id
-        entityId
-        fromEntityId
-        fromEntity { name }
-        toEntityId
-        toEntity { name typeIds }
-        typeId
-        typeEntity { name }
-        toSpaceId
-        fromSpaceId
-        toVersionId
-        fromVersionId
-        position
-      }
-    }`);
+      }`);
 
-    const rels = data.relations ?? [];
-    for (const r of rels) {
-      const toName = (r.toEntity?.name ?? '').trim();
-      const toTypeIds: string[] = r.toEntity?.typeIds ?? [];
+      const rels = data.relations ?? [];
+      for (const r of rels) {
+        const toName = (r.toEntity?.name ?? '').trim();
+        if (toName) continue;
 
-      // A deleted entity has no name AND no type assignments
-      if (!toName && toTypeIds.length === 0) {
+        const toTypeIds: string[] = r.toEntity?.typeIds ?? [];
+
+        // Text block: if markdown content is present, fix name instead of treating as stale
+        if (toTypeIds.includes(TEXT_BLOCK_TYPE)) {
+          const valData = await gql(`{
+            values(filter: {
+              entityId: { is: "${r.toEntityId}" }
+              propertyId: { is: "${MARKDOWN_PROP}" }
+            }) { text }
+          }`);
+          const text = ((valData.values ?? [])[0]?.text ?? '').trim();
+          if (text) {
+            nameFixes.push({ entityId: r.toEntityId, spaceId, name: text.slice(0, 20) });
+            continue;
+          }
+        }
+
+        // Image or video: if IPFS url is present, leave the relation alone
+        if (toTypeIds.includes(IMAGE_TYPE) || toTypeIds.includes(VIDEO_TYPE)) {
+          const valData = await gql(`{
+            values(filter: {
+              entityId: { is: "${r.toEntityId}" }
+              propertyId: { is: "${IPFS_URL_PROP}" }
+            }) { text }
+          }`);
+          const url = ((valData.values ?? [])[0]?.text ?? '').trim();
+          if (url) continue;
+        }
+
         stale.push({
           id: r.id,
           entityId: r.entityId,
@@ -118,13 +203,13 @@ async function findStaleRelationsInSpace(spaceId: string): Promise<StaleRelation
           position: r.position ?? null,
         });
       }
-    }
 
-    if (rels.length < PAGE) break;
-    offset += PAGE;
+      if (rels.length < PAGE) break;
+      offset += PAGE;
+    }
   }
 
-  return stale;
+  return { stale, nameFixes };
 }
 
 // ─── Phase 2: Resolve ───────────────────────────────────────────────────────
@@ -207,6 +292,82 @@ async function findCorrectTarget(stale: StaleRelation): Promise<FixCase | null> 
   return null;
 }
 
+// ─── Phase 2b: Resolve via version history ─────────────────────────────────
+
+async function resolveViaVersionHistory(stale: StaleRelation): Promise<FixCase | null> {
+  // Look up the stale entity's old name and old type relations
+  const versionData = await gql(`{
+    valueVersions(
+      filter: { entityId: { is: "${stale.toEntityId}" }, propertyId: { is: "${PROPERTIES.name}" } }
+    ) {
+      text
+    }
+    relationVersions(
+      filter: { fromEntityId: { is: "${stale.toEntityId}" }, typeId: { is: "${PROPERTIES.types}" } }
+    ) {
+      toEntityId
+    }
+  }`);
+
+  const names = (versionData.valueVersions ?? [])
+    .map((v: any) => (v.text ?? '').trim())
+    .filter((t: string) => t.length > 0);
+  const typeIds = [...new Set(
+    (versionData.relationVersions ?? []).map((r: any) => r.toEntityId).filter(Boolean)
+  )] as string[];
+
+  if (names.length === 0) return null;
+
+  // Use the most recent name (first result)
+  const oldName = names[0];
+
+  // Search for a live entity with matching name + type.
+  // The entities endpoint uses top-level args (spaceId, typeId), not a filter object,
+  // so we query each (typeId × space) combination and match by name client-side.
+  const searchTypeIds = typeIds.length > 0 ? typeIds : [null];
+  const candidates: Array<{ id: string; name: string }> = [];
+  const PAGE = 500;
+
+  outer:
+  for (const tid of searchTypeIds) {
+    for (const space of SPACES) {
+      const typeArg = tid ? `typeId: "${tid}"` : '';
+      let offset = 0;
+      while (true) {
+        const data = await gql(`{
+          entities(spaceId: "${space.id}" ${typeArg} first: ${PAGE} offset: ${offset}) {
+            id
+            name
+          }
+        }`);
+        const entities = data.entities ?? [];
+        for (const e of entities) {
+          const eName = (e.name ?? '').trim();
+          if (eName === oldName && e.id !== stale.toEntityId) {
+            candidates.push({ id: e.id, name: eName });
+            break outer;
+          }
+        }
+        if (entities.length < PAGE) break;
+        offset += PAGE;
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Pick the first matching live entity
+  const match = candidates[0];
+  return {
+    stale,
+    correctTargetId: match.id,
+    correctTargetName: match.name,
+    wrongSpaceRelId: null,
+    wrongSpaceId: null,
+    correctAlreadyExists: false,
+  };
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -221,10 +382,12 @@ async function main() {
   log('═'.repeat(80));
 
   const allStale: StaleRelation[] = [];
+  const allNameFixes: NameFix[] = [];
   for (const space of SPACES) {
-    const stale = await findStaleRelationsInSpace(space.id);
-    log(`  ${space.name}: ${stale.length} stale relation(s)`);
+    const { stale, nameFixes } = await findStaleRelationsInSpace(space.id);
+    log(`  ${space.name}: ${stale.length} stale relation(s), ${nameFixes.length} name fix(es)`);
     allStale.push(...stale);
+    allNameFixes.push(...nameFixes);
   }
 
   log(`\n  Total: ${allStale.length} stale relation(s)\n`);
@@ -357,6 +520,16 @@ async function main() {
           wrongSpaceId: null,
           correctAlreadyExists: false,
         });
+      } else if (stale.typeId === '8f637e6a629743c08eb9c49e971b2b54') {
+        // Stale Perspectives relation → just delete, no replacement needed
+        fixCases.push({
+          stale,
+          correctTargetId: '',
+          correctTargetName: '(delete only)',
+          wrongSpaceRelId: null,
+          wrongSpaceId: null,
+          correctAlreadyExists: true, // skip create
+        });
       } else if (stale.typeId === '1155befffad549b7a2e0da4777b8792c') {
         // Stale Avatar relation → just delete, no replacement needed
         fixCases.push({
@@ -376,6 +549,53 @@ async function main() {
   log(`\n  Fixable: ${fixCases.length}`);
   log(`  Unfixable (no matching relation found): ${unfixable.length}\n`);
 
+  // ═══ Phase 2b: Resolve unfixable via version history ═══
+  log('═'.repeat(80));
+  log('Phase 2b: Resolving remaining via version history (old name + old types)');
+  log('═'.repeat(80));
+
+  let deleteOnlyCount = 0;
+  // Deduplicate version lookups by stale toEntityId
+  const unfixableByTarget = new Map<string, StaleRelation[]>();
+  for (const s of unfixable) {
+    const list = unfixableByTarget.get(s.toEntityId) ?? [];
+    list.push(s);
+    unfixableByTarget.set(s.toEntityId, list);
+  }
+
+  for (const [, staleGroup] of unfixableByTarget) {
+    const fix = await resolveViaVersionHistory(staleGroup[0]);
+    if (fix) {
+      log(`  RESOLVED via history: DELETED(${staleGroup[0].toEntityId}) → "${fix.correctTargetName}" (${fix.correctTargetId})`);
+      for (const stale of staleGroup) {
+        fixCases.push({
+          stale,
+          correctTargetId: fix.correctTargetId,
+          correctTargetName: fix.correctTargetName,
+          wrongSpaceRelId: null,
+          wrongSpaceId: null,
+          correctAlreadyExists: false,
+        });
+      }
+    } else {
+      log(`  DELETE ONLY: DELETED(${staleGroup[0].toEntityId}) — no replacement found, will delete stale relation(s)`);
+      deleteOnlyCount += staleGroup.length;
+      for (const stale of staleGroup) {
+        fixCases.push({
+          stale,
+          correctTargetId: '',
+          correctTargetName: '(delete only)',
+          wrongSpaceRelId: null,
+          wrongSpaceId: null,
+          correctAlreadyExists: true, // skip create, just delete
+        });
+      }
+    }
+  }
+
+  log(`\n  Resolved via history: ${unfixable.length - deleteOnlyCount}`);
+  log(`  Delete only (no replacement found): ${deleteOnlyCount}\n`);
+
   // Log fixable cases
   for (const fix of fixCases) {
     log(`  FIX: "${fix.stale.fromEntityName}" --[${fix.stale.typeName}]--> DELETED(${fix.stale.toEntityId})`);
@@ -384,13 +604,6 @@ async function main() {
     if (fix.wrongSpaceRelId) {
       log(`    Wrong-space duplicate in: ${spaceName.get(fix.wrongSpaceId!) ?? fix.wrongSpaceId}  relation: ${fix.wrongSpaceRelId}`);
     }
-    log();
-  }
-
-  // Log unfixable cases
-  for (const s of unfixable) {
-    log(`  UNFIXABLE: "${s.fromEntityName}" --[${s.typeName}]--> DELETED(${s.toEntityId})`);
-    log(`    In: ${spaceName.get(s.spaceId) ?? s.spaceId}  relation: ${s.id}`);
     log();
   }
 
@@ -445,11 +658,78 @@ async function main() {
     log(`\n  Skipped ${skippedDuplicates} duplicate create(s)`);
   }
 
-  // Publish per space
+  // Name fixes: set name on text-block entities that have markdown content
+  const seenNameFix = new Set<string>();
+  for (const fix of allNameFixes) {
+    if (seenNameFix.has(fix.entityId)) continue;
+    seenNameFix.add(fix.entityId);
+    log(`  NAME FIX: ${fix.entityId} → "${fix.name}"`);
+    const result = Graph.updateEntity({
+      id: fix.entityId,
+      values: [{ property: NAME_PROP, type: 'text', value: fix.name }],
+    });
+    addOps(fix.spaceId, result.ops);
+  }
+
+  // ─── Phase 4: Orphan cleanup ─────────────────────────────────────────────
+  // Collect stale toEntityIds that we're fixing — check if they become orphaned
+  const staleEntityIds = [...new Set(fixCases.map(f => f.stale.toEntityId))];
+  // Also track which spaces each stale entity appears in
+  const staleEntitySpaces = new Map<string, Set<string>>();
+  for (const fix of fixCases) {
+    const set = staleEntitySpaces.get(fix.stale.toEntityId) ?? new Set();
+    set.add(fix.stale.spaceId);
+    staleEntitySpaces.set(fix.stale.toEntityId, set);
+  }
+
+  log(`\n${'═'.repeat(80)}`);
+  log('Phase 4: Checking for orphaned stale entities');
+  log('═'.repeat(80));
+
+  let orphanCount = 0;
+  for (const entityId of staleEntityIds) {
+    // Check if any relations still point TO this entity (excluding ones we're deleting)
+    const deletedRelIds = new Set(
+      fixCases.filter(f => f.stale.toEntityId === entityId).map(f => f.stale.id)
+    );
+    const data = await gql(`{
+      relations(filter: { toEntityId: { is: "${entityId}" } }) {
+        id
+      }
+    }`);
+    const remainingRels = (data.relations ?? []).filter((r: any) => !deletedRelIds.has(r.id));
+    if (remainingRels.length === 0) {
+      orphanCount++;
+      log(`  ORPHAN: ${entityId} — deleting entity`);
+      // Delete the orphaned entity in each space it appeared
+      const spaces = staleEntitySpaces.get(entityId) ?? new Set();
+      for (const spaceId of spaces) {
+        const delEntity = await Graph.deleteEntity({ id: entityId, spaceId });
+        addOps(spaceId, delEntity.ops);
+      }
+    }
+  }
+  log(`  ${orphanCount} orphaned entit${orphanCount === 1 ? 'y' : 'ies'} to delete\n`);
+
+  // Determine which spaces we can publish to
+  const spaceIdsWithOps = [...opsBySpace.keys()].filter(id => (opsBySpace.get(id)?.length ?? 0) > 0);
+  const publishable = await getPublishableSpaceIds(spaceIdsWithOps);
+
+  // Publish to spaces we have editor access; export fix packages for the rest
   for (const [spaceId, ops] of opsBySpace) {
     if (ops.length === 0) continue;
-    log(`  ${spaceName.get(spaceId) ?? spaceId}: ${ops.length} ops`);
-    if (!DRY_RUN) {
+    const name = spaceName.get(spaceId) ?? spaceId;
+
+    // Always export fix packages for spaces we can't publish to
+    if (!publishable.has(spaceId)) {
+      log(`  ${name}: ${ops.length} ops — NO EDITOR ACCESS, exporting fix package...`);
+      const spaceFixCases = fixCases.filter(f => f.stale.spaceId === spaceId);
+      exportFixPackage(spaceId, name, ops, spaceFixCases);
+      log(`    Exported to output/fix_packages/${name.replace(/\s+/g, '_')}/`);
+    } else if (DRY_RUN) {
+      log(`  ${name}: ${ops.length} ops (dry run)`);
+    } else {
+      log(`  ${name}: ${ops.length} ops — publishing...`);
       await publishOps(ops, `Fix stale relations from wrong-space bug`, spaceId);
       log(`    Published.`);
     }
@@ -460,8 +740,11 @@ async function main() {
   log('SUMMARY');
   log('═'.repeat(80));
   log(`  Stale relations found: ${allStale.length}`);
-  log(`  Fixed: ${fixCases.length}`);
-  log(`  Unfixable: ${unfixable.length}`);
+  log(`  Fixed (Phase 2): ${fixCases.length - (unfixable.length)}`);
+  log(`  Fixed (Phase 2b via history): ${unfixable.length - deleteOnlyCount}`);
+  log(`  Delete only (no replacement): ${deleteOnlyCount}`);
+  log(`  Total fixed: ${fixCases.length}`);
+  log(`  Orphaned entities deleted: ${orphanCount}`);
   log(`  Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
 
   let totalOps = 0;
@@ -488,6 +771,257 @@ async function main() {
   }
 
   writeReport(lines);
+}
+
+function exportFixPackage(
+  spaceId: string,
+  name: string,
+  ops: Op[],
+  spaceFixCases: FixCase[],
+) {
+  const dirName = name.replace(/\s+/g, '_');
+  const dir = path.join('output', 'fix_packages', dirName);
+  fs.mkdirSync(dir, { recursive: true });
+
+  // 1. Write ops JSON
+  printOps(ops, dir, 'ops.json');
+
+  // 2. Write report
+  const report: string[] = [
+    `Fix Package: ${name}`,
+    `Space ID: ${spaceId}`,
+    `Generated: ${new Date().toISOString()}`,
+    `Total ops: ${ops.length}`,
+    '',
+    '═'.repeat(70),
+    'What this fixes:',
+    '═'.repeat(70),
+    '',
+  ];
+  for (const fix of spaceFixCases) {
+    report.push(`  "${fix.stale.fromEntityName}" --[${fix.stale.typeName}]--> DELETED(${fix.stale.toEntityId})`);
+    report.push(`    Relation ID: ${fix.stale.id}`);
+    if (fix.correctTargetId) {
+      report.push(`    → Replace with: "${fix.correctTargetName}" (${fix.correctTargetId})`);
+    } else {
+      report.push(`    → Delete only (no replacement)`);
+    }
+    report.push('');
+  }
+  fs.writeFileSync(path.join(dir, 'report.txt'), report.join('\n'));
+
+  // 3. Write README
+  const readme = `# Fix Package: ${name}
+
+This folder contains a set of pre-generated operations to fix stale relations
+in the **${name}** space (\`${spaceId}\`).
+
+Stale relations point to entities that have been deleted. This package either
+remaps them to the correct live entity or removes them entirely.
+
+## Contents
+
+| File | Description |
+|------|-------------|
+| \`README.md\` | This file |
+| \`report.txt\` | Detailed list of every relation being fixed and what the fix does |
+| \`ops.json\` | The raw operations to publish (${ops.length} ops) |
+| \`publish.ts\` | A self-contained script that publishes the ops on-chain |
+
+## Prerequisites
+
+- [Bun](https://bun.sh) installed
+- You must be an **editor** of the ${name} space
+- A smart wallet private key (\`PK_SW\`) with access to that space
+
+## How to run
+
+1. Clone or copy the \`content_management\` project (this folder relies on its
+   \`node_modules\` for the Geo SDK).
+
+2. Install dependencies from the project root if you haven't already:
+   \`\`\`
+   bun install
+   \`\`\`
+
+3. Create a \`.env\` file in the project root (or add to an existing one) with
+   your smart wallet private key:
+   \`\`\`
+   PK_SW=0xYOUR_PRIVATE_KEY_HERE
+   \`\`\`
+
+4. Run the publish script:
+   \`\`\`
+   bun run output/fix_packages/${dirName}/publish.ts
+   \`\`\`
+
+5. The script will:
+   - Load the ops from \`ops.json\`
+   - Detect your space membership and editor status
+   - Submit a proposal to the DAO (or publish directly for personal spaces)
+   - If you are an editor, it will also auto-vote YES to approve the proposal
+
+## What gets fixed
+
+See \`report.txt\` for the full list. In summary: **${spaceFixCases.length}** stale
+relation(s) are being fixed across **${ops.length}** operations.
+
+## Questions?
+
+If something goes wrong, check that:
+- Your \`PK_SW\` is correct and the associated wallet is an editor of this space
+- You have run \`bun install\` from the project root
+- The Geo testnet API is reachable (\`https://testnet-api.geobrowser.io/graphql\`)
+`;
+  fs.writeFileSync(path.join(dir, 'README.md'), readme);
+
+  // 4. Write standalone publish script
+  const script = `#!/usr/bin/env bun
+/**
+ * Fix Package Publisher — ${name}
+ * Space ID: ${spaceId}
+ *
+ * This script publishes pre-generated fix ops to the "${name}" space.
+ * You must be an editor of this space to run it.
+ *
+ * Setup:
+ *   1. Make sure you have bun installed
+ *   2. Run: bun install (from the content_management root)
+ *   3. Copy .env.example to .env and fill in your PK_SW (smart wallet private key)
+ *   4. Run: bun run output/fix_packages/${dirName}/publish.ts
+ */
+import { daoSpace, getSmartAccountWalletClient, personalSpace, type Op } from '@geoprotocol/geo-sdk';
+import dotenv from 'dotenv';
+import * as fs from 'fs';
+import path from 'node:path';
+
+dotenv.config();
+
+const TESTNET_RPC_URL = 'https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz';
+const SPACE_ID = '${spaceId}';
+const SPACE_NAME = '${name}';
+
+async function gql(query: string, variables?: Record<string, any>) {
+  const res = await fetch('https://testnet-api.geobrowser.io/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(\`API error: \${res.status} \${res.statusText}\\n\${body}\`);
+  }
+  const json = await res.json();
+  if (json.errors) {
+    console.error('GraphQL errors:', JSON.stringify(json.errors, null, 2));
+    throw new Error(\`GraphQL: \${json.errors[0].message}\`);
+  }
+  return json.data;
+}
+
+async function main() {
+  const privateKey = process.env.PK_SW as \`0x\${string}\`;
+  if (!privateKey) throw new Error('PK_SW not set in .env');
+
+  // Load ops and restore UUID hex strings to Uint8Array(16)
+  const opsPath = path.join(path.dirname(new URL(import.meta.url).pathname), 'ops.json');
+  const raw = JSON.parse(fs.readFileSync(opsPath, 'utf-8'));
+  const hexToBytes = (hex: string): Uint8Array => {
+    const bytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    return bytes;
+  };
+  const restoreUuids = (obj: any): any => {
+    if (typeof obj === 'string' && /^[0-9a-f]{32}$/i.test(obj)) return hexToBytes(obj);
+    if (Array.isArray(obj)) return obj.map(restoreUuids);
+    if (obj && typeof obj === 'object') {
+      const out: any = {};
+      for (const [k, v] of Object.entries(obj)) out[k] = restoreUuids(v);
+      return out;
+    }
+    return obj;
+  };
+  const ops: Op[] = restoreUuids(raw);
+  console.log(\`Loaded \${ops.length} ops for space "\${SPACE_NAME}" (\${SPACE_ID})\`);
+
+  const client = await getSmartAccountWalletClient({ privateKey, rpcUrl: TESTNET_RPC_URL });
+  const author = client.account.address;
+
+  const personalSpaceData = await gql(\`{ spaces(filter: { address: { is: "\${author}" } }) { id type } }\`);
+  const callerSpace = personalSpaceData.spaces?.find((s: any) => s.type === 'PERSONAL');
+  if (!callerSpace) throw new Error(\`No personal space found for wallet \${author}.\`);
+  const callerSpaceId: string = callerSpace.id;
+
+  const spaceData = await gql(\`{
+    space(id: "\${SPACE_ID}") { type address editorsList { memberSpaceId } }
+  }\`);
+  if (!spaceData.space) throw new Error(\`Space \${SPACE_ID} not found\`);
+
+  const { type: spaceType, address: daoAddress } = spaceData.space;
+  console.log(\`Space type: \${spaceType}\`);
+
+  let to: \`0x\${string}\`;
+  let calldata: \`0x\${string}\`;
+
+  if (spaceType === 'PERSONAL') {
+    if (SPACE_ID !== callerSpaceId) throw new Error('This is not your personal space.');
+    const result = await personalSpace.publishEdit({
+      name: 'Fix stale relations',
+      spaceId: SPACE_ID,
+      ops,
+      author: SPACE_ID,
+      network: 'TESTNET',
+    });
+    console.log('CID:', result.cid);
+    console.log('Edit ID:', result.editId);
+    to = result.to;
+    calldata = result.calldata;
+  } else {
+    const editors: Array<{ memberSpaceId: string }> = spaceData.space.editorsList ?? [];
+    const isEditor = editors.some((e: any) => e.memberSpaceId === callerSpaceId);
+    console.log(\`Caller space: \${callerSpaceId}, is editor: \${isEditor}\`);
+
+    const result = await daoSpace.proposeEdit({
+      name: 'Fix stale relations',
+      ops,
+      author: callerSpaceId,
+      network: 'TESTNET',
+      callerSpaceId: \`0x\${callerSpaceId}\` as \`0x\${string}\`,
+      daoSpaceId: \`0x\${SPACE_ID}\` as \`0x\${string}\`,
+      daoSpaceAddress: daoAddress as \`0x\${string}\`,
+    });
+    console.log('Proposal ID:', result.proposalId);
+    console.log('CID:', result.cid);
+    console.log('Edit ID:', result.editId);
+    to = result.to;
+    calldata = result.calldata;
+
+    const txHash = await client.sendTransaction({ to, data: calldata });
+    console.log('Proposal TX:', txHash);
+
+    if (isEditor) {
+      const voteResult = daoSpace.voteProposal({
+        authorSpaceId: callerSpaceId,
+        spaceId: SPACE_ID,
+        proposalId: result.proposalId,
+        vote: 'YES',
+      });
+      const voteTx = await client.sendTransaction({ to: voteResult.to, data: voteResult.calldata });
+      console.log('Vote TX:', voteTx);
+    }
+
+    console.log('\\nDone!');
+    return;
+  }
+
+  const txHash = await client.sendTransaction({ to, data: calldata });
+  console.log('TX:', txHash);
+  console.log('\\nDone!');
+}
+
+main().catch(console.error);
+`;
+  fs.writeFileSync(path.join(dir, 'publish.ts'), script);
 }
 
 function writeReport(lines: string[]) {

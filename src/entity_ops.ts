@@ -1,6 +1,6 @@
 import { Graph, type Op, type PropertyValueParam } from '@geoprotocol/geo-sdk';
 import { gql, publishOps } from './functions.ts';
-import { TYPES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './constants.ts';
+import { TYPES, PROPERTIES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './constants.ts';
 
 // ─── Ops Batching ──────────────────────────────────────────────────────────
 
@@ -1000,7 +1000,85 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
     }
   }
 
+  // ── Update data block filters: replace old secondary IDs with main ID ──
+  for (const oldId of allSecondaryIds) {
+    console.log(`\n  Updating data block filters: ${oldId} → ${mainEntityId}`);
+    const filterOps = await updateDataBlockFilters({
+      oldId,
+      newId: mainEntityId,
+      dryRun,
+      opsBatch,
+    });
+    allOps.push(...filterOps);
+  }
+
   console.log(`\n  Generated ${allOps.length} total merge ops.`);
+  return allOps;
+}
+
+// ─── Data Block Filter Updates ──────────────────────────────────────────────
+
+export interface UpdateDataBlockFiltersOptions {
+  /** Old entity/property ID to find in filters */
+  oldId: string;
+  /** New entity/property ID to replace with */
+  newId: string;
+  /** If true, generate ops but don't publish */
+  dryRun?: boolean;
+  /** If provided, accumulate ops into this batch instead of publishing */
+  opsBatch?: OpsBatch;
+}
+
+/**
+ * Scan all filter property values across all spaces for occurrences of the
+ * old ID (in any position — as a property key or entity value) and replace
+ * with the new ID.
+ */
+export async function updateDataBlockFilters(options: UpdateDataBlockFiltersOptions): Promise<Op[]> {
+  const { oldId, newId, dryRun = false, opsBatch } = options;
+
+  console.log(`\n[updateDataBlockFilters] ${oldId} → ${newId}`);
+
+  // Query all filter values that contain the old ID
+  const data = await gql(`{
+    values(filter: {
+      propertyId: { is: "${PROPERTIES.filter}" }
+      text: { includes: "${oldId}" }
+    }) {
+      entityId
+      spaceId
+      text
+    }
+  }`);
+
+  const matches = data.values ?? [];
+  if (matches.length === 0) {
+    console.log('  No filter values reference the old ID.');
+    return [];
+  }
+
+  console.log(`  Found ${matches.length} filter value(s) containing old ID`);
+
+  const allOps: Op[] = [];
+
+  for (const v of matches) {
+    const updatedFilter = v.text.replaceAll(oldId, newId);
+    console.log(`    Updating filter on entity ${v.entityId} in space ${v.spaceId}`);
+
+    const ops: Op[] = [];
+    const result = Graph.updateEntity({
+      id: v.entityId,
+      values: [{ property: PROPERTIES.filter, type: 'text', value: updatedFilter }],
+    });
+    ops.push(...result.ops);
+
+    if (!dryRun) {
+      await publishOrBatch(ops, `Update data block filter ${v.entityId}`, v.spaceId, opsBatch);
+    }
+    allOps.push(...ops);
+  }
+
+  console.log(`  Total data block filter ops: ${allOps.length}`);
   return allOps;
 }
 
@@ -1163,25 +1241,51 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
     console.log(`  Data type mismatch: ${oldDataType} → ${newDataType} — values will be converted`);
   }
 
-  // Discover all spaces that reference the old property ID (as values or relations)
-  const discoveryData = await gql(`{
+  // Fetch all values and relations using the old property ID in one shot
+  const allData = await gql(`{
     values(filter: { propertyId: { is: "${oldPropertyId}" } }) {
+      entityId
       spaceId
+      ${VALUE_FIELDS}
     }
     relations(filter: { typeId: { is: "${oldPropertyId}" } }) {
+      id
+      entityId
       spaceId
+      fromEntityId
+      toEntityId
+      toSpaceId
+      fromSpaceId
+      toVersionId
+      fromVersionId
+      position
     }
   }`);
 
-  const valueSpaces = (discoveryData.values ?? []).map((v: any) => v.spaceId);
-  const relationSpaces = (discoveryData.relations ?? []).map((r: any) => r.spaceId);
-  const affectedSpaceIds = [...new Set([...valueSpaces, ...relationSpaces])];
+  const allValues = allData.values ?? [];
+  const allRelations = allData.relations ?? [];
 
-  if (affectedSpaceIds.length === 0) {
+  if (allValues.length === 0 && allRelations.length === 0) {
     console.log('  No spaces reference the old property ID — nothing to migrate.');
     return [];
   }
 
+  // Group values and relations by space
+  const valuesBySpace = new Map<string, any[]>();
+  for (const v of allValues) {
+    const list = valuesBySpace.get(v.spaceId) ?? [];
+    list.push(v);
+    valuesBySpace.set(v.spaceId, list);
+  }
+
+  const relationsBySpace = new Map<string, any[]>();
+  for (const r of allRelations) {
+    const list = relationsBySpace.get(r.spaceId) ?? [];
+    list.push(r);
+    relationsBySpace.set(r.spaceId, list);
+  }
+
+  const affectedSpaceIds = [...new Set([...valuesBySpace.keys(), ...relationsBySpace.keys()])];
   console.log(`  Found references in ${affectedSpaceIds.length} space(s): ${affectedSpaceIds.join(', ')}`);
 
   // Resolve our wallet's personal space ID for membership checks
@@ -1222,10 +1326,8 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
     }
 
     if (space.type === 'PERSONAL') {
-      // We can write to our own personal space
       hasWriteAccess = spaceId === callerSpaceId;
     } else {
-      // DAO space — check if we're a member or editor
       const members = (space.membersList ?? []).map((m: any) => m.memberSpaceId);
       const editors = (space.editorsList ?? []).map((e: any) => e.memberSpaceId);
       hasWriteAccess = callerSpaceId != null && [...members, ...editors].includes(callerSpaceId);
@@ -1233,18 +1335,8 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
 
     const ops: Op[] = [];
 
-    // Find all values using the old property ID in this space
-    const valueData = await gql(`{
-      values(filter: {
-        propertyId: { is: "${oldPropertyId}" }
-        spaceId: { is: "${spaceId}" }
-      }) {
-        entityId
-        ${VALUE_FIELDS}
-      }
-    }`);
-
-    const valuesUsingOld = valueData.values ?? [];
+    // Migrate values using the old property ID in this space
+    const valuesUsingOld = valuesBySpace.get(spaceId) ?? [];
     if (valuesUsingOld.length > 0) {
       console.log(`    ${valuesUsingOld.length} value(s) using old property ID`);
 
@@ -1285,25 +1377,8 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
       }
     }
 
-    // Find all relations using the old property ID as their type in this space
-    const relationData = await gql(`{
-      relations(filter: {
-        typeId: { is: "${oldPropertyId}" }
-        spaceId: { is: "${spaceId}" }
-      }) {
-        id
-        entityId
-        fromEntityId
-        toEntityId
-        toSpaceId
-        fromSpaceId
-        toVersionId
-        fromVersionId
-        position
-      }
-    }`);
-
-    const relationsUsingOld = relationData.relations ?? [];
+    // Migrate relations using the old property ID as their type in this space
+    const relationsUsingOld = relationsBySpace.get(spaceId) ?? [];
     if (relationsUsingOld.length > 0) {
       console.log(`    ${relationsUsingOld.length} relation(s) using old property ID as type`);
 
@@ -1324,8 +1399,9 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
 
     if (ops.length > 0) {
       if (!hasWriteAccess) {
-        console.error(`    ⚠ Space ${spaceId} needs ${ops.length} property migration ops but you are not a member/editor — skipping publish`);
-      } else if (!dryRun) {
+        console.error(`    ⚠ Space ${spaceId} needs ${ops.length} property migration ops but you are not a member/editor`);
+      }
+      if (!dryRun) {
         await publishOrBatch(ops, `Migrate property ${oldPropertyId} → ${newPropertyId}`, spaceId, opsBatch);
       }
       allOps.push(...ops);

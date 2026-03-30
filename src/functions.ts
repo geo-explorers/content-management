@@ -26,7 +26,8 @@ export async function gql(query: string, variables?: Record<string, any>) {
   });
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const body = await res.text();
+    throw new Error(`API error: ${res.status} ${res.statusText}\n${body}`);
   }
 
   const json = await res.json();
@@ -35,6 +36,88 @@ export async function gql(query: string, variables?: Record<string, any>) {
     throw new Error(`GraphQL: ${json.errors[0].message}`);
   }
   return json.data;
+}
+
+// ─── Membership Check ────────────────────────────────────────────────────────
+// Returns the set of space IDs the caller can publish to (is editor or owner).
+
+export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<string>> {
+  const privateKey = process.env.PK_SW as `0x${string}`;
+  if (!privateKey) throw new Error("PK_SW not set in .env");
+
+  const client = await getSmartAccountWalletClient({
+    privateKey,
+    rpcUrl: TESTNET_RPC_URL,
+  });
+  const author = client.account.address;
+
+  const personalSpaceData = await gql(`{
+    spaces(filter: { address: { is: "${author}" } }) { id type }
+  }`);
+  const callerSpace = personalSpaceData.spaces?.find((s: any) => s.type === "PERSONAL");
+  if (!callerSpace) throw new Error(`No personal space found for wallet ${author}.`);
+  const callerSpaceId: string = callerSpace.id;
+
+  const publishable = new Set<string>();
+  for (const spaceId of spaceIds) {
+    const spaceData = await gql(`{
+      space(id: "${spaceId}") {
+        type
+        editorsList { memberSpaceId }
+      }
+    }`);
+    if (!spaceData.space) continue;
+    const { type: spaceType } = spaceData.space;
+    if (spaceType === "PERSONAL") {
+      if (spaceId === callerSpaceId) publishable.add(spaceId);
+    } else {
+      const editors: Array<{ memberSpaceId: string }> = spaceData.space.editorsList ?? [];
+      if (editors.some(e => e.memberSpaceId === callerSpaceId)) publishable.add(spaceId);
+    }
+  }
+  return publishable;
+}
+
+// ─── Space Info Helper ───────────────────────────────────────────────────────
+
+export interface SpaceOwnerInfo {
+  spaceId: string;
+  spaceName: string;
+  spaceType: 'PERSONAL' | 'DAO' | string;
+  editors: Array<{ memberSpaceId: string; name: string }>;
+}
+
+export async function getSpaceOwnerInfo(spaceIds: string[]): Promise<SpaceOwnerInfo[]> {
+  const results: SpaceOwnerInfo[] = [];
+  for (const spaceId of spaceIds) {
+    const spaceData = await gql(`{
+      space(id: "${spaceId}") {
+        type
+        page { name }
+        editorsList { memberSpaceId }
+      }
+    }`);
+    if (!spaceData.space) continue;
+
+    const { type: spaceType, page, editorsList } = spaceData.space;
+    const spaceName = page?.name ?? spaceId;
+
+    const editors: Array<{ memberSpaceId: string; name: string }> = [];
+    if (spaceType !== 'PERSONAL' && editorsList?.length > 0) {
+      for (const editor of editorsList) {
+        const editorData = await gql(`{
+          space(id: "${editor.memberSpaceId}") { page { name } }
+        }`);
+        editors.push({
+          memberSpaceId: editor.memberSpaceId,
+          name: editorData.space?.page?.name ?? editor.memberSpaceId,
+        });
+      }
+    }
+
+    results.push({ spaceId, spaceName, spaceType, editors });
+  }
+  return results;
 }
 
 // ─── Publishing Helper ───────────────────────────────────────────────────────

@@ -20,6 +20,9 @@ export const SPACES = [
   { name: 'Technology',     id: '870e3b3068661e6280fad2ab456829bc' },
   { name: 'Industries',     id: 'd69608290513c2a91102c939b3265bd7' },
   { name: 'World Affairs',  id: '89bd89bf28ff8a0963faf92a8c905e20' },
+  { name: 'Podcasts',  id: '24cd3c3b36efb0e13ea53fead3f7d2b9' },
+  { name: 'Podcasts',  id: 'bd5529695e011fdf76637d4addca733a' },
+  
 ];
 
 // ─── Type IDs ────────────────────────────────────────────────────────────────
