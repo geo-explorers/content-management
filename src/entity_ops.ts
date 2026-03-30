@@ -511,7 +511,6 @@ export async function changeEntityId(options: ChangeEntityIdOptions): Promise<Op
       if (!dryRun) {
         await publishOrBatch(blOps, `Migrate backlinks for ${oldEntityId} → ${newEntityId}`, bl.spaceId, opsBatch);
       }
-      ops.push(...blOps);
     }
   }
 
@@ -929,7 +928,6 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
           if (!dryRun) {
             await publishOrBatch(blOps, `Migrate backlinks to ${mainEntityId}`, bl.spaceId, opsBatch);
           }
-          allOps.push(...blOps);
         }
       }
 
@@ -952,32 +950,32 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   }
 
   // ── Cross-space secondaries: merge within each space, then change entity ID ──
+  // These ops are for otherSpaceId, not mainSpaceId — they publish/batch internally
+  // and must NOT be added to allOps (which publishes to mainSpaceId).
   for (const [otherSpaceId, entityIds] of bySpace) {
     let survivorId = entityIds[0];
 
     // If multiple entities in this foreign space, merge them first
     if (entityIds.length > 1) {
       console.log(`\n  Cross-space: merging ${entityIds.length} entities within space ${otherSpaceId}`);
-      const withinOps = await mergeEntities({
+      await mergeEntities({
         mainEntityId: survivorId,
         mainSpaceId: otherSpaceId,
         secondaries: entityIds.slice(1).map(id => ({ entityId: id, spaceId: otherSpaceId })),
         dryRun,
         opsBatch,
       });
-      allOps.push(...withinOps);
     }
 
     // Move the survivor to the main entity's ID
     console.log(`\n  Cross-space: changing entity ID ${survivorId} → ${mainEntityId} in space ${otherSpaceId}`);
-    const moveOps = await changeEntityId({
+    await changeEntityId({
       oldEntityId: survivorId,
       newEntityId: mainEntityId,
       spaceId: otherSpaceId,
       dryRun,
       opsBatch,
     });
-    allOps.push(...moveOps);
   }
 
   // Publish the merge ops (before property migration, which publishes per-space)
