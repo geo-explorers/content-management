@@ -16,7 +16,7 @@ import path from 'node:path';
 // Property duplicates with data type mismatches are SKIPPED (logged as warnings).
 // Run with: bun run 03_merge_duplicates.ts
 
-const DRY_RUN = false; // Set to false to actually publish merges
+const DRY_RUN = false;; // Set to false to actually publish merges
 
 const spaceRank = new Map(SPACES.map((s, i) => [s.id, i]));
 const spaceName = new Map(SPACES.map(s => [s.id, s.name]));
@@ -733,14 +733,14 @@ async function main() {
     //{ label: 'Property', typeId: TYPES.property },
     //{ label: 'Role', typeId: TYPES.role },
     //{ label: 'Skill', typeId: TYPES.skill },
-    //{ label: 'Topic', typeId: TYPES.topic },
+    { label: 'Topic', typeId: TYPES.topic },
     //{ label: 'Claim', typeId: TYPES.claim },
     //{ label: 'Person', typeId: TYPES.person },
     //{ label: 'Podcast', typeId: TYPES.podcast },
     //{ label: 'Episode', typeId: TYPES.episode },
     //{ label: 'Exercise', typeId: TYPES.exercise },
     //{ label: 'Muscle group', typeId: TYPES.muscle_group },
-    { label: 'Training category', typeId: TYPES.training_category },
+    //{ label: 'Training category', typeId: TYPES.training_category },
     //{ label: 'Excercise equipment', typeId: TYPES.excercise_equipment },
   ];
 

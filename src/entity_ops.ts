@@ -814,6 +814,13 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       mainData.relations.map(r => `${r.typeId}:${r.toEntityId}`)
     );
 
+    // Track which entities already have backlinks of a given type pointing to main,
+    // so we don't create duplicate backlinks when migrating from secondaries.
+    const mainBacklinks = backlinksCache.get(mainEntityId) ?? await queryBacklinks(mainEntityId);
+    const existingMainBacklinkKeys = new Set(
+      mainBacklinks.map(bl => `${bl.fromEntityId}:${bl.typeId}`)
+    );
+
     for (const secondaryId of sameSpaceSecondaries) {
       console.log(`\n    Processing secondary: ${secondaryId}`);
       const secondaryData = entityDataCache.get(secondaryId) ?? (await queryEntityData(secondaryId, mainSpaceId));
@@ -902,6 +909,7 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
       // Migrate backlinks pointing TO the secondary → point to main instead
       // Route ops to the relation's own spaceId, not mainSpaceId
       const backlinks = backlinksCache.get(secondaryId) ?? await queryBacklinks(secondaryId);
+
       for (const bl of backlinks) {
         if (allSecondaryIds.includes(bl.fromEntityId)) continue;
 
@@ -909,8 +917,10 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
         const delResult = Graph.deleteRelation({ id: bl.id });
         blOps.push(...delResult.ops);
 
-        const key = `${bl.typeId}:${mainEntityId}`;
-        if (!mainRelationKeys.has(key)) {
+        // Only recreate pointing to main if fromEntity doesn't already have
+        // a relation of the same type pointing to main
+        const backlinkKey = `${bl.fromEntityId}:${bl.typeId}`;
+        if (!existingMainBacklinkKeys.has(backlinkKey)) {
           const createResult = Graph.createRelation({
             fromEntity: bl.fromEntityId,
             toEntity: mainEntityId,
@@ -919,6 +929,10 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
             ...optionalRelationFields(bl),
           });
           blOps.push(...createResult.ops);
+          // Track so subsequent secondaries also see this backlink
+          existingMainBacklinkKeys.add(backlinkKey);
+        } else {
+          console.log(`      Skipping duplicate backlink: ${bl.fromEntityId} --[${bl.typeEntity?.name ?? bl.typeId}]--> main (already exists)`);
         }
 
         if (bl.spaceId === mainSpaceId) {
@@ -984,30 +998,31 @@ export async function mergeEntities(options: MergeEntitiesOptions): Promise<Op[]
   }
 
   // ── Property entity: migrate references from old secondary IDs to main ──
-  // This publishes per-space internally (respecting write access checks)
+  // This publishes per-space internally (respecting write access checks).
+  // Do NOT add returned ops to allOps — they span multiple spaces and are
+  // already published/batched to the correct space inside the function.
   if (isPropertyEntity) {
     for (const oldPropertyId of allSecondaryIds) {
       console.log(`\n  Migrating property references: ${oldPropertyId} → ${mainEntityId}`);
-      const migrationOps = await migratePropertyReferences({
+      await migratePropertyReferences({
         oldPropertyId,
         newPropertyId: mainEntityId,
         dryRun,
         opsBatch,
       });
-      allOps.push(...migrationOps);
     }
   }
 
   // ── Update data block filters: replace old secondary IDs with main ID ──
+  // Same as above — publishes per-space internally, do not re-add to allOps.
   for (const oldId of allSecondaryIds) {
     console.log(`\n  Updating data block filters: ${oldId} → ${mainEntityId}`);
-    const filterOps = await updateDataBlockFilters({
+    await updateDataBlockFilters({
       oldId,
       newId: mainEntityId,
       dryRun,
       opsBatch,
     });
-    allOps.push(...filterOps);
   }
 
   console.log(`\n  Generated ${allOps.length} total merge ops.`);
