@@ -380,6 +380,14 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
     toEntityIds.push(r.toEntityId);
   }
 
+  // Delete all incoming relations (from other entities pointing to this one)
+  const incomingRelations = await queryBacklinksInSpace(entityId, spaceId);
+  console.log(`  Found ${incomingRelations.length} incoming relations`);
+  for (const r of incomingRelations) {
+    const result = Graph.deleteRelation({ id: r.id });
+    ops.push(...result.ops);
+  }
+
   // Orphan cleanup: check if any "to" entities are now orphaned
   if (!skipOrphanCleanup && toEntityIds.length > 0) {
     const uniqueToIds = [...new Set(toEntityIds)].filter(id => !excludeFromOrphanCheck.includes(id));
