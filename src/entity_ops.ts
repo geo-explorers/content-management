@@ -418,6 +418,9 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
       if (deletingIds) {
         for (const id of orphanIds) deletingIds.add(id);
       }
+      // Prevent infinite recursion on cycles (e.g. A→B→C→A) by adding the
+      // current entity and sibling orphans to excludeFromOrphanCheck.
+      const visited = [...excludeFromOrphanCheck, entityId, ...orphanIds];
       const orphanResults = await Promise.all(
         orphanIds.map(toId =>
           deleteEntity({
@@ -425,7 +428,7 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
             spaceId,
             dryRun: true,
             skipOrphanCleanup: false,
-            excludeFromOrphanCheck,
+            excludeFromOrphanCheck: visited,
             entityDataCache,
             backlinksCache,
             deletingIds,
