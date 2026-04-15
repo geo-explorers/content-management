@@ -342,7 +342,12 @@ export interface DeleteEntityOptions {
   entityDataCache?: Map<string, EntityData>;
   /** If provided, look up backlinks for orphan targets here before querying */
   backlinksCache?: Map<string, BacklinkRecord[]>;
-  /** Set of all entity IDs being deleted in this batch — orphan checks ignore these */
+  /**
+   * Shared set of entity IDs being deleted. Orphan checks ignore these.
+   * Mutated as new orphans are discovered. Pass this when deleting multiple
+   * entities in a batch so each call sees the others. If omitted, an
+   * internal set is used for the current call only.
+   */
   deletingIds?: Set<string>;
 }
 
@@ -355,8 +360,12 @@ export interface DeleteEntityOptions {
  * Returns the generated ops (and publishes them unless dryRun is set).
  */
 export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> {
-  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch, prefetchedEntityData, entityDataCache, backlinksCache, deletingIds } = options;
-  const isBeingDeleted = (id: string) => id === entityId || !!deletingIds?.has(id);
+  const { entityId, spaceId, dryRun = false, skipOrphanCleanup = false, excludeFromOrphanCheck = [], opsBatch, prefetchedEntityData, entityDataCache, backlinksCache } = options;
+  // Initialize deletingIds internally if not provided so recursive orphan
+  // detection correctly ignores sibling orphans even for single-entity calls.
+  const deletingIds = options.deletingIds ?? new Set<string>();
+  deletingIds.add(entityId);
+  const isBeingDeleted = (id: string) => deletingIds.has(id);
 
   const cached = prefetchedEntityData ?? entityDataCache?.get(entityId);
   console.log(`\n[deleteEntity] ${cached ? 'Using prefetched data for' : 'Querying'} entity ${entityId} in space ${spaceId}...`);
@@ -411,13 +420,11 @@ export async function deleteEntity(options: DeleteEntityOptions): Promise<Op[]> 
     // Re-check deletingIds here to avoid racing with a sibling recursion that
     // may have already claimed the same orphan.
     const orphanIds = orphanChecks
-      .filter(c => c.isOrphan && !deletingIds?.has(c.toId))
+      .filter(c => c.isOrphan && !deletingIds.has(c.toId))
       .map(c => c.toId);
     if (orphanIds.length > 0) {
       console.log(`  ${orphanIds.length} orphaned entities detected — recursively deleting`);
-      if (deletingIds) {
-        for (const id of orphanIds) deletingIds.add(id);
-      }
+      for (const id of orphanIds) deletingIds.add(id);
       // Prevent infinite recursion on cycles (e.g. A→B→C→A) by adding the
       // current entity and sibling orphans to excludeFromOrphanCheck.
       const visited = [...excludeFromOrphanCheck, entityId, ...orphanIds];
