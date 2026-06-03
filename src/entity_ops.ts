@@ -156,11 +156,14 @@ async function fetchAllConnectionNodes<T>(
         pageInfo { hasNextPage endCursor }
       }
     }`);
-    const conn = data[connectionName];
-    for (const e of conn?.edges ?? []) all.push(e.node as T);
-    if (!conn?.pageInfo?.hasNextPage) break;
-    afterClause = `, after: "${conn.pageInfo.endCursor}"`;
-  }
+    const conn = data?.[connectionName];
+    if (!conn) throw new Error(`fetchAllConnectionNodes: missing "${connectionName}" in GraphQL response`);
+    for (const e of conn.edges ?? []) all.push(e.node as T);
+    if (!conn.pageInfo?.hasNextPage) break;
+    const cursor = conn.pageInfo.endCursor as string | null | undefined;
+    if (!cursor) throw new Error(`fetchAllConnectionNodes: "${connectionName}" hasNextPage=true but endCursor is empty`);
+    if (afterClause.includes(cursor)) throw new Error(`fetchAllConnectionNodes: "${connectionName}" endCursor did not advance (${cursor})`);
+    afterClause = `, after: "${cursor}"`;
   return all;
 }
 
