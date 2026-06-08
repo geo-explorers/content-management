@@ -73,22 +73,18 @@ function toPropertyValueParam(v: any): PropertyValueParam | null {
 
 /** Query full value data for an entity in a space and return as PropertyValueParam[]. */
 async function queryValueParams(entityId: string, spaceId: string, propertyFilter?: string[]): Promise<PropertyValueParam[]> {
-  const filterClause = propertyFilter
-    ? `propertyId: { in: [${propertyFilter.map(id => `"${id}"`).join(', ')}] }`
+  const propClause = propertyFilter
+    ? ` propertyId: { in: [${propertyFilter.map(id => `"${id}"`).join(', ')}] }`
     : '';
-  const data = await gql(`{
-    values(filter: {
-      entityId: { is: "${entityId}" }
-      spaceId: { is: "${spaceId}" }
-      ${filterClause}
-    }) {
-      ${VALUE_FIELDS}
-    }
-  }`);
+  const values = await fetchAllConnectionNodes<any>(
+    'valuesConnection',
+    `entityId: { is: "${entityId}" } spaceId: { is: "${spaceId}" }${propClause}`,
+    VALUE_FIELDS,
+  );
 
   const params: PropertyValueParam[] = [];
   const seen = new Set<string>();
-  for (const v of data.values ?? []) {
+  for (const v of values) {
     if (seen.has(v.propertyId)) continue;
     seen.add(v.propertyId);
     const param = toPropertyValueParam(v);
@@ -140,85 +136,77 @@ export interface EntityData {
 
 // ─── Query Helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Paginate any `*Connection` GraphQL query and return all node objects.
+ * The bare `relations(...)` / `values(...)` queries cap at ~100 rows; this
+ * walks the connection until `pageInfo.hasNextPage` is false.
+ */
+async function fetchAllConnectionNodes<T>(
+  connectionName: string,
+  filterClause: string,
+  nodeFields: string,
+  pageSize = 500,
+): Promise<T[]> {
+  const all: T[] = [];
+  let afterClause = '';
+  while (true) {
+    const data = await gql(`{
+      ${connectionName}(filter: { ${filterClause} }, first: ${pageSize} ${afterClause}) {
+        edges { node { ${nodeFields} } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    const conn = data?.[connectionName];
+    if (!conn) throw new Error(`fetchAllConnectionNodes: missing "${connectionName}" in GraphQL response`);
+    for (const e of conn.edges ?? []) all.push(e.node as T);
+    if (!conn.pageInfo?.hasNextPage) break;
+    const cursor = conn.pageInfo.endCursor as string | null | undefined;
+    if (!cursor) throw new Error(`fetchAllConnectionNodes: "${connectionName}" hasNextPage=true but endCursor is empty`);
+    if (afterClause.includes(cursor)) throw new Error(`fetchAllConnectionNodes: "${connectionName}" endCursor did not advance (${cursor})`);
+    afterClause = `, after: "${cursor}"`;
+  return all;
+}
+
 /** Fetch all values and outgoing relations for an entity in a specific space. */
 async function queryEntityData(entityId: string, spaceId: string): Promise<EntityData> {
-  const data = await gql(`{
-    values(filter: {
-      entityId: { is: "${entityId}" }
-      spaceId: { is: "${spaceId}" }
-    }) {
-      propertyId
-      propertyEntity { name }
-    }
-    relations(filter: {
-      fromEntityId: { is: "${entityId}" }
-      spaceId: { is: "${spaceId}" }
-    }) {
-      id
-      entityId
-      typeId
-      toEntityId
-      toEntity { name typeIds }
-      typeEntity { name }
-      toSpaceId
-      fromSpaceId
-      toVersionId
-      fromVersionId
-      position
-    }
-  }`);
-
-  return {
-    values: data.values ?? [],
-    relations: data.relations ?? [],
-  };
+  const [values, relations] = await Promise.all([
+    fetchAllConnectionNodes<ValueRecord>(
+      'valuesConnection',
+      `entityId: { is: "${entityId}" } spaceId: { is: "${spaceId}" }`,
+      `propertyId propertyEntity { name }`,
+    ),
+    fetchAllConnectionNodes<RelationRecord>(
+      'relationsConnection',
+      `fromEntityId: { is: "${entityId}" } spaceId: { is: "${spaceId}" }`,
+      `id entityId typeId toEntityId
+       toEntity { name typeIds }
+       typeEntity { name }
+       toSpaceId fromSpaceId toVersionId fromVersionId position`,
+    ),
+  ]);
+  return { values, relations };
 }
 
 /** Fetch all backlinks (relations pointing TO an entity) across all spaces. */
 async function queryBacklinks(entityId: string): Promise<BacklinkRecord[]> {
-  const data = await gql(`{
-    relations(filter: {
-      toEntityId: { is: "${entityId}" }
-    }) {
-      id
-      entityId
-      typeId
-      fromEntityId
-      fromEntity { name }
-      typeEntity { name }
-      spaceId
-      toSpaceId
-      fromSpaceId
-      toVersionId
-      fromVersionId
-      position
-    }
-  }`);
-  return data.relations ?? [];
+  return fetchAllConnectionNodes<BacklinkRecord>(
+    'relationsConnection',
+    `toEntityId: { is: "${entityId}" }`,
+    `id entityId typeId fromEntityId
+     fromEntity { name } typeEntity { name }
+     spaceId toSpaceId fromSpaceId toVersionId fromVersionId position`,
+  );
 }
 
 /** Fetch backlinks in a specific space only. */
 async function queryBacklinksInSpace(entityId: string, spaceId: string): Promise<BacklinkRecord[]> {
-  const data = await gql(`{
-    relations(filter: {
-      toEntityId: { is: "${entityId}" }
-      spaceId: { is: "${spaceId}" }
-    }) {
-      id
-      entityId
-      typeId
-      fromEntityId
-      fromEntity { name }
-      typeEntity { name }
-      spaceId
-      toSpaceId
-      fromSpaceId
-      toVersionId
-      fromVersionId
-      position
-    }
-  }`);
-  return data.relations ?? [];
+  return fetchAllConnectionNodes<BacklinkRecord>(
+    'relationsConnection',
+    `toEntityId: { is: "${entityId}" } spaceId: { is: "${spaceId}" }`,
+    `id entityId typeId fromEntityId
+     fromEntity { name } typeEntity { name }
+     spaceId toSpaceId fromSpaceId toVersionId fromVersionId position`,
+  );
 }
 
 /** Check if an entity has any remaining backlinks in any space. */
@@ -1136,18 +1124,11 @@ export async function updateDataBlockFilters(options: UpdateDataBlockFiltersOpti
   console.log(`\n[updateDataBlockFilters] ${oldId} → ${newId}`);
 
   // Query all filter values that contain the old ID
-  const data = await gql(`{
-    values(filter: {
-      propertyId: { is: "${PROPERTIES.filter}" }
-      text: { includes: "${oldId}" }
-    }) {
-      entityId
-      spaceId
-      text
-    }
-  }`);
-
-  const matches = data.values ?? [];
+  const matches = await fetchAllConnectionNodes<{ entityId: string; spaceId: string; text: string }>(
+    'valuesConnection',
+    `propertyId: { is: "${PROPERTIES.filter}" } text: { includes: "${oldId}" }`,
+    `entityId spaceId text`,
+  );
   if (matches.length === 0) {
     console.log('  No filter values reference the old ID.');
     return [];
@@ -1337,29 +1318,21 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
     console.log(`  Data type mismatch: ${oldDataType} → ${newDataType} — values will be converted`);
   }
 
-  // Fetch all values and relations using the old property ID in one shot
-  const allData = await gql(`{
-    values(filter: { propertyId: { is: "${oldPropertyId}" } }) {
-      entityId
-      spaceId
-      ${VALUE_FIELDS}
-    }
-    relations(filter: { typeId: { is: "${oldPropertyId}" } }) {
-      id
-      entityId
-      spaceId
-      fromEntityId
-      toEntityId
-      toSpaceId
-      fromSpaceId
-      toVersionId
-      fromVersionId
-      position
-    }
-  }`);
-
-  const allValues = allData.values ?? [];
-  const allRelations = allData.relations ?? [];
+  // Fetch all values and relations using the old property ID — paginated
+  // across all spaces (a popular property can have 10k+ references).
+  const [allValues, allRelations] = await Promise.all([
+    fetchAllConnectionNodes<any>(
+      'valuesConnection',
+      `propertyId: { is: "${oldPropertyId}" }`,
+      `entityId spaceId ${VALUE_FIELDS}`,
+    ),
+    fetchAllConnectionNodes<any>(
+      'relationsConnection',
+      `typeId: { is: "${oldPropertyId}" }`,
+      `id entityId spaceId fromEntityId toEntityId
+       toSpaceId fromSpaceId toVersionId fromVersionId position`,
+    ),
+  ]);
 
   if (allValues.length === 0 && allRelations.length === 0) {
     console.log('  No spaces reference the old property ID — nothing to migrate.');
