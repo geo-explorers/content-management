@@ -191,6 +191,81 @@ function outletOf(source: string): string {
   return '(unknown outlet)';
 }
 
+// ─── Gap analysis ────────────────────────────────────────────────────────────
+// Pure functions of the coverage data. No external press, no proposals (v1).
+interface Gaps {
+  thinTopics: { topic: string; count: number; why: string }[];
+  staleStories: { id: string; name: string; publishDate: string | null; why: string }[];
+  singleSource: { id: string; name: string; publishDate: string | null; outlets: number; why: string }[];
+}
+
+const ESTABLISHED_TOPIC_MIN = 5; // a topic is "established" if it has ≥ this many all-time stories
+const THIN_WINDOW_MAX = 1;       // …but ≤ this many in the window → it went quiet
+const STALE_LAG_DAYS = 5;        // a story is stale if its topic kept moving ≥ this many days after it
+
+function computeGaps(
+  stories: Story[],
+  byTopic: Record<string, number>,
+  allTimeTopicCount: Record<string, number>,
+): Gaps {
+  // ① Thin topics — topics the Space NORMALLY covers a lot (established) but
+  // went quiet on in this window. Comparing to the all-time baseline filters
+  // out the noise of hyper-granular one-off topics.
+  const thinTopics = Object.entries(allTimeTopicCount)
+    .filter(([topic, allTime]) => allTime >= ESTABLISHED_TOPIC_MIN && (byTopic[topic] ?? 0) <= THIN_WINDOW_MAX)
+    .map(([topic, allTime]) => ({ topic, count: byTopic[topic] ?? 0, allTime }))
+    .sort((a, b) => b.allTime - a.allTime) // most-established first
+    .map(({ topic, count, allTime }) => ({
+      topic,
+      count,
+      why: `usually well-covered (${allTime} stories all-time) but only ${count} in this window — the Space went quiet on it`,
+    }));
+
+  // ② Stale stories — published early relative to the latest story sharing a topic.
+  // For each topic, find its newest story date; flag stories trailing it by STALE_LAG_DAYS+.
+  const newestByTopic: Record<string, number> = {};
+  for (const s of stories) {
+    if (!s.publishDate) continue;
+    const ts = new Date(s.publishDate).getTime();
+    for (const t of s.topics) newestByTopic[t] = Math.max(newestByTopic[t] ?? 0, ts);
+  }
+  const staleStories: Gaps['staleStories'] = [];
+  for (const s of stories) {
+    if (!s.publishDate) continue;
+    const ts = new Date(s.publishDate).getTime();
+    let maxLagTopic = '';
+    let maxLagDays = 0;
+    for (const t of s.topics) {
+      const lagDays = ((newestByTopic[t] ?? ts) - ts) / 86400000;
+      if (lagDays > maxLagDays) { maxLagDays = lagDays; maxLagTopic = t; }
+    }
+    if (maxLagDays >= STALE_LAG_DAYS) {
+      staleStories.push({
+        id: s.id, name: s.name, publishDate: s.publishDate,
+        why: `"${maxLagTopic}" saw newer stories ~${Math.round(maxLagDays)}d later — may need a refresh/update`,
+      });
+    }
+  }
+  staleStories.sort((a, b) => (a.publishDate ?? '').localeCompare(b.publishDate ?? ''));
+
+  // ③ Single-source stories — backed by ≤1 distinct outlet.
+  const singleSource: Gaps['singleSource'] = [];
+  for (const s of stories) {
+    const outlets = new Set(s.sources.map(outletOf).filter(o => o !== '(unknown outlet)'));
+    if (outlets.size <= 1) {
+      singleSource.push({
+        id: s.id, name: s.name, publishDate: s.publishDate, outlets: outlets.size,
+        why: outlets.size === 0
+          ? 'no identifiable outlet on its sources — verify sourcing'
+          : `only 1 outlet (${[...outlets][0]}) — add corroborating sources`,
+      });
+    }
+  }
+  singleSource.sort((a, b) => a.outlets - b.outlets || (b.publishDate ?? '').localeCompare(a.publishDate ?? ''));
+
+  return { thinTopics, staleStories, singleSource };
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -222,8 +297,12 @@ async function main() {
   console.log(`  ${ids.length} News stories in space. Loading details...\n`);
 
   const stories: Story[] = [];
+  // All-time topic frequency across the WHOLE space (every story, ignoring the
+  // window) — the baseline that makes "thin in this window" meaningful.
+  const allTimeTopicCount: Record<string, number> = {};
   for (let i = 0; i < ids.length; i++) {
     const s = await fetchStory(ids[i]);
+    for (const t of s.topics) allTimeTopicCount[t] = (allTimeTopicCount[t] ?? 0) + 1;
     if (s.publishDate) {
       const ts = new Date(s.publishDate).getTime();
       if (ts < fromTs || ts > toTs) continue;
@@ -272,6 +351,36 @@ async function main() {
   }
   console.log('');
 
+  // ─── Gap analysis (v1: derived purely from the Geo knowledge layer) ─────────
+  // Three editorial signals, each ranked, each justified — no external press.
+  const gaps = computeGaps(stories, byTopic, allTimeTopicCount);
+
+  console.log('═'.repeat(80));
+  console.log('EDITORIAL GAPS — what to prioritize next (from Geo data alone)');
+  console.log('═'.repeat(80));
+
+  console.log('\n① WENT-QUIET TOPICS — usually well-covered by this Space, but thin in this window:');
+  if (gaps.thinTopics.length === 0) console.log('   (none)');
+  for (const t of gaps.thinTopics) {
+    console.log(`   ${t.topic}`);
+    console.log(`        → ${t.why}`);
+  }
+
+  console.log('\n② STALE STORIES — published early in the window while their topic kept moving:');
+  if (gaps.staleStories.length === 0) console.log('   (none)');
+  for (const s of gaps.staleStories.slice(0, 15)) {
+    console.log(`   [${s.publishDate?.slice(0, 10)}] ${s.name}`);
+    console.log(`        → ${s.why}   id: ${s.id}`);
+  }
+
+  console.log('\n③ SINGLE-SOURCE STORIES — backed by one outlet or none (candidates to strengthen):');
+  if (gaps.singleSource.length === 0) console.log('   (none)');
+  for (const s of gaps.singleSource.slice(0, 15)) {
+    console.log(`   [${s.publishDate?.slice(0, 10)}] ${s.name}`);
+    console.log(`        → ${s.why}   id: ${s.id}`);
+  }
+  console.log('');
+
   // ─── Machine-readable artifact (for the orchestrator / dashboard) ──────────
   if (args.json) {
     const artifact = {
@@ -282,12 +391,13 @@ async function main() {
       stories,
       topicCoverage: byTopic,
       outletFootprint: outletCount,
+      gaps,
     };
     fs.writeFileSync(args.json, JSON.stringify(artifact, null, 2));
     console.log(`📄 Wrote machine-readable coverage map to ${args.json}`);
   }
 
-  console.log(`\nDone. This is the "already covered" baseline. The press-review skill compares external press against this.`);
+  console.log(`\nDone. v1 = knowledge-layer review. External-press comparison (v2) is a later phase.`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

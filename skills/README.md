@@ -1,0 +1,52 @@
+# Geo Skills
+
+Skills for working with the Geo knowledge graph from Claude Code / Codex / browser assistants. Each skill is a folder with a `SKILL.md`.
+
+Skills are organized by **what they can do to Geo**, because that's the safety-critical distinction:
+
+- **`non-actionable/`** — skills that only *read* Geo (and the web). They cannot create, update, delete, or publish anything. Safe for anyone, including non-technical curators.
+- **`actionable/`** — skills that *change* Geo (publish, merge, delete). Only for trained editors. Every write goes through safeguards (dry-run, duplicate/existence check, explicit publish confirmation). Never give these to someone who hasn't been onboarded.
+
+## Index
+
+### non-actionable/ — read-only, can't break anything
+
+| Skill | What it does | Runs in |
+|---|---|---|
+| **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas. | Repo (GraphQL + MCP) |
+| **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already-published / needs-update / not-covered). Recommends only. | Repo (coverage script + web search) |
+
+#### non-actionable/web/ — web/desktop-app variants
+
+| Skill | What it does | Runs in |
+|---|---|---|
+| **geo-query-web** | Reads + submission review/fact-check over plain HTTP. No SDK, no wallet, no repo. | **Browser** (claude.ai, Codex, ChatGPT) |
+
+### actionable/ — changes Geo, editors only
+
+| Skill | What it does | Runs in |
+|---|---|---|
+| **geo-publish** | Create/update/delete entities and relations via the GRC-20 SDK. | Repo + wallet key |
+| **geo-clean** | Find/merge duplicates, delete orphans, fix data types, fix stale relations, etc. Safeguards before any destructive op. | Repo + wallet key |
+| **geo-orchestrate** | Editor entry point. Turns "I want to X" into a plan → generates a script → dry-run → confirm → publish. Routes to query + publish. | Repo + wallet key |
+
+#### actionable/web/ — web/desktop-app variants
+
+| Skill | What it does | Runs in |
+|---|---|---|
+| **geo-publish-codex** | Publish tuned for Codex Desktop. Duplicate + schema check before writing. | Codex Desktop + repo |
+
+## Which to give whom
+
+- **Non-technical curator / domain expert** → `non-actionable/` only. They explore and review; they can't damage production.
+- **Trained editor** → `non-actionable/` + `actionable/`, with the wallet key set up per the setup guide. Start them on dry-runs.
+- **Browser-only user (no terminal)** → `geo-query-web` works with nothing installed. Writing still requires the repo.
+
+## Adding a skill
+
+One folder per skill, containing `SKILL.md` (+ any `bin/`, `examples/`, `reference.md`). Put it in `non-actionable/` or `actionable/` by whether it can change Geo. Frontmatter must have `name`, `description` (packed with trigger phrases), `metadata`. Then add a row to the index above.
+
+## Notes
+
+- These skills assume the `content-management` repo is cloned locally **unless** the "Runs in" column says Browser. Cloning instructions live in the repo setup guide.
+- `write/` skills need a wallet key. Never paste the key into chat — see each write skill's prerequisites for the `.env` handoff.
