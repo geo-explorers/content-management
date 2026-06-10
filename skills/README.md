@@ -30,11 +30,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **geo-clean** | Find/merge duplicates, delete orphans, fix data types, fix stale relations, etc. Safeguards before any destructive op. | Repo + wallet key |
 | **geo-orchestrate** | Editor entry point. Turns "I want to X" into a plan → generates a script → dry-run → confirm → publish. Routes to query + publish. | Repo + wallet key |
 
-#### actionable/web/ — web/desktop-app variants
-
-| Skill | What it does | Runs in |
-|---|---|---|
-| **geo-publish-codex** | Publish tuned for Codex Desktop. Duplicate + schema check before writing. | Codex Desktop + repo |
+`geo-publish` is portable — one skill for Claude Code, Codex (CLI + Desktop), and Claude cowork (any local-execution agent). Browser-only assistants can't publish.
 
 ## Which to give whom
 

@@ -1,173 +1,345 @@
 ---
 name: geo-query
-description: Read the Geo knowledge graph — find entities, inspect properties and relations, traverse the graph, discover schemas before publishing. Triggers on "find", "search", "list", "what entities", "show me", "query Geo", "in space", "discover schema", "who points at", "backlinks".
+description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: 0.1.0
+  version: "0.1.0"
 ---
 
 # Geo Knowledge Graph — Querying
 
-Read entities, types, properties, and relations from the Geo knowledge graph. The read-only counterpart to `geo-publish`. Use this any time the editor asks a question about Geo, and **always before** publishing a new entity of a type you haven't worked with — schemas drift and IDs must be discovered, not guessed.
+Query and explore entities, types, properties, and relations in the Geo knowledge graph via its GraphQL API.
 
 ## When to apply
 
 Use this skill when the user wants to:
 
-- Find entities by name, type, or property value.
-- Inspect a single entity's properties, types, and outgoing relations.
-- Traverse the graph from one entity to its neighbours (incoming or outgoing).
-- Discover what types and properties exist in a space.
-- Discover an existing entity's schema **before** publishing a new one of the same type — the publish skill depends on this.
-- Detect duplicates, orphans, or schema drift.
+- Look up an entity by ID.
+- Search for entities of a given type (optionally scoped to a space).
+- Explore what properties and relations an entity has.
+- Discover the schema for an unfamiliar entity type before publishing.
+- Find type, property, or relation type IDs.
 
-It does NOT publish or change anything. Hand off to `geo-publish` when the user wants to write.
+## API basics
 
-## Two backends, one skill
+- **Endpoint:** `https://testnet-api.geobrowser.io/graphql`
+- **Method:** `POST` with `Content-Type: application/json`
+- **Auth:** none required for reads.
+- **UUIDs:** 32-char hex, no dashes (e.g. `7ed45f2bc48b419e8e4664d5ff680b0d`).
+- **Browser links:** `https://www.geobrowser.io/space/{spaceId}/{entityId}`.
 
-There are two ways to read Geo. Prefer MCP when available, fall back to GraphQL for things MCP can't do.
+> Why GraphQL and not MCP: MCP (`hypergraph-mcp`) is convenient for casual browsing, but it can be slow and occasionally returns wrong schema data (e.g. inflated property lists). For anything that informs a write, or anything that must be exact, use the GraphQL queries below — they're deterministic.
 
-### Backend 1 — `hypergraph-mcp` (preferred)
+## Core concepts (compact)
 
-If the user's Codex / Claude Code is configured with the `hypergraph-mcp` server (added via `codex mcp add hypergraph-mcp --url https://hypergraph-mcp.up.railway.app/mcp` or the equivalent Claude Code config), the following tools are available:
+- **Entity:** a unique node in the graph (person, place, article, etc.). Has an ID, `name`, `description`, `types`, `values`, and `relations`.
+- **Property:** a typed attribute on an entity (`text`, `date`, `boolean`, `decimal`, `integer`, `float`, `url`).
+- **Relation:** a typed edge between two entities. Relations are themselves entities — they can have their own properties.
+- **Type:** a category (`Person`, `Article`, …). Types define a schema of default properties that every entity of that type inherits.
+- **Space:** an independent community/topic scope. An entity can live in multiple spaces; each has its own perspective.
 
-| Tool | Purpose |
-|---|---|
-| `list_spaces` | Enumerate all spaces. |
-| `get_entity_types` | List types and their property schemas. Omit `space` to scan **all** spaces at once. |
-| `search_entities` | Name search across spaces. Supports `filters` (property-based), `related_to` (graph traversal), `compact`, `limit`/`offset`. |
-| `list_entities` | List entities of a given type. Same options as search. |
-| `get_entity` | Full details for one entity by ID. |
-| `get_related_entities` | Graph traversal — `direction: incoming | outgoing | both`, optional `relation_type`. |
+Full conceptual details: see `../../../knowledge-graph-ontology.md`.
 
-**Don't restrict to a space unless the user explicitly asks.** The same type / name often exists in multiple spaces; passing `space` will silently miss results. Run `list_spaces` once for context, then run searches without `space`.
+## List query: `entities` vs `entitiesConnection`
 
-### Backend 2 — GraphQL (fallback)
+There are two list queries with the same top-level args (`typeId`, `spaceId`, `typeIds`, `spaceIds`, `filter`, `first`, `offset`, `orderBy`) but different shapes. **Choose based on result set size**:
 
-Endpoint: `https://testnet-api.geobrowser.io/graphql`. No auth needed for reads.
+|              | `entities`                                        | `entitiesConnection`                        |
+| ------------ | ------------------------------------------------- | ------------------------------------------- |
+| Return shape | flat array                                        | `{ nodes, edges, pageInfo, totalCount }`    |
+| Pagination   | `first` + `offset` **(capped at offset 1000)**    | `first` + cursor (`after`/`before`)         |
+| Use when     | small, bounded lookups; default for <1000 results | totalCount needed, or unbounded result sets |
 
-Use GraphQL when:
-- MCP isn't installed.
-- You need a query MCP doesn't support (deep nested selections, schema introspection, edge IDs for relation deletion).
-- You're discovering schemas before publishing — `geo-publish` calls into this exact pattern.
+**CRITICAL — offset cap:** `entities(...)`, `relations(...)`, and `values(...)` return **400 "offset cannot exceed 1000"** beyond offset 1000. For any query that might exceed 1000 results, use the `*Connection` variant with cursor pagination.
 
-Minimal request:
+**CRITICAL — response shape:** `entities` returns a **flat array**. Do NOT wrap fields in `{ nodes { ... } }`.
 
-```js
-const res = await fetch("https://testnet-api.geobrowser.io/graphql", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ query: `...`, variables: { ... } }),
-});
-const { data, errors } = await res.json();
-```
-
-Retry on 5xx / 429 / GraphQL "Unexpected error" with exponential backoff. Reference implementation: `content-management/src/functions.ts` `gql()`.
-
-## The four query patterns
-
-### Pattern A — Find entities by name
-
-MCP:
-```
-search_entities({ query: "Bitcoin", compact: true, limit: 10 })
-```
-
-GraphQL:
 ```graphql
-{ entities(first: 10, filter: { name: { contains: "Bitcoin" } }) { nodes { id name } } }
-```
+# CORRECT
+{ entities(typeId: "TYPE_ID", first: 50) { id name description } }
 
-### Pattern B — List entities of a type
-
-MCP:
-```
-list_entities({ type: "Person", compact: true, limit: 50 })
-```
-
-GraphQL — get the type ID first via `get_entity_types`, then:
-```graphql
+# WRONG — `entities` is flat, no `nodes`
 { entities(typeId: "TYPE_ID", first: 50) { nodes { id name } } }
+
+# WRONG — `typeId` is top-level, not inside `filter`
+{ entities(filter: { typeIds: { anyEqualTo: "TYPE_ID" } }, first: 50) { ... } }
 ```
 
-### Pattern C — Inspect one entity (the schema-discovery query)
+## Core queries
 
-MCP:
-```
-get_entity({ id: "<entity-id>" })
-```
+### Look up a single entity
 
-GraphQL — this is the canonical schema-discovery query the publish skill depends on:
+This is the starting point for almost every investigation:
+
 ```graphql
-{ entity(id: "<entity-id>") {
-    id name
-    types { nodes { type { id name } } }
+{
+  entity(id: "ENTITY_ID") {
+    id
+    name
+    description
+    spaceIds
+    types {
+      id
+      name
+    }
+    values(first: 100) {
+      nodes {
+        property {
+          id
+          name
+        }
+        text
+        date
+        boolean
+        decimal
+        integer
+        float
+      }
+    }
+    relations(first: 100) {
+      nodes {
+        id # relation edge ID (use this to delete the relation)
+        entityId # relation ENTITY ID (use this to read/update relation properties)
+        type {
+          id
+          name
+        }
+        toEntity {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+```
+
+Values come back as typed fields (`text`, `date`, `boolean`, `decimal`, `integer`, `float`) — NOT a single `value` field. Check each for non-null.
+
+### Search entities by type (optionally by space)
+
+```graphql
+# Small result set
+{
+  entities(typeId: "TYPE_ID", spaceId: "SPACE_ID", first: 50) {
+    id
+    name
+    description
+  }
+}
+
+# Large/unbounded — use cursor pagination
+{
+  entitiesConnection(typeId: "TYPE_ID", spaceId: "SPACE_ID", first: 500) {
+    totalCount
+    nodes {
+      id
+      name
+      description
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+```
+
+### Cursor pagination loop (TypeScript)
+
+```typescript
+async function fetchAll(
+  typeId: string,
+  spaceId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const out: Array<{ id: string; name: string }> = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const afterClause = cursor ? `after: "${cursor}"` : "";
+    const res = await fetch("https://testnet-api.geobrowser.io/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: `{
+        entitiesConnection(typeId: "${typeId}", spaceId: "${spaceId}", first: 500 ${afterClause}) {
+          nodes { id name }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      }),
+    });
+    const { data } = await res.json();
+    const conn = data.entitiesConnection;
+    out.push(...(conn?.nodes ?? []));
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  return out;
+}
+```
+
+## Filtering
+
+The `filter` arg accepts `EntityFilter` for field-level conditions:
+
+```graphql
+{
+  entities(typeId: "TYPE_ID", filter: { name: { startsWithInsensitive: "Bitcoin" } }, first: 20) {
+    id
+    name
+  }
+}
+```
+
+Common `EntityFilter` fields:
+
+- `id` — `UUIDFilter` (uses `is` / `isNot` / `in`; NOT `equalTo`).
+- `name`, `description`, `createdAt`, `updatedAt` — `StringFilter` (`startsWithInsensitive`, `includesInsensitive`, `equalTo`).
+- `spaceIds`, `typeIds` — `UUIDListFilter` (`anyEqualTo`).
+- `relations`, `backlinks` — `EntityToManyRelationFilter` (`some`, `none`, `every`).
+- `values` — `EntityToManyValueFilter`.
+- `and`, `or`, `not`.
+
+**CRITICAL — scope relation filters by space.** Cross-space relation filters can return `INTERNAL_SERVER_ERROR` on the server. Always include `spaceId` inside relation filters:
+
+```graphql
+relations: { some: { spaceId: { is: "SPACE_ID" }, toEntity: { ... } } }
+```
+
+**Prefer `none` over `every` for exclusion.** `every` means "all items must match the full condition" and misbehaves when items have different field values. Use `none` for "there is no X where Y":
+
+```graphql
+# "entity has no name value"
+values: { none: { propertyId: { is: NAME_PROP_ID }, text: { isNull: false } } }
+```
+
+If complex filters return 500s, reduce `first` from 500 → 100 → 50.
+
+## Schema discovery workflow
+
+When you need to publish or understand an entity type you haven't seen before, **inspect an existing entity of that type** to learn the schema. Do this before assuming any property/relation IDs.
+
+1. Find entities of the type (search by `typeId`).
+2. Pick one and fetch it fully (all values + relations).
+3. Read the property names and relation types from the result.
+4. Note the IDs — property IDs, relation type IDs, and `toEntity` IDs for classification values.
+
+```graphql
+{
+  entities(typeId: "7ed45f2bc48b419e8e4664d5ff680b0d", first: 3) {
+    id
+    name
+    types {
+      id
+      name
+    }
     values(first: 50) {
-      nodes { property { id name } text date boolean decimal }
+      nodes {
+        property {
+          id
+          name
+        }
+        text
+        date
+      }
     }
     relations(first: 50) {
-      nodes { id type { id name } toEntity { id name } toSpace { id } }
+      nodes {
+        type {
+          id
+          name
+        }
+        toEntity {
+          id
+          name
+        }
+      }
     }
   }
 }
 ```
 
-The `relations.nodes.id` field is the **edge id** — required by `Graph.deleteRelation`. Don't confuse with `toEntity.id`.
+This is the query `geo-publish` relies on before any write — paste the discovered IDs to it as `KNOWN IDs` so it doesn't re-discover.
 
-### Pattern D — Traverse the graph
+## Finding type and property IDs by name
 
-MCP:
-```
-get_related_entities({ entity_id: "<id>", direction: "incoming", relation_type: "Topics" })
-```
+`Type` and `Property` are themselves types — you can query all of them:
 
-`incoming` finds "what points at this" (backlinks). `outgoing` finds "what does this point at" (relations).
-
-GraphQL (incoming / backlinks):
 ```graphql
-{ relations(filter: { toEntity: { id: { is: "<id>" } } }, first: 50) {
-    nodes { id type { name } fromEntity { id name } }
+# All type definitions
+{
+  entities(
+    typeId: "e7d737c536764c609fa16aa64a8c90ad"
+    filter: { name: { includesInsensitive: "article" } }
+    first: 20
+  ) {
+    id
+    name
+  }
+}
+
+# All property definitions
+{
+  entities(
+    typeId: "808a04ceb21c4d888ad12e240613e5ca"
+    filter: { name: { includesInsensitive: "date" } }
+    first: 20
+  ) {
+    id
+    name
   }
 }
 ```
 
-## Common editor jobs
+For relation types, inspect an entity that uses them — the `type { id name }` field on a relation gives you the ID.
 
-- **"What entity types exist?"** → `get_entity_types({})` (no space). Returns the schema map across all spaces.
-- **"Show me all Claims with no Topic relation."** → `list_entities({ type: "Claim", limit: 200 })` then check each entity's relations, OR write a GraphQL query with a relations-empty filter.
-- **"Find the canonical version of this entity."** → search by name, then for each candidate `get_related_entities({ direction: "incoming" })` and count. Most backlinks = usual Main.
-- **"Discover schema for type X before I publish a new one of type X."** → fetch one existing entity of type X with Pattern C. Read property IDs and relation type IDs from the result. Pass them to `geo-publish` so it doesn't re-discover. **Never hardcode IDs you haven't verified.**
-- **"Are there duplicates of type X?"** → `list_entities({ type: "X", compact: true, limit: 200 })`, group by lowercased name, hand the dup groups to `geo-publish` (or `content-management/03_merge_duplicates.ts`) for merging.
+## Well-known IDs
 
-## Output guidance
+Prefer the SDK's exported constants where possible:
 
-- Default to `compact: true` for searches with > ~20 results — the table fits in context.
-- Drill in with `get_entity` only after the editor picks a specific result.
-- For graph traversal, start with `direction: both` (the default) to learn the relation types, then re-query with `direction` and `relation_type` set.
-- For "the full picture of an entity", do: `get_entity` + `get_related_entities` (both directions) — three calls, then summarise.
+```typescript
+import { SystemIds, ContentIds } from "@geoprotocol/geo-sdk";
+
+(SystemIds.PERSON_TYPE, SystemIds.COMPANY_TYPE, SystemIds.PROJECT_TYPE, SystemIds.EVENT_TYPE);
+(ContentIds.ARTICLE_TYPE, ContentIds.TALK_TYPE, ContentIds.PODCAST_TYPE, ContentIds.TOPIC_TYPE);
+```
+
+Common raw IDs (verified against the API — for GraphQL queries):
+
+| Name            | ID                                 |
+| --------------- | ---------------------------------- |
+| Type (meta)     | `e7d737c536764c609fa16aa64a8c90ad` |
+| Property (meta) | `808a04ceb21c4d888ad12e240613e5ca` |
+| Person          | `7ed45f2bc48b419e8e4664d5ff680b0d` |
+| Article         | `a2a5ed0cacef46b1835de457956ce915` |
+| Topic           | `5ef5a5860f274d8e8f6c59ae5b3e89e2` |
+| News story      | `e550fe517e904b2c8fffdf13408f5634` |
+
+More type, property, and space IDs live in `../../../src/constants.ts` and `../../../knowledge-graph-ontology.md`.
+
+## curl sanity check
+
+```bash
+curl -s --compressed 'https://testnet-api.geobrowser.io/graphql' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"{ entities(typeId: \"7ed45f2bc48b419e8e4664d5ff680b0d\", first: 5) { id name } }"}' | jq .
+```
 
 ## Critical gotchas — quick reference
 
-- **Don't pass `space` unless asked.** Same name often exists in many spaces; you will silently miss results.
-- **Same type name in multiple spaces is normal.** "Bounty", "Person", "Project" exist in many spaces. Treat them as families, not singletons.
-- **Edge id ≠ entity id.** When deleting a relation, you need the relation's `id` (the edge), not `toEntity.id`. Pull it from a Pattern C query.
-- **Schemas drift.** Always discover via Pattern C before authoring a publish op.
-- **Result limit is 50 by default.** Paginate with `offset` for large sets.
-- **GraphQL is read-only.** Writes go through the SDK + smart-account wallet — see `geo-publish`.
-
-## Hand-off to `geo-publish`
-
-When the user's intent shifts from "tell me about X" to "change X", stop the query flow and hand to the publish skill. Pass:
-
-- The **space ID** (or "personal" if writing to the user's personal space).
-- The **entity ID(s)** involved.
-- The **schema** discovered via Pattern C — paste it as `KNOWN IDs` so `geo-publish` doesn't re-discover.
-
-The orchestrator skill (`geo-orchestrate`) handles this hand-off automatically when invoked from a higher-level intent.
+1. **Offset cap 1000** on `entities`/`relations`/`values` — use `*Connection` + cursor for larger sets.
+2. **`entities` is flat**, not `{ nodes { ... } }`.
+3. **`typeId`/`spaceId` are top-level args**, not inside `filter`.
+4. **Scope relation filters by `spaceId`** to avoid `INTERNAL_SERVER_ERROR`.
+5. **`UUIDFilter` uses `is` / `isNot` / `in`**, not `equalTo`. `UUIDListFilter` uses `anyEqualTo`.
+6. **Prefer `none` over `every`** for exclusion logic.
+7. **Values come back as typed fields** (`text`, `date`, `boolean`, …), not a single `value`.
+8. **Relation `id` ≠ `entityId`** — `id` is the edge (for deletion); `entityId` is the relation-as-entity (for relation properties).
 
 ## More
 
-- `reference.md` — full GraphQL schema, MCP tool details, retry logic, pagination patterns.
-- `examples/find-by-property.md` — filter by `Bounty Budget > 1000` end-to-end.
-- `examples/discover-schema.md` — the full schema-discovery query annotated.
-- `examples/find-duplicates.md` — sort by backlinks, group by name, output dup groups for `geo-publish`.
+- `../../../knowledge-graph-ontology.md` — full ontology spec (types, properties, data types, blocks).
+- `../../../src/constants.ts` — well-known type/property/space IDs and the ranked SPACES list.
+- `../../../src/functions.ts` — reference `gql()` client with retry/backoff and pagination.
+- Sibling skills: `geo-publish` / `geo-orchestrate` (writes this hands off to), `geo-press-review` (built on these reads).

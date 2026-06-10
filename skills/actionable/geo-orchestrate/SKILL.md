@@ -216,8 +216,7 @@ Use ONE message for the plan, in this exact shape, then wait for the editor:
 
 ## More
 
-- `examples/merge-duplicates.md` — full walk-through of the dup-merge job, generated script included.
-- `examples/assign-topics-to-claims.md` — Arturas's example, end-to-end.
-- `examples/bulk-update-property.md` — add Web URL to all Persons.
-- `examples/delete-orphans.md` — delete a flagged list with backlink verification.
-- `templates/script-skeleton.mjs` — the empty `.mjs` the orchestrator copies when generating a new script.
+- Building-block skills: `geo-query` (discovery/reads), `geo-publish` (the write path + safeguards).
+- Reusable repo logic to import instead of reimplementing: `../../../src/entity_ops.ts` (delete/merge/changeSpace), `../../../src/functions.ts` (`gql`, `publishOps`, `printOps`).
+- Worked dup-merge / delete walk-throughs: the editor guides in `../../../documentation/From Rush/`.
+- Real generated scripts to copy as patterns: `../../../scripts/` (dated `.ts` files).
