@@ -42,32 +42,59 @@ Each operation has a dedicated section below with its own Discovery, Gates, and 
 | Find entities without types | No | — |
 | Find blank properties | No | — |
 | Find stale relations | No | — |
+| Find duplicate-type relations | No | — |
 | Merge duplicates | Yes | Main = most backlinks |
 | Delete orphan | Yes | Must have 0 incoming relations |
 | Fix data type | Yes | Old value preserved as comment until publish |
+| Fix duplicate-type relations | Yes | Keep exactly one edge per (entity, type) |
 | Delete space data | Yes (mass) | Editor types space name to confirm |
 
 ---
 
 ## Operation: Find duplicates (read-only)
 
-Used standalone OR as the discovery step before a merge.
+Used standalone OR as the discovery step before a merge. **Two passes** — run Pass 1 always; run Pass 2 when the type is text-heavy (News story, Article, Claim, Event) where exact-name collisions are near-impossible.
 
-### Discovery
+### Pass 1 — Exact-name grouping (cheap, deterministic)
 Pattern B from `geo-query-web`: list entities of the target type (paginate every page, not just the first 50). Group by `name.toLowerCase().trim()`. Surface groups with 2+ members.
+
+Pass 1 works well for **People / Orgs / Projects** (canonical names recur verbatim — "ethereum" published four times). It is **structurally blind to news/article near-duplicates**: two stories about the same event almost never share a byte-identical headline, so Pass 1 returns 0 groups even when genuine same-event dupes exist. Verified: exact-name grouping over 1,087 Crypto News stories → **0 groups**, while ~4 genuine same-event near-dupes were present.
+
+### Pass 2 — Semantic near-duplicate detection (LLM judgment, NOT string similarity)
+Run this for text-heavy types. The goal is **same real-world event told twice**, e.g.:
+- "Senate advances GENIUS Act in new cloture vote" ↔ "GENIUS Act advances toward final Senate vote"
+- "Trump Media and Crypto.com formalize their partnership…" ↔ "Trump Media is partnering with Crypto.com to launch ETPs…"
+- "Priority Blockspace for Humans has launched on World Chain" ↔ "World launches Priority Blockspace for Humans"
+
+**Do NOT use token/string-similarity (Jaccard, Levenshtein, cosine-on-bag-of-words) as the decision.** It over-flags template headlines that are *different stories*:
+- "X raises $Y Series Z" vs "P raises $Q Series R" — high token overlap, **different companies, NOT dupes**
+- "X secures MiCA license" vs "P secures MiCA license" — same template, **different firms, NOT dupes**
+
+Method that works:
+1. **Pre-cluster cheaply** to keep the LLM pass tractable — bucket candidates by shared salient tokens (entity names, tickers, bill names, dates), or by a same-day/same-week `createdAt` window. This is a *recall* filter to build candidate pairs, **not** the duplicate decision.
+2. **LLM adjudication per candidate pair/cluster.** For each pair, read both names (and `description`/source URL if present) and decide: *same underlying event/subject → near-dup; same template but different actors → keep separate.* Emit a confidence and a one-line reason.
+3. **Surface as recommendations only.** Never auto-merge a Pass-2 group — semantic calls are fallible. The editor confirms each before it flows into the Merge operation.
+
+Caveat to state in the output: Pass 2 trades determinism for recall — it can miss (no candidate pairing) and can over-suggest (template look-alikes). It is advisory; Pass 1 groups are safe to "merge all", Pass 2 groups are not.
 
 ### Output template
 ```
 ## Duplicate groups — type {type name}
 Total entities scanned: {N}
-Duplicate groups: {G}
 
+### Pass 1 — exact name ({G1} groups)
 | Group | Members | Spaces | Backlinks (each) |
 |---|---|---|---|
 | "ethereum" | 4 | Crypto, Crypto datasets, AI, PERSONAL | 142, 8, 2, 0 |
 | ... |
 
-Reply with the group(s) to merge, or "all" to merge every group automatically (Main = most backlinks).
+### Pass 2 — semantic near-dupes ({G2} candidate groups, ADVISORY — confirm each)
+| Members (headlines) | Same event? | Confidence | Reason |
+|---|---|---|---|
+| "Senate advances GENIUS Act in new cloture vote" / "GENIUS Act advances toward final Senate vote" | yes | high | same Senate vote, same bill |
+| "Circle secures MiCA license" / "Kraken secures MiCA license" | no | high | template match, different firms — KEEP SEPARATE |
+
+Reply with the group(s) to merge (Pass 1: or "all"; Pass 2: name them explicitly — no "all"). Main = most backlinks.
 ```
 
 No write happens here. Output is the input for the Merge operation.
@@ -247,22 +274,52 @@ Uses `Graph.deleteEntity({ id })`. Also emit `deleteRelation` ops for the entity
 
 Untyped entities are leakage from broken publishes. Surface them so the editor can re-type or delete.
 
-### Discovery
+### Discovery — there is NO server-side "untyped" filter that works. Paginate + check client-side.
+
+This was the documented query and it is **wrong on two counts**:
 ```graphql
+# ✗ BROKEN — do NOT use
 { entities(first: 50, filter: { types: { isNull: true } }) { id name createdAt } }
 ```
-If the schema doesn't support `types.isNull`, fall back to listing entities + checking `types` array per-entity (paginate everything).
+1. **There is no `types` filter field.** The schema field is `typeIds` (a `UUIDListFilter`). `types` is silently invalid.
+2. **`typeIds: { isNull: true }` 504-times-out.** So does `entitiesConnection { totalCount }` (even unfiltered) — the API cannot count or null-scan this column within the gateway timeout. Don't rely on either for totals.
+
+Do **NOT** reach for this either — it looks fast and correct but is a **false-positive trap**:
+```graphql
+# ✗ WRONG RESULTS — returns ~660ms but most rows DO have types
+{ entities(filter: { relationsByTypeIdConnection: { none: { typeId: { is: "8f151ba4de204e3c9cb499ddf96f48f1" } } } }) { id typeIds } }
+```
+Verified: the rows it returns mostly have non-empty `typeIds` (Text Block, Claim, Image…). The relation-join semantics don't match the materialized `typeIds` array, so it under-reports types and over-reports "untyped". Discarded after testing.
+
+**The only reliable method: paginate the space and check `typeIds.length === 0` client-side** (`8f151ba4de204e3c9cb499ddf96f48f1` is the Types property; an entity with no Types relation has an empty `typeIds`):
+```graphql
+{ entities(
+    first: 500,
+    filter: { spaceIds: { anyEqualTo: "<spaceId>" } }
+  ) { id name typeIds createdAt } }
+```
+Page with `after`/cursor (or `offset`) until exhausted; keep only rows where `typeIds` is `[]`. This is read-only and slow on big spaces — log progress per page and write the full list to `scripts/<date>-no-type-export.json`.
+
+Two flavours of untyped show up; label them in the output:
+- **Husks** — names like `Proposal <uuid>`. Almost always broken-publish leakage; default action **delete** (via delete-orphan op).
+- **Real entities** that just lost their type (e.g. "Kaito AI"). Default action **assign type**.
+
+Reference baseline (crypto-datasets space, paginate-and-check): **193 untyped / 1,827 (~11%)**, mostly husks plus a few real ones.
 
 ### Output template
 ```
-## Entities without types
-Total: {N} (across {S} spaces; sample shown — full list in scripts/<date>-no-type-export.json)
+## Entities without types — space {space name}
+Scanned (paginated): {N} entities across {pages} pages
+Untyped: {U} ({pct}%)  — husks: {h}, real: {r}
+Full list: scripts/<date>-no-type-export.json
 
-| Name | ID | Space | createdAt |
-|---|---|---|---|
-| ... |
+| Name | ID | Space | Husk? | createdAt |
+|---|---|---|---|---|
+| Proposal 00064d73-… | 00064d73… | crypto-datasets | husk | … |
+| Kaito AI | … | crypto-datasets | real | … |
 
 Decide per-entity: **assign type** (specify type id) / **delete** (use delete-orphan op) / **leave**.
+(Or: "delete all husks" / "assign {type id} to all real ones".)
 ```
 
 Read-only — no script written. Hand off to merge / delete / publish as the editor decides.
@@ -351,6 +408,57 @@ Cleanup ops use `Graph.deleteRelation({ id })` with the edge id.
 
 ---
 
+## Operation: Find / fix duplicate-type relations
+
+An entity's type is a relation with `typeId = 8f151ba4de204e3c9cb499ddf96f48f1` (the **Types** property) pointing to a type entity. A **duplicate-type relation** is the *same type entity listed two or more times* on one entity — two edges with identical `(fromEntity, typeId=Types, toEntityId)`. The UI then shows the type chip twice. These are publish-skill leakage (a re-run that re-created the type edge instead of skipping it).
+
+Note: `typeIds` on the entity **dedupes**, so a duplicate is invisible there — you must look at the raw type *relations* (edges), not the `typeIds` array. Two edges to the same type → one is redundant.
+
+### Discovery (read-only)
+Per space (or per entity), fetch every Types-relation edge and group by `(fromEntityId, toEntityId)`:
+```graphql
+{ relationsConnection(
+    filter: { typeId: { is: "8f151ba4de204e3c9cb499ddf96f48f1" }, spaceId: { is: "<spaceId>" } },
+    first: 500
+  ) {
+    edges { node { id fromEntityId toEntityId toEntity { name } spaceId } }
+    pageInfo { hasNextPage endCursor }
+  } }
+```
+Paginate to completion. Any `(fromEntityId, toEntityId)` key with **2+ edges** is a duplicate group; all but one edge are redundant.
+
+Distinguish from the legitimate **multi-type** case: an entity with edges to *different* type entities (e.g. Person **and** Author) is correctly multi-typed — NOT a duplicate. Only same-`toEntityId` repeats are duplicates.
+
+### Output template
+```
+## Duplicate-type relations — space {space name}
+Type edges scanned: {N}
+Entities with a duplicated type: {E}
+
+| Entity | ID | Type (listed ×n) | Edge ids | Keep / delete |
+|---|---|---|---|---|
+| Søren Halberg Vesterby | 0146e0c9… | Person ×2 | aaa…(keep), bbb…(delete) | delete 1 |
+
+Reply **go** to write + dry-run the cleanup (deletes the extra edges, keeps the earliest by createdAt).
+```
+
+### Fix (destructive — but low-risk; only removes redundant edges)
+For each duplicate group: keep one edge (default: earliest `createdAt`, or any if equal), emit `Graph.deleteRelation({ id })` for every other edge. Route each delete to its edge's own `spaceId`. No `createRelation` is needed — the kept edge already carries the type.
+
+```typescript
+// per duplicate group: keep[0], delete the rest
+for (const edge of group.slice(1)) {
+  const { ops } = Graph.deleteRelation({ id: edge.id });
+  opsBatch.get(edge.spaceId)!.push(...ops);
+}
+```
+
+Log lines: `[FIX-DUP-TYPE] {entity} ({id}) — Person listed ×2, deleting edge bbb… (keeping aaa…)`.
+
+After publish, re-query the entity's Types edges and confirm exactly one remains per type.
+
+---
+
 ## Operation: Delete space data (mass-destructive, RARE)
 
 Used when wiping a test space. **Never used on a DAO space or someone else's space.**
@@ -423,6 +531,8 @@ After `go`, the skill writes + dry-runs, surfaces the log lines (`[MERGE]` / `[D
 4. **"Find duplicates" must group across spaces** — same name in different spaces is still a duplicate candidate unless the user explicitly scoped to one space.
 5. **`Graph.deleteEntity` doesn't delete incoming relations** automatically. If you bypass the orphan gate via "force delete", you must also delete each incoming edge or the UI will show ghosts.
 6. **Mass merges should be batched per Main's target space.** All ops with a given target space go in one transaction. The `OpsBatch` helper handles this.
+7. **`typeIds` dedupes; type *edges* do not.** To find duplicate-type relations you must read the raw Types-relation edges (`relationsConnection` filtered by `typeId = 8f151ba4…`), not the entity's `typeIds` array — the array collapses repeats and hides the duplicate.
+8. **No working server-side "untyped" filter.** `types` isn't a field (it's `typeIds`); `typeIds: { isNull: true }` and `entitiesConnection.totalCount` both 504; the `relationsByTypeIdConnection: { none }` filter returns false positives. Paginate the space and check `typeIds.length === 0` client-side.
 
 ## What this skill does NOT do
 
