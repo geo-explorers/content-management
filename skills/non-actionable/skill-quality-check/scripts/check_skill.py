@@ -110,6 +110,18 @@ def has_toc(text):
     return len(bullets) >= 3
 
 
+def find_repo_root(start):
+    """Nearest ancestor directory containing a .git (the repo root), or None."""
+    d = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(d, ".git")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
 def check_skill(skill_dir):
     findings = []
     skill_dir = os.path.abspath(skill_dir.rstrip("/"))
@@ -179,22 +191,29 @@ def check_skill(skill_dir):
     findings.append(finding("forward slashes only (no backslash paths)", "WARN", not backslash,
                             "ok" if not backslash else "backslash path(s): " + ", ".join(backslash)))
 
-    # referenced bundled .md files exist + ToC on long ones
+    # referenced .md files: prefer bundled (self-contained); else check the repo root
+    # (repo-coupled - exists but not portable); else truly missing (dangling).
+    repo_root = find_repo_root(skill_dir)
     refs = find_referenced_md(body)
-    missing, toc_missing = [], []
+    missing, repo_coupled, toc_missing = [], [], []
     for p in sorted(refs):
         if not is_skill_relative_md(p):
             continue
         full = os.path.join(skill_dir, p)
-        if not os.path.isfile(full):
-            missing.append(p)
-        else:
+        if os.path.isfile(full):
             rtext = read(full)
             rlines = rtext.count("\n") + 1
             if rlines > 100 and not has_toc(rtext):
                 toc_missing.append("%s (%d lines)" % (p, rlines))
-    findings.append(finding("referenced bundled files exist", "WARN", not missing,
-                            "all referenced .md exist" if not missing else "MISSING: " + ", ".join(missing)))
+        elif repo_root and os.path.isfile(os.path.join(repo_root, p)):
+            repo_coupled.append(p)
+        else:
+            missing.append(p)
+    findings.append(finding("referenced files exist (not dangling)", "WARN", not missing,
+                            "ok" if not missing else "MISSING (not in skill or repo root): " + ", ".join(missing)))
+    if repo_coupled:
+        findings.append(finding("references are bundled in the skill (self-contained)", "WARN", False,
+                                "repo-coupled - exist at repo root but not bundled: " + ", ".join(repo_coupled)))
     findings.append(finding("reference files >100 lines have a ToC", "WARN", not toc_missing,
                             "ok" if not toc_missing else "no ToC: " + ", ".join(toc_missing)))
 
