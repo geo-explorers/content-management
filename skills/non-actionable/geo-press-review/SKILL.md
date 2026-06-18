@@ -130,5 +130,4 @@ The review itself is safe by construction — read + compare + rank only.
 ## More
 
 - `scripts/press-review-coverage-map.ts` — the Geo-side coverage map (Half 1).
-- `documentation/press-review-skill-plan.md` — full design and open questions for Preston.
 - `geo-query` / `geo-orchestrate` / `geo-publish` — the skills this one reads from and hands off to.

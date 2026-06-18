@@ -128,7 +128,7 @@ STOP and tell the editor:
 > - duplicate(s) have **{M}** combined
 > - estimated total ops: **{ops}** (cap is 200)
 >
-> This needs the manual merge procedure in `documentation/big-merge.md` — the helper has historically under-migrated rows on this scale and produced large cross-space proposals. Reply **skip** to leave this group, or **force big-merge** to override (you accept the under-migration risk and will manually verify backlink counts post-merge).
+> This needs the manual merge procedure in [`big-merge.md`](big-merge.md) — the helper has historically under-migrated rows on this scale and produced large cross-space proposals. Reply **skip** to leave this group, or **force big-merge** to override (you accept the under-migration risk and will manually verify backlink counts post-merge).
 
 ### Gate — Cross-Space-Impact
 
@@ -201,33 +201,7 @@ Reply **go** to write + dry-run the script. (Then **publish** to actually merge.
 
 ### Execution
 
-Use `mergeEntities` from `content-management/src/entity_ops.ts` (battle-tested). Batch ops via `OpsBatch`. **Always pass `summaryOut: new Map()`** so the helper fills per-space op counts for the Cross-Space-Impact gate.
-
-The helper handles:
-- Re-pointing incoming relations from members to Main (**paginated to completion** — uses `offset`-based pagination with `first: 500` until exhausted; logs page count)
-- Copying unique values from members to Main (skip if Main already has the property; skip legacy/deprecated property IDs from `LEGACY_PROPERTY_IDS`)
-- Copying unique outgoing relations to Main (skip if Main already has that exact `type + toEntity`; skip legacy/deprecated relation type IDs from `LEGACY_RELATION_TYPE_IDS`)
-- Stripping the member: unset all values, delete all relations (outgoing + in-space backlinks), and emit a protocol-level `deleteEntity` op so the member ID is truly removed (not left as a nameless husk). Opt out with `keepAsGhost: true` only if an external system needs the ID.
-
-```typescript
-import { mergeEntities, type MergeOpSummary } from '../src/entity_ops.js';
-
-const summaryOut: MergeOpSummary = new Map();
-await mergeEntities({
-  mainEntityId: '<canonical-id>',
-  mainSpaceId: '<canonical-space-id>',
-  secondaries: [{ entityId: '<dup-id>', spaceId: '<dup-space-id>' }],
-  dryRun: true,
-  opsBatch,
-  summaryOut,
-});
-// Render the Cross-Space-Impact gate from summaryOut:
-for (const [spaceId, counts] of summaryOut) {
-  console.log(`  ${spaceId}: total=${counts.total} ` +
-    `create=${counts.createRelation} update=${counts.updateEntity} ` +
-    `delRel=${counts.deleteRelation} delEntity=${counts.deleteEntity}`);
-}
-```
+Use `mergeEntities` from `src/entity_ops.ts` (battle-tested) — it re-points backlinks (paginated to completion), ports unique values + outgoing relations to Main, strips the member, and emits a protocol-level `deleteEntity`. Batch ops via `OpsBatch`. **Always pass `summaryOut: new Map()`** so the helper fills per-space op counts for the Cross-Space-Impact gate. Full helper contract + the code template: see [`reference.md`](reference.md).
 
 After publish, report per-space tx hashes AND the post-merge backlink count on Main. Editor sanity-checks that Main's new backlink total ≈ the pre-merge sum (canonical + duplicates' migrated backlinks). A meaningful gap is a red flag for under-migration — investigate before approving the next merge.
 
@@ -510,29 +484,9 @@ Reply **go** to authorize.
 
 After `go`, the skill writes + dry-runs, surfaces the log lines (`[MERGE]` / `[DELETE]` / `[SKIP]` / `[FIX]`), then waits for `publish` or `stop`.
 
-## Script generation rules
+## Reference — read before writing any script
 
-- **One file, one job.** `scripts/<YYYY-MM-DD>-<operation>-<slug>.ts`. Successful scripts become a pattern library.
-- **Top of file**: comment block restating the operation, the discovery counts, and the gate results. Future-you needs this.
-- **TypeScript**, runs with `bun run scripts/<file>.ts`.
-- **`DRY_RUN` constant at the top, defaults `true`**.
-- **Collect ALL ops in one array, publish ONCE.** Never `await publishOps` inside a loop.
-- **Import battle-tested helpers** from `content-management/src/`:
-  - `mergeEntities` (entity merging)
-  - `OpsBatch` (batching + per-space transaction routing)
-  - `deleteEntity`, `deleteRelation` (cleanup)
-  Don't reimplement these.
-
-## Critical gotchas
-
-1. **Backlinks are paginated.** A naive query returning 50 backlinks doesn't mean only 50 exist. For a Main-selection decision, paginate the backlink query to completion.
-2. **Edge id ≠ entity id** for relation deletes. Use the relation's own `id`, not `toEntity.id`.
-3. **Cross-space relations on merged entities**: when porting a member's relations to Main, preserve the `toSpace` field if the target lives in a different space.
-4. **"Find duplicates" must group across spaces** — same name in different spaces is still a duplicate candidate unless the user explicitly scoped to one space.
-5. **`Graph.deleteEntity` doesn't delete incoming relations** automatically. If you bypass the orphan gate via "force delete", you must also delete each incoming edge or the UI will show ghosts.
-6. **Mass merges should be batched per Main's target space.** All ops with a given target space go in one transaction. The `OpsBatch` helper handles this.
-7. **`typeIds` dedupes; type *edges* do not.** To find duplicate-type relations you must read the raw Types-relation edges (`relationsConnection` filtered by `typeId = 8f151ba4…`), not the entity's `typeIds` array — the array collapses repeats and hides the duplicate.
-8. **No working server-side "untyped" filter.** `types` isn't a field (it's `typeIds`); `typeIds: { isNull: true }` and `entitiesConnection.totalCount` both 504; the `relationsByTypeIdConnection: { none }` filter returns false positives. Paginate the space and check `typeIds.length === 0` client-side.
+Deep detail lives in [`reference.md`](reference.md) (bundled with the skill): **script-generation rules** (file naming, `DRY_RUN` default, publish-once, which `src/` helpers to import), the **`mergeEntities` helper contract + code template**, the **critical gotchas** (backlink pagination, edge-id ≠ entity-id, `typeIds` dedupe, no working server-side "untyped" filter, …), and **what to do when a publish fails mid-run** (sandbox network allowlist). Consult it before generating any cleanup script.
 
 ## What this skill does NOT do
 
@@ -540,8 +494,4 @@ After `go`, the skill writes + dry-runs, surfaces the log lines (`[MERGE]` / `[D
 - Auto-publish without an explicit `publish` reply (separate from `go`).
 - Force-delete entities with backlinks unless the editor typed `force delete {id}` exactly.
 - Touch DAO spaces unless the wallet is an editor of that DAO and the editor explicitly named the DAO space.
-- Reimplement merge/delete logic — use `content-management/src/` helpers.
-
-## When something fails mid-publish
-
-If `bun run` errors with a network host blocked by the host platform's sandbox, the editor adds that host to the platform's network allowlist and retries. (Exact config location varies by platform — settings UI, a `config.toml`, or similar.) Do not suggest disabling the sandbox.
+- Reimplement merge/delete logic — use `src/` helpers (see [`reference.md`](reference.md)).

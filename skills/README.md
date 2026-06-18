@@ -13,8 +13,9 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 
 | Skill | What it does | Runs in |
 |---|---|---|
-| **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas. | Repo (GraphQL + MCP) |
-| **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already-published / needs-update / not-covered). Recommends only. | Repo (coverage script + web search) |
+| **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas. | Repo (GraphQL) |
+| **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already on Geo / needs update / not on Geo yet). Recommends only. | Repo (coverage script + web search) |
+| **qa-report-workflow** | Triage a **UI/UX bug** an editor hit while using the app (real? / not an issue / known / fixed), rewrite it, and emit copy-paste Linear + Notion + Slack reports. Doesn't scan or touch Geo. | Anywhere (text in/out) |
 
 #### non-actionable/web/ — web/desktop-app variants
 
