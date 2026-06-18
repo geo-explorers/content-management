@@ -14,8 +14,10 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | Skill | What it does | Runs in |
 |---|---|---|
 | **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas. | Repo (GraphQL) |
+| **ontology-advisor** | Advise on modelling — should this be a type/property/relation? duplicate/drift checks, missing descriptions, export types to CSV. Grounded in ONTOLOGY.md + the live graph. Suggests text, never writes. | Repo (Python + GraphQL) |
 | **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already on Geo / needs update / not on Geo yet). Recommends only. | Repo (coverage script + web search) |
 | **qa-report-workflow** | Triage a **UI/UX bug** an editor hit while using the app (real? / not an issue / known / fixed), rewrite it, and emit copy-paste Linear + Notion + Slack reports. Doesn't scan or touch Geo. | Anywhere (text in/out) |
+| **skill-quality-check** | Lint a skill against the Agent Skill authoring standard — dangling refs, frontmatter, missing evals/ToC, weak descriptions. Form/quality only, never domain content. Read-only. | Repo (Python) |
 
 #### non-actionable/web/ — web/desktop-app variants
 
@@ -30,6 +32,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **geo-publish** | Create/update/delete entities and relations via the GRC-20 SDK. | Repo + wallet key |
 | **geo-clean** | Find/merge duplicates, delete orphans, fix data types, fix stale relations, etc. Safeguards before any destructive op. | Repo + wallet key |
 | **geo-orchestrate** | Editor entry point. Turns "I want to X" into a plan → generates a script → dry-run → confirm → publish. Routes to query + publish. | Repo + wallet key |
+| **geo-discovery** | Run a gap-discovery pass over a space's daily stream → ranked coverage/depth/freshness/structural/trending gaps as Gap finding entities. Read-only until the human-reviewed publish stage. | Repo (Python; publish stage needs wallet key) |
 
 `geo-publish` is portable — one skill for Claude Code, Codex (CLI + Desktop), and Claude cowork (any local-execution agent). Browser-only assistants can't publish.
 
