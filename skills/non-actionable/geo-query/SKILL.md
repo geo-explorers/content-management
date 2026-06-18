@@ -19,6 +19,9 @@ Use this skill when the user wants to:
 - Explore what properties and relations an entity has.
 - Discover the schema for an unfamiliar entity type before publishing.
 - Find type, property, or relation type IDs.
+- **Review / fact-check a submission** — a `geobrowser.io/.../<entity>` page made of data-block tables (see "Review a submission" below).
+
+**Runs anywhere.** This is plain GraphQL over HTTP — no SDK, no wallet, no cloned repo required for the queries themselves. It works the same in Claude Code, Codex, Claude cowork, and **claude.ai in the browser**. (The repo paths in "More" are optional convenience references; the querying needs none of them.)
 
 ## API basics
 
@@ -261,6 +264,17 @@ When you need to publish or understand an entity type you haven't seen before, *
 ```
 
 This is the query `geo-publish` relies on before any write — paste the discovered IDs to it as `KNOWN IDs` so it doesn't re-discover.
+
+## Review a submission (multi-table page)
+
+Use this when the user gives a `geobrowser.io/space/<SPACE_ID>/<ENTITY_ID>` URL or asks to "review / fact-check this submission/page". A submission is a single entity whose page contains one or more **data blocks** — each block is a filtered query rendered as a table. Reviewing means: enumerate ALL blocks, paginate ALL rows in each, and inspect entities for the issues the user named (missing entries, wrong descriptions, inaccurate properties).
+
+1. **Parse the URL** → `…/space/<SPACE_ID>/<ENTITY_ID>`. The second hex segment is the entity id.
+2. **Fetch the submission entity** (single-entity query above). In its `relations`, find entries whose `type.name` is `Blocks` / `Data block` / `Has block` / similar — each `toEntity.id` is a block. If the relation type isn't obvious, inspect each `toEntity` until you find the ones whose own type is `Data block`. Don't guess — schemas drift; confirm by inspection.
+3. **Decode each block's filter** — run the single-entity query on the block; its `values`/`relations` describe what it queries (a `Type` relation = what it displays, plus property/relation filters, optional space scope). Read these off the block, not the UI.
+4. **Re-run each filter and paginate FULLY** — translate the block filter into an `entities(...)` query and page until exhausted. Offset caps at 1,000; for larger blocks use cursor pagination (`createdAt` ascending, feed the last row's `createdAt` back as `greaterThan`). Don't stop at page 1.
+5. **Inspect each row** per the review criteria — missing entries (cross-ref the expected list / domain knowledge), wrong descriptions (read the Description `text`), inaccurate properties (spot-check against the entity's Web URL).
+6. **Report once, structured** — per block: name + id, total rows (after full pagination), and per-issue flags `[OK]` / `[MISSING]` / `[WRONG DESCRIPTION]` / `[INACCURATE PROPERTY]`, plus a summary line (e.g. "Block 'Hospitals — California': 247 rows, 12 issues (3 missing, 7 wrong descriptions, 2 inaccurate prices)"). The reviewer needs the full picture before approve / send-back / partial-approve.
 
 ## Finding type and property IDs by name
 

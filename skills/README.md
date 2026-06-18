@@ -13,17 +13,11 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 
 | Skill | What it does | Runs in |
 |---|---|---|
-| **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas. | Repo (GraphQL) |
+| **geo-query** | Find entities, inspect properties/relations, traverse the graph, discover schemas, and review/fact-check a submission page. Plain GraphQL over HTTP — runs anywhere, **including claude.ai in the browser** (no SDK/wallet/repo needed for queries). | Anywhere (GraphQL) |
 | **ontology-advisor** | Advise on modelling — should this be a type/property/relation? duplicate/drift checks, missing descriptions, export types to CSV. Grounded in ONTOLOGY.md + the live graph. Suggests text, never writes. | Repo (Python + GraphQL) |
 | **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already on Geo / needs update / not on Geo yet). Recommends only. | Repo (coverage script + web search) |
 | **qa-report-workflow** | Triage a **UI/UX bug** an editor hit while using the app (real? / not an issue / known / fixed), rewrite it, and emit copy-paste Linear + Notion + Slack reports. Doesn't scan or touch Geo. | Anywhere (text in/out) |
 | **skill-quality-check** | Lint a skill against the Agent Skill authoring standard — dangling refs, frontmatter, missing evals/ToC, weak descriptions. Form/quality only, never domain content. Read-only. | Repo (Python) |
-
-#### non-actionable/web/ — web/desktop-app variants
-
-| Skill | What it does | Runs in |
-|---|---|---|
-| **geo-query-web** | Reads + submission review/fact-check over plain HTTP. No SDK, no wallet, no repo. | **Browser** (claude.ai, Codex, ChatGPT) |
 
 ### actionable/ — changes Geo, editors only
 
@@ -40,7 +34,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 
 - **Non-technical curator / domain expert** → `non-actionable/` only. They explore and review; they can't damage production.
 - **Trained editor** → `non-actionable/` + `actionable/`, with the wallet key set up per the setup guide. Start them on dry-runs.
-- **Browser-only user (no terminal)** → `geo-query-web` works with nothing installed. Writing still requires the repo.
+- **Browser-only user (no terminal)** → `geo-query` works with nothing installed (it's just GraphQL over HTTP). Writing still requires the repo.
 
 ## Adding a skill
 

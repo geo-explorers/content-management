@@ -8,7 +8,7 @@ metadata:
 
 # Geo Knowledge Graph — Publishing
 
-Create, update, and delete entities and relations in Geo using `@geoprotocol/geo-sdk`. Portable (works in any local-execution agent: Claude Code, Codex CLI/Desktop, Claude cowork). **Browser-only assistants cannot publish** — they have no local runtime; send them to `geo-query-web` for reads.
+Create, update, and delete entities and relations in Geo using `@geoprotocol/geo-sdk`. Portable (works in any local-execution agent: Claude Code, Codex CLI/Desktop, Claude cowork). **Browser-only assistants cannot publish** — they have no local runtime; send them to `geo-query` for reads.
 
 Every write passes three mandatory safeguards FIRST: **semantic-duplicate check**, **schema check**, and **two-phase dry-run → explicit confirm**. These are not optional.
 

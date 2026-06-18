@@ -56,7 +56,7 @@ Each operation has a dedicated section below with its own Discovery, Gates, and 
 Used standalone OR as the discovery step before a merge. **Two passes** — run Pass 1 always; run Pass 2 when the type is text-heavy (News story, Article, Claim, Event) where exact-name collisions are near-impossible.
 
 ### Pass 1 — Exact-name grouping (cheap, deterministic)
-Pattern B from `geo-query-web`: list entities of the target type (paginate every page, not just the first 50). Group by `name.toLowerCase().trim()`. Surface groups with 2+ members.
+Pattern B from `geo-query` (list entities of a type): list entities of the target type (paginate every page, not just the first 50). Group by `name.toLowerCase().trim()`. Surface groups with 2+ members.
 
 Pass 1 works well for **People / Orgs / Projects** (canonical names recur verbatim — "ethereum" published four times). It is **structurally blind to news/article near-duplicates**: two stories about the same event almost never share a byte-identical headline, so Pass 1 returns 0 groups even when genuine same-event dupes exist. Verified: exact-name grouping over 1,087 Crypto News stories → **0 groups**, while ~4 genuine same-event near-dupes were present.
 
