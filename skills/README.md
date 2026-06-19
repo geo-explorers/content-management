@@ -17,7 +17,6 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **ontology-advisor** | Advise on modelling — should this be a type/property/relation? duplicate/drift checks, missing descriptions, export types to CSV. Grounded in ONTOLOGY.md + the live graph. Suggests text, never writes. | Repo (Python + GraphQL) |
 | **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already on Geo / needs update / not on Geo yet). Recommends only. | Repo (coverage script + web search) |
 | **qa-report-workflow** | Triage a **UI/UX bug** an editor hit while using the app (real? / not an issue / known / fixed), rewrite it, and emit copy-paste Linear + Notion + Slack reports. Doesn't scan or touch Geo. | Anywhere (text in/out) |
-| **skill-quality-check** | Lint a skill against the Agent Skill authoring standard — dangling refs, frontmatter, missing evals/ToC, weak descriptions. Form/quality only, never domain content. Read-only. | Repo (Python) |
 
 ### actionable/ — changes Geo, editors only
 
@@ -39,6 +38,8 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 ## Adding a skill
 
 One folder per skill, containing `SKILL.md` (+ any `bin/`, `examples/`, `reference.md`). Put it in `non-actionable/` or `actionable/` by whether it can change Geo. Frontmatter must have `name`, `description` (packed with trigger phrases), `metadata`. Then add a row to the index above.
+
+> **Maintainers:** the skill-authoring standard and a linter to check a skill against it live in `../skill-dev/skill-quality-check/` (not shipped to editors). Run it before adding or editing a skill.
 
 ## Notes
 
