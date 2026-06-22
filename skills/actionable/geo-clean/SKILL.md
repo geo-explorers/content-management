@@ -43,7 +43,7 @@ Each operation has a dedicated section below with its own Discovery, Gates, and 
 | Find blank properties | No | — |
 | Find stale relations | No | — |
 | Find duplicate-type relations | No | — |
-| Merge duplicates | Yes | Main = most backlinks |
+| Merge duplicates | Yes | Canonical (DAO) wins + is never deleted; then most backlinks |
 | Delete orphan | Yes | Must have 0 incoming relations |
 | Fix data type | Yes | Old value preserved as comment until publish |
 | Fix duplicate-type relations | Yes | Keep exactly one edge per (entity, type) |
@@ -70,12 +70,7 @@ Run this for text-heavy types. The goal is **same real-world event told twice**,
 - "X raises $Y Series Z" vs "P raises $Q Series R" — high token overlap, **different companies, NOT dupes**
 - "X secures MiCA license" vs "P secures MiCA license" — same template, **different firms, NOT dupes**
 
-Method that works:
-1. **Pre-cluster cheaply** to keep the LLM pass tractable — bucket candidates by shared salient tokens (entity names, tickers, bill names, dates), or by a same-day/same-week `createdAt` window. This is a *recall* filter to build candidate pairs, **not** the duplicate decision.
-2. **LLM adjudication per candidate pair/cluster.** For each pair, read both names (and `description`/source URL if present) and decide: *same underlying event/subject → near-dup; same template but different actors → keep separate.* Emit a confidence and a one-line reason.
-3. **Surface as recommendations only.** Never auto-merge a Pass-2 group — semantic calls are fallible. The editor confirms each before it flows into the Merge operation.
-
-Caveat to state in the output: Pass 2 trades determinism for recall — it can miss (no candidate pairing) and can over-suggest (template look-alikes). It is advisory; Pass 1 groups are safe to "merge all", Pass 2 groups are not.
+Method: (1) **pre-cluster cheaply for recall** — bucket by shared salient tokens (names, tickers, bill names) or a same-week `createdAt` window; this builds candidate pairs, it is *not* the decision. (2) **LLM-adjudicate each pair** — read both names (+ `description`/source URL) and decide *same event → near-dup; same template, different actors → keep separate*, with a confidence + one-line reason. (3) **Recommendations only** — never auto-merge a Pass-2 group; the editor confirms each. Pass 2 trades determinism for recall (can miss, can over-suggest), so Pass 1 groups are safe to "merge all" but Pass 2 groups are not.
 
 ### Output template
 ```
@@ -103,7 +98,12 @@ No write happens here. Output is the input for the Merge operation.
 
 ## Operation: Merge duplicates (destructive)
 
-The most-requested op. Editors' rule: **the entity with the most incoming relations (backlinks) wins** — it's the Main. Other group members merge INTO it.
+The most-requested op. Other group members merge INTO the Main and are deleted.
+
+**Main-selection rule (canonical-safe):**
+1. **A canonical (DAO-space) entity always wins over a personal one** — it must be the Main, because the loser gets deleted and a canonical entity must never be deleted by an auto-merge.
+2. **Within the same class** (all personal, or — rare — disambiguated by the editor), **most incoming backlinks wins.**
+3. **Two or more members in DAO spaces → do NOT auto-merge** (see the Canonical-Delete gate). The `mergeEntities` helper enforces this: it throws unless a non-PERSONAL secondary is explicitly waived with `allowCanonicalDelete`.
 
 ### Discovery (mandatory before Plan)
 
@@ -111,9 +111,27 @@ For every group the editor selected:
 
 1. **List every member** (id, name, space, types).
 2. **Count backlinks per member, paginated to completion.** Query `relations(filter: { toEntity: { id: { is: "<id>" } } })` with `first: 50` and cursor-paginate by last `createdAt` until a page returns fewer rows than `first`. **Do NOT stop at page 1.** Record the total page count alongside the row count.
-3. **Designate Main** = member with most backlinks. Tie-break by space priority (root > canonical > personal — load from `content-management/src/constants.ts` if present, otherwise list the tie and ask the editor).
-4. **Inventory each non-Main member's values + outgoing relations** — these will be ported to Main.
-5. **Bucket the resulting ops by target space.** Each backlink op writes to the backlink's source space, not Main's space. A merge that touches Podcasts, Crypto, and PERSONAL becomes three separate transactions / governance proposals.
+3. **Record each member's space type** (`spaces(filter: { id: { in: [...] } }) { id type }` — `DAO` = canonical, `PERSONAL` = personal). This drives Main selection and the Canonical-Delete gate.
+4. **Designate Main** per the canonical-safe rule above: any DAO member wins; otherwise most backlinks. (Two+ DAO members → stop, don't pick a Main.)
+5. **Inventory each non-Main member's values + outgoing relations** — these will be ported to Main.
+6. **Bucket the resulting ops by target space.** Each backlink op writes to the backlink's source space, not Main's space. A merge that touches Podcasts, Crypto, and PERSONAL becomes three separate transactions / governance proposals.
+
+### Gate — Canonical-Delete (HARD STOP)
+
+Fires if **the would-be loser is in a DAO (canonical) space** — i.e. two+ members are in DAO spaces, or the only canonical member isn't the one with the most backlinks. A canonical entity must never be deleted by an auto-merge (this is the case that can nuke a canonical space).
+
+STOP and tell the editor:
+
+> Group **"{name}"** can't be auto-merged — it would delete a **canonical** entity:
+> | Member | Space | Type | Backlinks |
+> |---|---|---|---|
+> | … | … | DAO / PERSONAL | … |
+>
+> A canonical (DAO) entity must stay. Options:
+> - **One canonical + personal copies** → make the canonical entity the Main and merge the personal copies into it (safe). Reply **go** with that Main.
+> - **Two+ canonical duplicates** (e.g. two topics in the same DAO space) → this needs DAO **governance / the manual procedure**, not the auto-helper. Reply **skip**, or **force canonical-merge** to override (sets `allowCanonicalDelete` — you accept that a canonical entity will be deleted and will verify backlink migration yourself).
+
+The `mergeEntities` helper backstops this gate: it refuses any non-PERSONAL secondary unless `allowCanonicalDelete: true` is passed.
 
 ### Gate — Big-Merge (HARD STOP)
 
@@ -250,20 +268,7 @@ Untyped entities are leakage from broken publishes. Surface them so the editor c
 
 ### Discovery — there is NO server-side "untyped" filter that works. Paginate + check client-side.
 
-This was the documented query and it is **wrong on two counts**:
-```graphql
-# ✗ BROKEN — do NOT use
-{ entities(first: 50, filter: { types: { isNull: true } }) { id name createdAt } }
-```
-1. **There is no `types` filter field.** The schema field is `typeIds` (a `UUIDListFilter`). `types` is silently invalid.
-2. **`typeIds: { isNull: true }` 504-times-out.** So does `entitiesConnection { totalCount }` (even unfiltered) — the API cannot count or null-scan this column within the gateway timeout. Don't rely on either for totals.
-
-Do **NOT** reach for this either — it looks fast and correct but is a **false-positive trap**:
-```graphql
-# ✗ WRONG RESULTS — returns ~660ms but most rows DO have types
-{ entities(filter: { relationsByTypeIdConnection: { none: { typeId: { is: "8f151ba4de204e3c9cb499ddf96f48f1" } } } }) { id typeIds } }
-```
-Verified: the rows it returns mostly have non-empty `typeIds` (Text Block, Claim, Image…). The relation-join semantics don't match the materialized `typeIds` array, so it under-reports types and over-reports "untyped". Discarded after testing.
+Three "obvious" approaches all fail (details in [`reference.md`](reference.md) gotcha 8): there is **no `types` filter field** (it's `typeIds`); **`typeIds: { isNull: true }` and `entitiesConnection.totalCount` both 504-timeout**; and **`relationsByTypeIdConnection: { none }`** is fast but a **false-positive trap** (returns rows that actually have types). Don't use any of them.
 
 **The only reliable method: paginate the space and check `typeIds.length === 0` client-side** (`8f151ba4de204e3c9cb499ddf96f48f1` is the Types property; an entity with no Types relation has an empty `typeIds`):
 ```graphql
@@ -417,17 +422,7 @@ Reply **go** to write + dry-run the cleanup (deletes the extra edges, keeps the 
 ```
 
 ### Fix (destructive — but low-risk; only removes redundant edges)
-For each duplicate group: keep one edge (default: earliest `createdAt`, or any if equal), emit `Graph.deleteRelation({ id })` for every other edge. Route each delete to its edge's own `spaceId`. No `createRelation` is needed — the kept edge already carries the type.
-
-```typescript
-// per duplicate group: keep[0], delete the rest
-for (const edge of group.slice(1)) {
-  const { ops } = Graph.deleteRelation({ id: edge.id });
-  opsBatch.get(edge.spaceId)!.push(...ops);
-}
-```
-
-Log lines: `[FIX-DUP-TYPE] {entity} ({id}) — Person listed ×2, deleting edge bbb… (keeping aaa…)`.
+For each duplicate group: keep one edge (default: earliest `createdAt`), and `Graph.deleteRelation({ id })` every other edge, routing each delete to its edge's own `spaceId`. No `createRelation` needed — the kept edge already carries the type. Log: `[FIX-DUP-TYPE] {entity} ({id}) — Person listed ×2, deleting edge bbb… (keeping aaa…)`.
 
 After publish, re-query the entity's Types edges and confirm exactly one remains per type.
 
