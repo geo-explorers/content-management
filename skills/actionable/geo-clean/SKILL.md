@@ -1,6 +1,8 @@
 ---
 name: geo-clean
 description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (orphan check, backlink-based Main selection, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
+metadata:
+  version: "0.1.0"
 ---
 
 # Geo Knowledge Graph — Cleaning
