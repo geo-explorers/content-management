@@ -26,4 +26,4 @@ python3 skill-dev/skill_versions.py generate   # updates skills/SKILL-VERSIONS.j
 python3 skill-dev/skill_versions.py verify     # exit 0 = all match, 1 = drift
 ```
 
-`verify` reports per skill: `OK` · `DRIFT` (modified since approval) · `MISSING` · `UNLISTED`. Wire `verify` into CI so any unreviewed change to a shipped skill fails the build. Re-run `generate` whenever you intentionally approve a change, and commit the updated manifest in the same commit.
+`verify` reports per skill: `OK` · `DRIFT` (modified since approval) · `MISSING` · `UNLISTED`. **CI runs it on every PR** (`.github/workflows/verify-skills.yml`) — any unreviewed change to a shipped skill fails the build. Re-run `generate` whenever you intentionally approve a change, and commit the updated manifest in the same commit.
