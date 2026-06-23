@@ -25,6 +25,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 ### qa-report-workflow — 0.1.0
 - 2026-06 · Initial. Triage + report UI/UX bugs (editor-reported, or active hunting via Playwright MCP); copy-paste Linear/Notion/Slack output; markdown report file. *(Not yet committed/shipped.)*
 
+### image-banner-recompose — 0.2.0
+- 2026-06 · Initial in-repo. Recomposes an uploaded image (e.g. a book cover) into a 2364×640 banner — smart crop / outpaint / blurred backdrop / solid-edge extend, auto-picked per image; strategy-aware QA, unsharp finishing, low-res warning. Author: Armando; reviewed + rebuilt into a full skill by Moh. No graph writes.
+
 ## actionable/
 
 ### geo-publish — 0.3.0
