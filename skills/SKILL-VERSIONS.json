@@ -3,12 +3,12 @@
   "skills": {
     "actionable/geo-clean": {
       "version": "0.1.0",
-      "approved_commit": "9c157809d813c254870860782e5ce52b04287a68",
+      "approved_commit": "201c12bdbe95874afb4647af9d8ec2d1da44c00a",
       "content_sha256": "d76b2f0776b2a3d540e5cbf5715c816358f8fb76c038059632530ea74af29e23"
     },
     "actionable/geo-discovery": {
       "version": "0.1.0",
-      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "approved_commit": "201c12bdbe95874afb4647af9d8ec2d1da44c00a",
       "content_sha256": "c72b7c04bc8939766e058e92ed714981c57eb97b1442f27e6e92cc6eb8c5a944"
     },
     "actionable/geo-orchestrate": {
@@ -30,6 +30,11 @@
       "version": "0.1.0",
       "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
       "content_sha256": "29491abd8c5cef513f0c1d5f1ce48e6c310c77ff1e55fcc83fa1c20c6884af68"
+    },
+    "non-actionable/image-banner-recompose": {
+      "version": "0.2.0",
+      "approved_commit": "61fa8afc20009a74f7f58bef1dda6d96caa3c97e",
+      "content_sha256": "ea9e37588885018e2246020f7b885c792ff1b8bb73730fdda8edd01deb1ce6a5"
     },
     "non-actionable/ontology-advisor": {
       "version": "0.1.0",
