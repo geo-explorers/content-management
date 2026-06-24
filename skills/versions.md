@@ -28,6 +28,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 ### image-banner-recompose — 0.2.0
 - 2026-06 · Initial in-repo. Recomposes an uploaded image (e.g. a book cover) into a 2364×640 banner — smart crop / outpaint / blurred backdrop / solid-edge extend, auto-picked per image; strategy-aware QA, unsharp finishing, low-res warning. Author: Armando; reviewed + rebuilt into a full skill by Moh. No graph writes.
 
+### geo-describe — 0.1.0
+- 2026-06 · Initial. Writes accurate, original, rules-compliant entity descriptions at scale: fact-extract → tiered parallel accuracy research → compose source-hidden → originality+accuracy+rules gate (`scripts/check_similarity.py`) → emit vetted description + Source for geo-publish. Makes no graph writes itself (hands off to geo-publish); advanced/needs the fuller Claude env (see `compatibility`). Author: Armando (spec), Moh (build).
+
 ## actionable/
 
 ### geo-publish — 0.3.0
