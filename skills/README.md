@@ -39,7 +39,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 
 One folder per skill, containing `SKILL.md` (+ any `bin/`, `examples/`, `reference.md`). Put it in `non-actionable/` or `actionable/` by whether it can change Geo. Frontmatter must have `name`, `description` (packed with trigger phrases), `metadata`. Then add a row to the index above.
 
-> **Maintainers:** the skill-authoring standard and a linter to check a skill against it live in `../skill-dev/skill-quality-check/` (not shipped to editors). Run it before adding or editing a skill.
+> **Maintainers:** the skill-authoring standard and a linter live in `../skill-dev/skill-quality-check/` (not shipped to editors). And every skill add/edit must end with re-approving the integrity manifest (`python3 skill-dev/skill_versions.py generate` → `git add skills/SKILL-VERSIONS.json`) in the same commit, or CI rejects the PR — see the **"Before you commit a skill change"** checklist in `../skill-dev/README.md`.
 
 ## Notes
 

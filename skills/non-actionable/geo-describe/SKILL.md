@@ -12,7 +12,7 @@ description: >
   dataset has missing, thin, or source-lifted descriptions. Does NOT build category hierarchies,
   decide entity types, or publish on its own — it emits vetted descriptions plus Source citations
   for geo-publish and the human gate.
-version: "0.1.0"
+version: "0.2.0"
 authors: Armando (spec), CptMoh (build)
 tools: Claude Code
 compatibility: >
@@ -89,7 +89,7 @@ parallel for scale. Do **not** re-research what a reputable dataset already sour
 - **Tier 1 — one corroboration:** a single-sourced claim → one confirming search; on confirm, record the source.
 - **Tier 2 — multi-source or flag:** extraordinary / unsourced / conflicting → corroborate across
   ≥2 independent sources; if it can't be confirmed, **flag it** (do not include it as fact).
-The sources gathered here become the `Sources` relations for Stage 6.
+The sources gathered here become the `Sources` relations for Stage 6. **Verify the framing, not just existence** — correct distorted claims (e.g. a "$1T daily" that is really $1T cumulative). **Treat dynamic metrics** (TVL, volume, price, rank/"largest", user counts) qualitatively — verify at write time, never bake a number or a rank that goes stale. Full procedure + the per-claim verification-record format: `references/accuracy-verification.md`.
 
 ### Stage 4 — Compose (source hidden, to the rules)
 Write from the **fact list with the source text closed**, following `references/description-rules.md`:
@@ -108,6 +108,7 @@ python3 scripts/check_similarity.py --candidate cand.txt --source src.txt --json
 - **Drift:** low lexical overlap **and** low semantic similarity → likely hallucination → **flag**.
 - **Ideal:** low lexical overlap + faithful to the fact list → pass.
 - **Rules:** ≤ ~50 words, 1–2 sentences, doesn't lead with the name, neutral, what + why.
+- **Faithfulness:** every sentence is entailed by a verified/corrected claim (no unsupported additions) — see `references/accuracy-verification.md`.
 Loop Stage 4 → 5 until a row passes or is flagged for a human.
 
 ### Stage 6 — Emit for review + publish
@@ -138,5 +139,6 @@ auto-published.
 ## Files
 - `references/description-rules.md` — the Geo description rules + good/bad input→output examples (read in Stage 4).
 - `references/closeness-and-accuracy-checks.md` — metrics, thresholds, and the lexical+semantic combination logic (read in Stage 5).
+- `references/accuracy-verification.md` — the tiered research leg: verify claims (Tier 0/1/2), verify framing not just existence, handle dynamic metrics, the verification-record format, and the faithfulness check (read in Stage 3 + Stage 5).
 - `references/copyright-and-licensing.md` — idea/expression, derivative-work risk, CC BY-SA reuse obligations (read in Stage 1 when a license is unclear or expression may be reused).
 - `scripts/check_similarity.py` — the deterministic closeness gate (verbatim run, ROUGE-L/LCS, shingled Jaccard; optional SBERT cosine). Run it; `--help` documents flags.
