@@ -23,13 +23,13 @@
     },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
-      "approved_commit": "d3ad74196ab608fec427f687740109887dcd9c49",
+      "approved_commit": "b91b5396d0f036ac1baea8dab97ad7e97946a886",
       "content_sha256": "bf1cc781216c56ed8af740d4fa6cf8e723359fe516328b02b67aa9ab998379cb"
     },
     "non-actionable/geo-press-review": {
-      "version": "0.2.0",
+      "version": "0.3.0",
       "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
-      "content_sha256": "f12045cea5162107c88d83e6aaeba737da0ca432563605ae84c09576e80ca7ce"
+      "content_sha256": "018185f913f03db53b9e465dab7029551db809148b57852172295e86680fd65f"
     },
     "non-actionable/geo-query": {
       "version": "0.1.0",

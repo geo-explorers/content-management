@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published / needs-update / not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.2.0
+  version: 0.3.0
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -61,6 +61,7 @@ Guidance:
 - For a **past date**, scope every search to that date window so you reconstruct the timeline, not today's news.
 - Don't stop at the first page. Web search is lazy by default — explicitly gather the top N per topic.
 - **Keep each source's URL** alongside the outlet name. Don't discard it after reading — the report must link to it.
+- **Prefer specific articles over live-blogs / topic hubs.** A page like `cnn.com/.../live-news/iran-war` or `aljazeera.com/.../iran-war-live` covers an *entire* topic, not one event — it is not a clean source for a specific story unless that exact development is in it. Capture the specific article; treat live-blogs as leads to chase, not as citations.
 
 ### Half 3 — Match & classify (the LLM does this)
 
@@ -71,6 +72,15 @@ For each external story, find the best-matching Geo story from `geo-coverage.jso
 - **No match** → 🆕 Not on Geo yet — publish new.
 
 Then **rank** the 🔄 and 🆕 items and **justify** each rank.
+
+### Source-faithfulness gate (do this BEFORE listing any source — non-negotiable)
+
+The #1 failure mode of this skill: recommending a *specific* story and attaching *loosely-related* sources that don't actually back it. Before a source appears in the report, it must pass both checks:
+
+1. **The source actually substantiates THIS specific story** — not just the broad topic. A story titled "5th round of US-Iran ceasefire talks in Washington; Hormuz de-confliction cell agreed" needs sources that report *that development*. A generic "Iran war — live" blog is **not** a valid source for it. If you can't point to where the source states the claim, **drop that source** — don't pad the list.
+2. **The recommended story is only as specific as its sources support.** Don't synthesize a precise headline (named round number, named venue, named mechanism) that the sources don't actually state. Phrase the recommendation to match what the sources say; if the sources are vaguer, make the recommendation vaguer.
+
+If, after the gate, a 🆕/🔄 item has **no source that genuinely backs its specific claim**, do NOT recommend it as a confident gap — either rewrite it to the level the sources support, or drop it. Better to recommend fewer, well-sourced opportunities than many over-specified ones. (Same discipline as `geo-describe`'s accuracy leg: verify the *framing*, not just that something is roughly on-topic.)
 
 ### Ranking signals
 
