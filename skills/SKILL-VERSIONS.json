@@ -2,9 +2,9 @@
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
     "actionable/geo-clean": {
-      "version": "0.1.0",
+      "version": "0.2.0",
       "approved_commit": "201c12bdbe95874afb4647af9d8ec2d1da44c00a",
-      "content_sha256": "d76b2f0776b2a3d540e5cbf5715c816358f8fb76c038059632530ea74af29e23"
+      "content_sha256": "934680ee9bf71990d4d342feb071da583f08aaea97f558642ad54ad5aa040777"
     },
     "actionable/geo-discovery": {
       "version": "0.1.0",
@@ -12,14 +12,14 @@
       "content_sha256": "c72b7c04bc8939766e058e92ed714981c57eb97b1442f27e6e92cc6eb8c5a944"
     },
     "actionable/geo-orchestrate": {
-      "version": "0.1.0",
+      "version": "0.2.0",
       "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
-      "content_sha256": "475fb81b1c817853d450dded5d858ab0858ff7ee1011e79727fce6d2b8b473fe"
+      "content_sha256": "5e328080a18f8a4e8f040a73d831d338f9f2b8a3065d85ac5ece2e52005e0931"
     },
     "actionable/geo-publish": {
-      "version": "0.3.0",
+      "version": "0.4.0",
       "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
-      "content_sha256": "ff41a3353a54b587d564fce1948e23b84f2e644d7e24bdcffae190f4af38b671"
+      "content_sha256": "1c4cf7cf2456eb43f1874a1d78fab4f39213e8cb4c6b538a63501d0e044ae018"
     },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
@@ -28,7 +28,7 @@
     },
     "non-actionable/geo-press-review": {
       "version": "0.3.0",
-      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "approved_commit": "90f79a9c2d22e672167efd7e56c93c4039b0a527",
       "content_sha256": "018185f913f03db53b9e465dab7029551db809148b57852172295e86680fd65f"
     },
     "non-actionable/geo-query": {

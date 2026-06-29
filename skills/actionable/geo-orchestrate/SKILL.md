@@ -3,7 +3,7 @@ name: geo-orchestrate
 description: Editor-facing entry point for Geo workflows. Translates natural-language intent ("find X and merge into Y", "assign Topics to all Claims about Bitcoin", "publish a podcast episode", "deduplicate Persons", "add Web URL to every Project") into a query plan + a publish plan, generates a runnable script, dry-runs it, confirms with the editor, then publishes. Triggers on "I want to", "find and merge", "deduplicate", "assign", "bulk update", "for all entities of type", "edit Geo", "fix", "clean up", "merge duplicates".
 metadata:
   author: geobrowser
-  version: 0.1.0
+  version: 0.2.0
 ---
 
 # Geo Knowledge Graph — Orchestrator
@@ -147,7 +147,7 @@ Wait for the editor to reply "go" (or to change something). Only then flip `DRY_
 
 1. **Discover** (`geo-query`): `search_entities({ type: "Person", filters: [...] })` → for each, `get_entity` to confirm no existing Web URL.
 2. **Plan**: "Will set `ContentIds.WEB_URL_PROPERTY` on N Persons. URLs sourced from {CSV / chat list / scraped}."
-3. **Generate**: script uses `Graph.updateEntity({ values: [{ property: WEB_URL, type: "url", value }] })` per entity, all in `allOps`, single publish.
+3. **Generate**: if the URLs come from a CSV/JSON, the script **reads that file at runtime** (don't paste the URLs into the script). It then uses `Graph.updateEntity({ values: [{ property: WEB_URL, type: "url", value }] })` per row, all in `allOps`, single publish.
 4. **Confirm + publish.**
 
 ### Job — "Publish a new podcast episode" (single-entity)
@@ -167,6 +167,7 @@ Wait for the editor to reply "go" (or to change something). Only then flip `DRY_
 
 When you write a script for the editor:
 
+- **Data goes in the file, not in the script.** When the job runs over a **dataset** (CSV/JSON of rows), the script **reads and parses that file at runtime** (`const rows = parse(readFileSync(process.argv[2], 'utf8'), { columns: true })`) and builds ops by looping the rows. **Never transcribe dataset rows into the script as a `const data = [ … ]` array.** Baking rows in (a) blows the token budget and times out on large sets — the model spends the run copying data instead of writing logic (this caused a real publish outage), and (b) risks the model fabricating/corrupting values (especially URLs) as it copies. The script holds only the ontology (type/property/relation IDs) + the row→ops mapping; the data stays in the file, so the script is small and reusable (swap the file, rerun). For very large sets, chunk the rows. Full pattern: `geo-publish` → "Bulk / dataset publishing".
 - **One file, one job.** `scripts/2026-05-08-merge-bitcoin-duplicates.ts`. Date prefix so successful scripts become a pattern library.
 - **Top of file: comment block** restating the editor's intent and the discovered data (entity IDs, schema, source spaces). Future-you needs this.
 - **TypeScript `.ts`** so it runs with `bun run scripts/<file>.ts`. The repo is set up for Bun (see `bun.lock`); `bun install` once and TypeScript executes natively.
