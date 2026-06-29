@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.3.0
+  version: 0.4.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -35,6 +35,7 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
    - On `stop`: leave the script on disk, change nothing on Geo.
    - Never auto-publish on `go`.
 5. **Never delete without explicit consent.** A delete or unset requires the user to type `publish` after seeing exactly what will be removed (entity name, backlink count, orphan count).
+6. **Publishing from a dataset: the script READS THE DATA FILE AT RUNTIME — never transcribe rows into the script as constants.** See [Bulk / dataset publishing](#bulk--dataset-publishing--data-goes-in-the-file-not-the-script). Baking rows into the script blows the token budget and times out on large datasets, and risks the model fabricating values (especially URLs) as it copies.
 
 ## Required output template (post BEFORE writing any script)
 
@@ -141,6 +142,41 @@ else {
 ```
 
 (Repo users may instead import `publishOps`/`printOps` from `../src/functions.js` — that path uses `PK_SW`/`DEMO_SPACE_ID` and handles personal-vs-DAO automatically.)
+
+## Bulk / dataset publishing — data goes in the file, not the script
+
+When the source is a **dataset** (a CSV/JSON of many rows — podcasts, people, books…), the generated script must **read and parse that file at runtime** and build ops by looping the rows. **Do NOT transcribe the rows into the script as a `const data = [ … ]` array.**
+
+Why this is a hard rule (it caused a real publish outage):
+- **It doesn't scale / times out.** Embedding rows makes the model spend the whole run *copying data* into the file instead of writing logic. On a large dataset it hits the output-token limit ("file too large", "spent too long reading") and **never publishes**.
+- **It hallucinates.** Asking a model to copy hundreds of values — especially URLs — risks fabricated or corrupted values getting published.
+- **It's not reusable.** Data-as-constants means a new script per dataset; reading the file means swap the file and rerun.
+
+The script holds only the **ontology (type/property/relation IDs) + the row→ops mapping**. The data stays in the file:
+
+```typescript
+import { Graph, personalSpace, getSmartAccountWalletClient, type Op } from '@geoprotocol/geo-sdk';
+import { readFileSync } from 'node:fs';
+import { parse } from 'csv-parse/sync';   // or JSON.parse for a .json dataset
+
+const DRY_RUN = true;
+const DATA = process.argv[2] ?? 'data.csv';            // path passed at runtime
+const rows = parse(readFileSync(DATA, 'utf8'), { columns: true, skip_empty_lines: true });
+
+const PODCAST_TYPE = '4c81561d1f9541319cdddd20ab831ba2';  // ontology lives in the script
+const HOSTS_REL    = 'c72d9abbbca84e86b7e8b71e91d2b37e';  // — IDs only, never the data
+
+const allOps: Op[] = [];
+for (const row of rows) {                               // build ops from the FILE, at runtime
+  const { id, ops } = Graph.createEntity({ name: row.name, description: row.description, types: [PODCAST_TYPE], values: [] });
+  allOps.push(...ops);
+  // …createRelation(HOSTS_REL) per host, etc.
+}
+console.log(`${rows.length} rows → ${allOps.length} ops`);
+if (!DRY_RUN) { /* publish allOps once (see template above) */ }
+```
+
+Run the dry-run against the real file: `node --env-file=.env.geo-publish scripts/<file>.ts data.csv`. If the dataset is very large, **chunk the rows** (publish in batches of N) rather than embedding more data. The two-phase `go` → `publish` flow is unchanged.
 
 ## Entity rules
 

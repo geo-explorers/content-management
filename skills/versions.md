@@ -35,14 +35,17 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## actionable/
 
-### geo-publish — 0.3.0
+### geo-publish — 0.4.0
+- 2026-06 · **Runtime data loading rule** (fixes the bulk-publish outage): scripts must READ the dataset file (CSV/JSON) at runtime, never transcribe rows into the script as constants — baking rows in times out on large sets and risks the model fabricating values (esp. URLs). New "Bulk / dataset publishing" section + HARD RULE 6.
 - 2026-06 · Consolidated to one portable skill (GEO_PRIVATE_KEY, PK_SW fallback) + strong safeguards (dup check, schema gate, two-phase dry-run→confirm). Retired geo-publish-codex.
 - earlier · 0.1–0.2 pre-consolidation publish skills.
 
-### geo-clean — 0.1.0
+### geo-clean — 0.2.0
+- 2026-06 · Runtime data loading rule (HARD RULE 7): cleanup scripts read the `<date>-*.json`/CSV list at runtime, never embed IDs/rows as constants — avoids timeouts and ID corruption on large lists.
 - 2026-06 · Initial. Find/merge duplicates, delete orphans, fix data types/stale relations; bundled reference.md + big-merge.md; Discovery→Gates→Plan→dry-run→publish safeguards.
 
-### geo-orchestrate — 0.1.0
+### geo-orchestrate — 0.2.0
+- 2026-06 · Runtime data loading rule in script-generation: generated scripts read the dataset file at runtime, never transcribe rows as constants; fixed the "Add Web URL from CSV" job accordingly.
 - 2026-06 · Initial. Intent → plan → generate script → dry-run → confirm → publish; routes to query + publish.
 
 ### geo-discovery — 0.1.0
