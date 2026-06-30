@@ -3,7 +3,7 @@
   "skills": {
     "actionable/geo-clean": {
       "version": "0.2.0",
-      "approved_commit": "201c12bdbe95874afb4647af9d8ec2d1da44c00a",
+      "approved_commit": "d62fccdf3156ef58487168a2a0919f5b19150679",
       "content_sha256": "934680ee9bf71990d4d342feb071da583f08aaea97f558642ad54ad5aa040777"
     },
     "actionable/geo-discovery": {
@@ -13,13 +13,18 @@
     },
     "actionable/geo-orchestrate": {
       "version": "0.2.0",
-      "approved_commit": "a2f1f9f2e7bb0949ea27ddbc30f60b9cfa7b6a87",
+      "approved_commit": "d62fccdf3156ef58487168a2a0919f5b19150679",
       "content_sha256": "5e328080a18f8a4e8f040a73d831d338f9f2b8a3065d85ac5ece2e52005e0931"
     },
     "actionable/geo-publish": {
       "version": "0.4.0",
-      "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
+      "approved_commit": "d62fccdf3156ef58487168a2a0919f5b19150679",
       "content_sha256": "1c4cf7cf2456eb43f1874a1d78fab4f39213e8cb4c6b538a63501d0e044ae018"
+    },
+    "non-actionable/daily-report": {
+      "version": "0.1.0",
+      "approved_commit": "19bb1cea7898ff306ca586f95f1cab47aa94af03",
+      "content_sha256": "0f13aecd820756cca87d1eebd5677357fb5a00a6ce9cdf6caa0baa6fd83d47a4"
     },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
