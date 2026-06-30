@@ -33,6 +33,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 - 2026-06 · Fleshed out the accuracy/research leg: added `references/accuracy-verification.md` (Tier 0/1/2 verification, verify-framing-not-just-existence, dynamic-metric handling, verification-record format, faithfulness check) and wired it into SKILL.md Stages 3 & 5. Validated on a real run (Aave): verified founder/origin, confirmed a TVL ranking (softened as a dynamic metric), corrected a distorted claim ($1T cumulative mis-stated as daily).
 - 2026-06 · Initial. Writes accurate, original, rules-compliant entity descriptions at scale: fact-extract → tiered parallel accuracy research → compose source-hidden → originality+accuracy+rules gate (`scripts/check_similarity.py`) → emit vetted description + Source for geo-publish. Makes no graph writes itself (hands off to geo-publish); advanced/needs the fuller Claude env (see `compatibility`). Author: Armando (spec), Moh (build).
 
+### daily-report — 0.1.0
+- 2026-06 · Initial. Editor end-of-day daily update: reads the day's Claude Code sessions (`scripts/gather_sessions.py`, runtime read, token-light), distills the Geo work into bullets, asks a top-up for work done elsewhere (Cowork/chat/ChatGPT), confirms, then files the editor's row to the Notion daily-update form under their own identity. Manual; no graph writes. v1 of the editor-scalable routine (scheduling deferred to v2).
+
 ## actionable/
 
 ### geo-publish — 0.4.0
