@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.4.0
+  version: 0.5.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -36,6 +36,9 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
    - Never auto-publish on `go`.
 5. **Never delete without explicit consent.** A delete or unset requires the user to type `publish` after seeing exactly what will be removed (entity name, backlink count, orphan count).
 6. **Publishing from a dataset: the script READS THE DATA FILE AT RUNTIME — never transcribe rows into the script as constants.** See [Bulk / dataset publishing](#bulk--dataset-publishing--data-goes-in-the-file-not-the-script). Baking rows into the script blows the token budget and times out on large datasets, and risks the model fabricating values (especially URLs) as it copies.
+7. **Properties on a relation go on the relation ENTITY id, NEVER the relation id.** A relation has two different IDs. Knowledge (values/name/types) written to the relation's own `id` is silently lost — the write "succeeds" and shows in the proposal, but renders nowhere. See [Relations — entity id vs relation id](#relations--entity-id-vs-relation-id-critical). This is not optional; getting it wrong mis-published ~1000 rows in production.
+8. **Match the property's declared data type — discover it, never guess.** Before writing any value, confirm the property's dataType from the type schema and set the value's `type` to match. The classic trap: a **datetime** property (e.g. `Date Founded`) set as `type: 'date'` publishes but silently doesn't render. Mismatches → Gate 2.
+9. **Test ONE before any bulk publish.** Publish a single row first, open it on geobrowser.io, and confirm every field actually renders (not just "the API returned success"). Only then run the batch. Both failure modes above are *silent* — API/proposal say OK while the data is lost — so visual confirmation of one row is the only real check.
 
 ## Required output template (post BEFORE writing any script)
 
@@ -54,8 +57,9 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
 
 ## Gates
 - **Gate 1 (semantic-duplicate)**: PASS | FIRE — <reason/hits>
-- **Gate 2 (schema-violation)**: PASS | FIRE — <reason/off-schema list>
-If either FIRES, STOP, run the gate dialog, wait for the user.
+- **Gate 2 (schema-violation)**: PASS | FIRE — <off-schema list AND any dataType mismatch, e.g. datetime property being set as date>
+- **Gate 3 (relation-target)**: PASS | FIRE — <any value targeting a relation `id` instead of the relation `entityId`; see Relations section>
+If any FIRES, STOP, run the gate dialog, wait for the user.
 
 ## Plan (only if gates PASS or waived)
 - Target space: <id> (personal | DAO)
@@ -72,24 +76,30 @@ Reply **"go"** to authorize writing + dry-running the script.
 > - **Use existing** → skip the create, reuse this ID downstream.
 > - **Publish anyway** → confirm it's NOT a duplicate and I'll proceed.
 
-**Gate 2 — schema-violation fires:**
-> You're adding **{property}** (`{id}`) to a **{type}**, but it isn't on **{type}**'s schema.
-> - **Add to schema first** → I'll generate a schema-update op.
+**Gate 2 — schema-violation fires** (missing property OR wrong data type):
+> **{property}** (`{id}`) on a **{type}**: {it isn't on {type}'s schema | the schema declares it as **{schemaType}** but you're publishing it as **{yourType}** (e.g. datetime-vs-date)}.
+> - **Fix the type** → I'll set the value's `type` to **{schemaType}** and reformat the value.
+> - **Add to schema first** → I'll generate a schema-update op (missing-property case).
 > - **Publish anyway** → it lands but won't render in the UI.
 > - **Skip the property** → drop it from this publish.
+
+**Gate 3 — relation-target fires:**
+> This value targets a **relation id** (`{relationId}`), which can't hold properties — knowledge must go on the relation **entity id**.
+> - **Fix the target** → I'll {put it in `createRelation`'s `entityValues` | resolve the relation's `entityId` and target that} instead.
+> - (There is no "publish anyway" — writing to a relation id silently loses the data.)
 
 ## Discovery — how to produce the four outputs
 
 GraphQL against `https://testnet-api.geobrowser.io/graphql` (no auth). Delegate to `geo-query` if loaded.
 
-**Schema** (type ID + property/relation IDs from a known instance):
+**Schema** (type ID + property/relation IDs + property dataTypes from a known instance):
 ```graphql
 { entities(first:1, filter:{ name:{ includesInsensitive:"<known instance>" } }) {
-    id name types { type { id name } }
-    values(first:50){ property{ id name } text }
-    relations(first:50){ id type{ id name } toEntity{ id name } } } }
+    id name types { id name }
+    values(first:50){ nodes{ property{ id name dataTypeName } text } }
+    relations(first:50){ nodes{ id entityId type{ id name } toEntity{ id name } } } } }
 ```
-Property IDs from `values[].property.id`; relation IDs from `relations[].type.id`. **Don't guess IDs.**
+Property IDs from `values.nodes[].property.id`; **the property's declared type from `values.nodes[].property.dataTypeName`** (e.g. `Text`, `Time`/datetime, `Number`) — match your SDK value `type` to it (Gate 2). Relation type IDs from `relations.nodes[].type.id`. Each relation exposes **both `id` (the edge) and `entityId` (the relation entity, where its properties live)** — target `entityId` for relation values (Gate 3). **Don't guess IDs.** (`values`/`relations` are connections — the `nodes{}` wrapper is required.)
 
 **Duplicate candidates** (name-only, all types, all spaces):
 ```graphql
@@ -178,10 +188,42 @@ if (!DRY_RUN) { /* publish allOps once (see template above) */ }
 
 Run the dry-run against the real file: `node --env-file=.env.geo-publish scripts/<file>.ts data.csv`. If the dataset is very large, **chunk the rows** (publish in batches of N) rather than embedding more data. The two-phase `go` → `publish` flow is unchanged.
 
+## Relations — entity id vs relation id (critical)
+
+**In Geo, entities and relations are separate spheres; their IDs are NOT interchangeable.** A single relation carries several IDs — and getting them confused silently corrupts data at scale.
+
+A relation (GraphQL `Relation`) has:
+- **`id`** — the relation edge's own unique identifier ("the relation id"). Identifies the edge. **It is NOT an entity and CANNOT hold properties.**
+- **`entityId`** — the **relation entity**: a real entity attached to the edge. **This is where any name / values / types on the relation live.**
+- plus `fromEntityId`, `toEntityId`, `typeId`, `spaceId`.
+
+**The failure mode (real, ~1000 rows):** writing values to the relation's `id` — e.g. `updateEntity({ id: <relationId>, values })`. The op is valid, the API returns success, and the proposal screen shows the property "set" — but it renders **nowhere**, because a relation id is not an entity. Silent loss.
+
+**Do it right:**
+
+- **Creating a relation WITH data** — put the data in `createRelation`'s `entity*` params. They attach to the relation entity (`entityId`), auto-generated or one you pass:
+  ```ts
+  const { id, ops } = Graph.createRelation({
+    fromEntity, toEntity, type,               // the edge
+    entityId,                                  // optional; the relation ENTITY (generate + keep it)
+    entityName: 'Listen on Apple Podcasts',    // name/values/types land on entityId, NOT on id
+    entityValues: [{ property: URL_PROP, type: 'text', value }],
+    entityTypes: [SOME_TYPE],
+  });
+  ```
+  Never follow a `createRelation` with a separate `updateEntity` that targets the relation's `id`.
+- **Updating a relation's data later** — resolve its **relation entity id** first, then update THAT:
+  ```graphql
+  { entity(id:"<from>"){ relations(first:50){ nodes{ id entityId type{ id name } toEntity{ id name } } } } }
+  ```
+  Use the relation's **`entityId`** in `updateEntity({ id: entityId, values })`. Never the relation `id`.
+- **Discovery must surface both.** When a relation carries (or will carry) data, show the plan's `relation id` AND `relation entity id` so it's unambiguous which one the values target.
+- **Cleaning up a past mistake:** for each affected relation, query its `entityId`, delete the values wrongly written on the relation `id`, and re-write them on the `entityId`.
+
 ## Entity rules
 
 - Names **must NOT** end with a period. Descriptions **MUST** end with a period.
-- Dates: `type: 'date'`, `YYYY-MM-DD`. Datetimes: `type: 'datetime'`, ISO `…Z`.
+- Dates: `type: 'date'`, `YYYY-MM-DD`. Datetimes: `type: 'datetime'`, ISO `…Z`. **Which one a property wants is decided by its schema, not by how the value looks — discover the declared dataType (Gate 2) and match it.** A datetime property (e.g. `Date Founded`) set as `date` publishes but never renders.
 - URLs publish as `type: 'text'` even for URL-renderable properties (SDK rejects `type: 'url'`).
 - **Collect ALL ops into one array, publish ONCE.** Never publish in a loop.
 - Relations: set `toSpace` if the target is in a different space. Use deterministic IDs (`from.slice(0,16)+to.slice(0,16)`) for relation entities so reruns are idempotent.

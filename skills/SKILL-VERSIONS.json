@@ -17,13 +17,13 @@
       "content_sha256": "5e328080a18f8a4e8f040a73d831d338f9f2b8a3065d85ac5ece2e52005e0931"
     },
     "actionable/geo-publish": {
-      "version": "0.4.0",
+      "version": "0.5.0",
       "approved_commit": "d62fccdf3156ef58487168a2a0919f5b19150679",
-      "content_sha256": "1c4cf7cf2456eb43f1874a1d78fab4f39213e8cb4c6b538a63501d0e044ae018"
+      "content_sha256": "ee7e55c935084c33177f306484fc4a48bd3329072006d8ed787ac07cf081e974"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",
-      "approved_commit": "19bb1cea7898ff306ca586f95f1cab47aa94af03",
+      "approved_commit": "5c1c5c22c2946ae1dbdd698e496f9951f2a0100f",
       "content_sha256": "0f13aecd820756cca87d1eebd5677357fb5a00a6ce9cdf6caa0baa6fd83d47a4"
     },
     "non-actionable/geo-describe": {
