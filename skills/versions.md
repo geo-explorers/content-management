@@ -38,7 +38,8 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## actionable/
 
-### geo-publish — 0.4.0
+### geo-publish — 0.5.0
+- 2026-07 · **Relation entity-id + dataType fixes** (from Preston's live diagnosis of the ~1000-row mis-publish): HARD RULE 7 + "Relations — entity id vs relation id" section (knowledge goes on the relation `entityId`, never the relation `id`; use `createRelation`'s `entity*` params or resolve `entityId` to update — new Gate 3). HARD RULE 8 + Gate 2 extended: match the property's declared `dataTypeName` (datetime-vs-date silent-render trap). HARD RULE 9: test one row (visually) before bulk. Fixed the discovery query too (validated: `types{ id name }`, `nodes{}` wrappers, `dataTypeName`, relation `entityId`).
 - 2026-06 · **Runtime data loading rule** (fixes the bulk-publish outage): scripts must READ the dataset file (CSV/JSON) at runtime, never transcribe rows into the script as constants — baking rows in times out on large sets and risks the model fabricating values (esp. URLs). New "Bulk / dataset publishing" section + HARD RULE 6.
 - 2026-06 · Consolidated to one portable skill (GEO_PRIVATE_KEY, PK_SW fallback) + strong safeguards (dup check, schema gate, two-phase dry-run→confirm). Retired geo-publish-codex.
 - earlier · 0.1–0.2 pre-consolidation publish skills.
