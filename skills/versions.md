@@ -12,7 +12,10 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
-### geo-query — 0.1.0
+### geo-query — 0.2.1
+- 2026-07 · Merged colleague's 0.2.1 refinements (all claims re-verified live): dedicated "Relation properties — read them inline" core section; pagination table corrected (`first`/`offset` ≤ 1000 on both shapes); Pattern 3 = filterable `backlinks`; Blocks relation-type ID `beaba5cb…` in the review query + Well-known IDs; `createdAt` keyset note; `backlinksExist`; `searchConnection`/`similarityThreshold`; `typeEntity{}` note.
+- 2026-07 · **Performance + freshness fixes** (editor feedback: "topic query takes 5–10 min"): new Performance section — never N+1, use server-side relation filters (measured live: Iran-war stories 469ms vs ~131s+ N+1); bulk-scan pattern (relationsConnection 1000 rows/330ms with inlined nested fields). New Data-freshness section (verified: no cache, indexer lag ~seconds; re-query, don't distrust). Review-a-submission: block/table order = relation `position` (server `orderBy: POSITION_ASC`; verified vs live UI). Gotchas 9–12.
+- 2026-07 · Hardened by independent 43-check live test: fixed StringFilter exact-match (`is`/`isInsensitive`, not `equalTo`); documented `first`≤1000 + offset-cap-on-Connections (cursor-only past 1000); `entity(id:)` never-null stub + correct existence check; one-query inline relation-properties + `backlinks` + count-only/`search()`/`relation(id:)`/`property(id:)`/`relationsExist` extras; softened stale unscoped-500 claim to performance rule; evals: dead fixture replaced, 4 new evals covering the v0.2.0 patterns.
 - 2026-06 · Initial. GraphQL-over-HTTP querying (Nick's version); runs anywhere incl. browser. Folded in submission review/fact-check (merged from the retired geo-query-web). Person-ID corrected to `7ed45f2b…`.
 
 ### ontology-advisor — 0.1.0
