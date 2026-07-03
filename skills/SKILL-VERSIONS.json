@@ -17,9 +17,9 @@
       "content_sha256": "5e328080a18f8a4e8f040a73d831d338f9f2b8a3065d85ac5ece2e52005e0931"
     },
     "actionable/geo-publish": {
-      "version": "0.5.0",
+      "version": "0.5.1",
       "approved_commit": "c063f286b53d9cfc9ff415523f7a11de7736a29c",
-      "content_sha256": "ee7e55c935084c33177f306484fc4a48bd3329072006d8ed787ac07cf081e974"
+      "content_sha256": "857f070df7e2d8b400d641c2b6d0a9fe25710161147ea52dc732514e3400b052"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",
@@ -38,7 +38,7 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.1",
-      "approved_commit": "3877c64edd987303e3bb7aae0a7d1aa0d26b5b98",
+      "approved_commit": "8ae81048c1221de5914df9db87914f21fe4b5dae",
       "content_sha256": "edeca1d056b8d22afdf90089cd46ce5062e57c50a5530977b7a639b3b8b785ac"
     },
     "non-actionable/image-banner-recompose": {
