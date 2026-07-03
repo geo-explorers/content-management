@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.5.0
+  version: 0.5.1
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -37,7 +37,7 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
 5. **Never delete without explicit consent.** A delete or unset requires the user to type `publish` after seeing exactly what will be removed (entity name, backlink count, orphan count).
 6. **Publishing from a dataset: the script READS THE DATA FILE AT RUNTIME — never transcribe rows into the script as constants.** See [Bulk / dataset publishing](#bulk--dataset-publishing--data-goes-in-the-file-not-the-script). Baking rows into the script blows the token budget and times out on large datasets, and risks the model fabricating values (especially URLs) as it copies.
 7. **Properties on a relation go on the relation ENTITY id, NEVER the relation id.** A relation has two different IDs. Knowledge (values/name/types) written to the relation's own `id` is silently lost — the write "succeeds" and shows in the proposal, but renders nowhere. See [Relations — entity id vs relation id](#relations--entity-id-vs-relation-id-critical). This is not optional; getting it wrong mis-published ~1000 rows in production.
-8. **Match the property's declared data type — discover it, never guess.** Before writing any value, confirm the property's dataType from the type schema and set the value's `type` to match. The classic trap: a **datetime** property (e.g. `Date Founded`) set as `type: 'date'` publishes but silently doesn't render. Mismatches → Gate 2.
+8. **EVERY value's `type` must match the property's declared `dataTypeName` — check all of them against the mapping table, not just dates.** The discovery query already returns `dataTypeName` per property, so this is a zero-extra-queries table lookup (see [Data-type mapping](#data-type-mapping-datatypename--sdk-value-type)). ANY mismatch publishes but silently doesn't render (datetime-as-date is just the classic case). Mismatches → Gate 2.
 9. **Test ONE before any bulk publish.** Publish a single row first, open it on geobrowser.io, and confirm every field actually renders (not just "the API returned success"). Only then run the batch. Both failure modes above are *silent* — API/proposal say OK while the data is lost — so visual confirmation of one row is the only real check.
 
 ## Required output template (post BEFORE writing any script)
@@ -57,7 +57,7 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
 
 ## Gates
 - **Gate 1 (semantic-duplicate)**: PASS | FIRE — <reason/hits>
-- **Gate 2 (schema-violation)**: PASS | FIRE — <off-schema list AND any dataType mismatch, e.g. datetime property being set as date>
+- **Gate 2 (schema-violation)**: PASS | FIRE — <off-schema list AND every planned value checked against the dataType mapping table; list any mismatch (e.g. datetime-as-date, Checkbox-as-text, Relation-as-value)>
 - **Gate 3 (relation-target)**: PASS | FIRE — <any value targeting a relation `id` instead of the relation `entityId`; see Relations section>
 If any FIRES, STOP, run the gate dialog, wait for the user.
 
@@ -223,7 +223,26 @@ A relation (GraphQL `Relation`) has:
 ## Entity rules
 
 - Names **must NOT** end with a period. Descriptions **MUST** end with a period.
-- Dates: `type: 'date'`, `YYYY-MM-DD`. Datetimes: `type: 'datetime'`, ISO `…Z`. **Which one a property wants is decided by its schema, not by how the value looks — discover the declared dataType (Gate 2) and match it.** A datetime property (e.g. `Date Founded`) set as `date` publishes but never renders.
+- **Which value `type` a property wants is decided by its schema, not by how the value looks** — read `dataTypeName` from discovery and map it (table below). A mismatched value publishes but never renders.
+
+## Data-type mapping (dataTypeName → SDK value type)
+
+Every dataTypeName in the live API, mapped to the SDK value `type` (zero extra queries — `dataTypeName` comes back in the discovery query; this check is a table lookup over your planned values):
+
+| `dataTypeName` (API) | SDK value `type` | Value format |
+|---|---|---|
+| `Text` | `text` | any string — **URLs too** (no url type) |
+| `Date` | `date` | `YYYY-MM-DD` |
+| `Datetime` | `datetime` | ISO `…Z` (the classic trap: setting it as `date` silently doesn't render) |
+| `Time` | `time` | time string |
+| `Checkbox` | `boolean` | `true`/`false` — NOT `text` |
+| `Integer` | `integer` | whole number |
+| `Float` | `float` | number |
+| `Decimal` | `decimal` | number string |
+| `Point` | `point` | coordinates |
+| `Schedule` | `schedule` | schedule value |
+| `Relation` | **NOT a value** | must be `Graph.createRelation` (with `entity*` params for its data) — never a `values[]` entry |
+| *(null / unknown)* | — | flag it (Gate 2); inspect a live instance, don't guess |
 - URLs publish as `type: 'text'` even for URL-renderable properties (SDK rejects `type: 'url'`).
 - **Collect ALL ops into one array, publish ONCE.** Never publish in a loop.
 - Relations: set `toSpace` if the target is in a different space. Use deterministic IDs (`from.slice(0,16)+to.slice(0,16)`) for relation entities so reruns are idempotent.
