@@ -21,7 +21,8 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 ### ontology-advisor — 0.1.0
 - 2026-06 · Initial. Conversational modelling advice grounded in ONTOLOGY.md + live graph; read-only.
 
-### geo-press-review — 0.3.0
+### geo-press-review — 0.4.0
+- 2026-07 · A/B tuning (Claude-vs-GPT test on World affairs Jul 3–6; gap was process depth, not search quality): mandatory 8–10 topic-lane fan-out before searching; discard out-of-window article dates; non-US compensation (outlet-name queries); every ✅/🔄 row cites the matching Geo entity ID; 🔄 deltas must be exact facts; 🆕 requires a cross-Geo name search first (catches existing related threads — the Duterte near-miss).
 - 2026-06 · Source-faithfulness gate: a cited source must actually substantiate the *specific* story (not just the broad topic), and the recommendation may only be as specific as its sources support — fixes attaching generic "Iran war — live" blogs to a precise story. Prefer specific articles over live-blogs/topic hubs.
 - 2026-06 · Editor-friendly labels ("Not on Geo yet" instead of "not covered"); all sources rendered as clickable links.
 - 2026-06 · Initial. External press (Google News/web) vs Geo coverage; three-bucket ranked output.

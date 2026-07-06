@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published / needs-update / not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.3.0
+  version: 0.4.0
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -57,9 +57,9 @@ This produces `geo-coverage.json` — every News story with name, publish date, 
 Use the agent's **web search / Google News** to gather what the press is actually covering for the same Space and window. Search by the Space's main topics and the date range. For each external story capture: headline, outlet, **date, and the article URL** (the URL is required — it becomes the clickable source in the report), and a one-line summary.
 
 Guidance:
-- Search **broadly and by topic**, not just "today's headlines" — e.g. for the AI space, search the recurring topics from `geo-coverage.json` (`topicCoverage`) so you compare like-for-like.
-- For a **past date**, scope every search to that date window so you reconstruct the timeline, not today's news.
-- Don't stop at the first page. Web search is lazy by default — explicitly gather the top N per topic.
+- **Topic-lane fan-out (mandatory): enumerate 8–10 distinct topic lanes BEFORE searching, then run at least one search per lane.** Derive lanes from the space's recurring topics (`geo-coverage.json` `topicCoverage`) plus the window's obvious threads (e.g. for World affairs: Ukraine/NATO, Iran, Gaza, Sudan, China/Pacific, domestic-politics-of-major-powers, …). A single-query or 3–4-lane run reads as "weak search" — the shortfall is breadth, not the search tool (verified in a Claude-vs-GPT A/B: same tool quality, the deeper fan-out found 2× the gaps).
+- For a **past date**, scope every search to that date window, and **discard any source whose article date falls outside the window** — search engines bleed adjacent-week results in.
+- Don't stop at the first page. Web search is lazy by default — explicitly gather the top N per topic. Claude's web search has no date operator and is US-centric: compensate with more, varied queries per lane (add outlet names like FT/Guardian/AP for non-US angles).
 - **Keep each source's URL** alongside the outlet name. Don't discard it after reading — the report must link to it.
 - **Prefer specific articles over live-blogs / topic hubs.** A page like `cnn.com/.../live-news/iran-war` or `aljazeera.com/.../iran-war-live` covers an *entire* topic, not one event — it is not a clean source for a specific story unless that exact development is in it. Capture the specific article; treat live-blogs as leads to chase, not as citations.
 
@@ -70,6 +70,11 @@ For each external story, find the best-matching Geo story from `geo-coverage.jso
 - **Match found, Geo story is current** → ✅ Already on Geo.
 - **Match found, but external press has newer facts / more outlets / new claims** → 🔄 On Geo — needs update. List specifically what's new.
 - **No match** → 🆕 Not on Geo yet — publish new.
+
+Rigor requirements (each verified to matter in the A/B test):
+- **Every ✅/🔄 row cites the matching Geo story's entity ID** (from the coverage map) — the editor must be able to open the exact entity, not re-search it.
+- **🔄 deltas are exact facts, not vibes**: numbers, names, dates ("Geo says ≥10 killed; AP reports ≥18, 351 drones, 68 missiles") — the editor should be able to apply the update without re-reading the press.
+- **Before calling anything 🆕, run one name/topic search across Geo beyond the window's coverage map** (`entities(filter:{name:{includesInsensitive:…}})`). The event's *story* may be new while the space already has a related thread (topic page, data block, older story) — cite it so the editor links the new story into it instead of creating a disconnected duplicate.
 
 Then **rank** the 🔄 and 🆕 items and **justify** each rank.
 
