@@ -21,7 +21,10 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 ### ontology-advisor — 0.1.0
 - 2026-06 · Initial. Conversational modelling advice grounded in ONTOLOGY.md + live graph; read-only.
 
-### geo-press-review — 0.3.0
+### geo-press-review — 0.5.0
+- 2026-07 · Accuracy round from an editor live-test (World affairs Jul 3–6): before 🆕, re-check with an **undated search of the News-story TYPE** (catches stories Geo published just outside the window — the India–Japan miss); **match on the story's `Notable claims`, not just title+description** (the Kyiv "68 missiles/351 drones" facts were already claims). Both queries verified live. Also hardened the two-bucket scope note (removed the 🔄 label from the instruction so it stops re-planting the forbidden bucket).
+- 2026-07 · **Removed the 🔄 "On Geo — needs update" bucket** (editor call: not useful in current form, deferred to a future version) → two-bucket output (✅ Already on Geo / 🆕 Not on Geo yet). **Headlines are now clickable links to their primary source** (editor's top-requested shortcut — click the headline, land on the article). Cross-Geo `entity` check + ✅ entity-ID citation retained.
+- 2026-07 · A/B tuning (Claude-vs-GPT test on World affairs Jul 3–6; gap was process depth, not search quality): mandatory 8–10 topic-lane fan-out before searching; discard out-of-window article dates; non-US compensation (outlet-name queries).
 - 2026-06 · Source-faithfulness gate: a cited source must actually substantiate the *specific* story (not just the broad topic), and the recommendation may only be as specific as its sources support — fixes attaching generic "Iran war — live" blogs to a precise story. Prefer specific articles over live-blogs/topic hubs.
 - 2026-06 · Editor-friendly labels ("Not on Geo yet" instead of "not covered"); all sources rendered as clickable links.
 - 2026-06 · Initial. External press (Google News/web) vs Geo coverage; three-bucket ranked output.

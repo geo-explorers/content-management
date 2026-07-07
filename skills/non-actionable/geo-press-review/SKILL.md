@@ -1,16 +1,16 @@
 ---
 name: geo-press-review
-description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published / needs-update / not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
+description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published or not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.3.0
+  version: 0.5.0
 ---
 
 # Geo Knowledge Graph — Press Review
 
 Generate a press review for a Space: pull what the press is actually covering (Google News / web search), compare it against what's already published on Geo, and hand editors a ranked, justified list of **what to publish next and why**.
 
-The point is not to summarize the news. It's to surface **actionable editorial opportunities** — real stories the press is covering that Geo is missing, under-covering, or needs to update.
+The point is not to summarize the news. It's to surface **actionable editorial opportunities** — real stories the press is covering that Geo is missing entirely.
 
 **Read-only.** This skill compares and recommends. It never creates, updates, or deletes anything on Geo. Acting on a recommendation is a separate, explicit step that goes through `geo-orchestrate` (with dry-run + existence-check safeguards).
 
@@ -19,26 +19,33 @@ The point is not to summarize the news. It's to surface **actionable editorial o
 Use this skill when an editor or curator wants to:
 
 - Run a **press review for a Space** — what's the press covering that we've missed?
-- Decide **what to publish or update next**, ranked by priority.
+- Decide **what to publish next**, ranked by priority.
 - Check whether a specific story **is already on Geo** before publishing it.
 - **Discover sources** for a topic + date (e.g. "Senate runoff", Jan 15 2026 → relevant articles).
 - Build a **timeline** for a past date, not just today's cycle.
 
-## The three buckets (the core output)
+## The two buckets (the core output)
 
 For every external story the press is covering, classify it against Geo. **Use these exact labels in the output** — they're written so a non-technical editor instantly knows what to do:
 
 | Label (use verbatim) | Meaning | Recommendation |
 |---|---|---|
 | ✅ **Already on Geo** | A Geo News story clearly covers this event, with sources. | No action. |
-| 🔄 **On Geo — needs update** | A Geo story exists but the press now has newer developments, more sources, or new claims it's missing. | Update — list what's new. |
 | 🆕 **Not on Geo yet — publish new** | No Geo story matches this event; it's missing from Geo entirely. | Publish — this is the opportunity. |
 
 Do **not** use the bare phrase "not covered" — editors don't know what it means. Always say **"Not on Geo yet — publish new"** (or, in tight UI, the chip "🆕 Not on Geo yet").
 
-The deliverable is a ranked table of the 🔄 and 🆕 items: `Priority | Headline | Status | Why | Sources (with links) | Matching Geo story (if any)`.
+> **Only these two buckets exist — there is no third category.** A story either matches something already on Geo (✅) or it doesn't (🆕). If a Geo story covers the event, mark it ✅ and move on — do **not** assess, rank, or report how fresh, complete, or up-to-date existing Geo stories are, and do **not** add any "missing fact" / "delta" column (that comparison is out of scope for this version). The whole deliverable is the **🆕 publish-next list**; ✅ is just the "already handled" list.
 
-**List EVERY source for a story, and make each a clickable link.** Not just the first or a "primary" one — all of them. A story backed by five outlets shows five links. Render each as a markdown link to its actual article URL — `[NPR](https://www.npr.org/…)` — never just `NPR`. The whole point is the editor clicks through to verify and pull the sources. If you couldn't capture a URL for one source, drop that source rather than listing a dead name — but still list all the others.
+The deliverable is **two tables** (both rendered as real markdown tables, never bullet lists):
+- **🆕 table** — `Priority | Headline | Why | Sources`.
+- **✅ table** — `Headline | Geo entity ID`.
+
+In both, the **Headline cell is a clickable markdown link** to the story's primary source.
+
+**Make the Headline itself a clickable link to the story's primary source** — `[Australia and Fiji sign mutual defense pact](https://apnews.com/article/…)` — so the editor clicks the headline and lands straight on the source (this is the editor's #1 requested shortcut). Use the strongest/first source as the headline's link target.
+
+**Also list EVERY source in the Sources column, each a clickable link.** Not just the headline's one — all of them. A story backed by five outlets shows five links: `[AP](url) · [FT](url) · [Guardian](url)`. Render each as a markdown link to its actual article URL — never a bare outlet name. If you couldn't capture a URL for a source, drop it rather than listing a dead name.
 
 ## How it works — two halves, then match
 
@@ -57,9 +64,9 @@ This produces `geo-coverage.json` — every News story with name, publish date, 
 Use the agent's **web search / Google News** to gather what the press is actually covering for the same Space and window. Search by the Space's main topics and the date range. For each external story capture: headline, outlet, **date, and the article URL** (the URL is required — it becomes the clickable source in the report), and a one-line summary.
 
 Guidance:
-- Search **broadly and by topic**, not just "today's headlines" — e.g. for the AI space, search the recurring topics from `geo-coverage.json` (`topicCoverage`) so you compare like-for-like.
-- For a **past date**, scope every search to that date window so you reconstruct the timeline, not today's news.
-- Don't stop at the first page. Web search is lazy by default — explicitly gather the top N per topic.
+- **Topic-lane fan-out (mandatory): enumerate 8–10 distinct topic lanes BEFORE searching, then run at least one search per lane.** Derive lanes from the space's recurring topics (`geo-coverage.json` `topicCoverage`) plus the window's obvious threads (e.g. for World affairs: Ukraine/NATO, Iran, Gaza, Sudan, China/Pacific, domestic-politics-of-major-powers, …). A single-query or 3–4-lane run reads as "weak search" — the shortfall is breadth, not the search tool (verified in a Claude-vs-GPT A/B: same tool quality, the deeper fan-out found 2× the gaps).
+- For a **past date**, scope every search to that date window, and **discard any source whose article date falls outside the window** — search engines bleed adjacent-week results in.
+- Don't stop at the first page. Web search is lazy by default — explicitly gather the top N per topic. Claude's web search has no date operator and is US-centric: compensate with more, varied queries per lane (add outlet names like FT/Guardian/AP for non-US angles).
 - **Keep each source's URL** alongside the outlet name. Don't discard it after reading — the report must link to it.
 - **Prefer specific articles over live-blogs / topic hubs.** A page like `cnn.com/.../live-news/iran-war` or `aljazeera.com/.../iran-war-live` covers an *entire* topic, not one event — it is not a clean source for a specific story unless that exact development is in it. Capture the specific article; treat live-blogs as leads to chase, not as citations.
 
@@ -67,11 +74,23 @@ Guidance:
 
 For each external story, find the best-matching Geo story from `geo-coverage.json` (match on the **event**, not exact wording — same companies/people/action). Then:
 
-- **Match found, Geo story is current** → ✅ Already on Geo.
-- **Match found, but external press has newer facts / more outlets / new claims** → 🔄 On Geo — needs update. List specifically what's new.
+- **A Geo story matches the event** → ✅ Already on Geo (no action; do not assess whether it's "fresh enough" — matched = done).
 - **No match** → 🆕 Not on Geo yet — publish new.
 
-Then **rank** the 🔄 and 🆕 items and **justify** each rank.
+Rigor requirements (each verified live to prevent a real mis-flag):
+- **Every ✅ row cites the matching Geo story's entity ID** (from the coverage map) — the editor must be able to open the exact entity, not re-search it.
+- **Before calling anything 🆕, re-check with an UNDATED search of the News-story TYPE in this space** — not just the window's coverage map, and not a generic name search. The coverage map only sees stories *inside* the window, so a story Geo published a day or two before the window (e.g. an India–Japan summit published Jul 2 for a Jul 3–6 review) will look missing when it isn't. Query:
+  ```graphql
+  { entities(typeId: "e550fe517e904b2c8fffdf13408f5634", spaceId: "SPACE_ID",
+      filter: { name: { includesInsensitive: "KEYWORD" } }, first: 5) { id name createdAt } }
+  ```
+  Run it per candidate 🆕 with a couple of salient keywords (person, country, event). If a real News story comes back, it's ✅ (cite the ID), not 🆕. Only after this check comes back empty is it a genuine gap.
+- **Match on the story's CLAIMS, not just its title + description.** A Geo News story's specific facts live in its `Notable claims` relations (verified: ~17 claims on a typical story), which the coverage map does NOT include. Before you assert a match is only partial or that Geo "lacks" some fact, fetch the candidate story's claims and read them — the fact is often already there (e.g. the Kyiv "68 missiles / 351 drones" numbers were already claims). Title+description alone under-reports what Geo has.
+  ```graphql
+  { entity(id: "STORY_ID") { relations(first: 50) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims
+  ```
+
+Then **rank** the 🆕 items and **justify** each rank.
 
 ### Source-faithfulness gate (do this BEFORE listing any source — non-negotiable)
 
@@ -80,7 +99,7 @@ The #1 failure mode of this skill: recommending a *specific* story and attaching
 1. **The source actually substantiates THIS specific story** — not just the broad topic. A story titled "5th round of US-Iran ceasefire talks in Washington; Hormuz de-confliction cell agreed" needs sources that report *that development*. A generic "Iran war — live" blog is **not** a valid source for it. If you can't point to where the source states the claim, **drop that source** — don't pad the list.
 2. **The recommended story is only as specific as its sources support.** Don't synthesize a precise headline (named round number, named venue, named mechanism) that the sources don't actually state. Phrase the recommendation to match what the sources say; if the sources are vaguer, make the recommendation vaguer.
 
-If, after the gate, a 🆕/🔄 item has **no source that genuinely backs its specific claim**, do NOT recommend it as a confident gap — either rewrite it to the level the sources support, or drop it. Better to recommend fewer, well-sourced opportunities than many over-specified ones. (Same discipline as `geo-describe`'s accuracy leg: verify the *framing*, not just that something is roughly on-topic.)
+If, after the gate, a 🆕 item has **no source that genuinely backs its specific claim**, do NOT recommend it as a confident gap — either rewrite it to the level the sources support, or drop it. Better to recommend fewer, well-sourced opportunities than many over-specified ones. (Same discipline as `geo-describe`'s accuracy leg: verify the *framing*, not just that something is roughly on-topic.)
 
 ### Ranking signals
 
@@ -88,7 +107,6 @@ If, after the gate, a 🆕/🔄 item has **no source that genuinely backs its sp
 - **Source quality** — tier-1 outlets (Reuters, Bloomberg, FT, AP…) weight higher.
 - **Topic centrality** — does it hit a topic this Space actively maintains? (Cross-check `topicCoverage` in the JSON.)
 - **Recency / momentum** — breaking vs. days-old.
-- **Gap size** — fully missing (🆕) ranks above a minor update (🔄).
 - **Graph-fit** — does it connect to people/topics/stories already on Geo (richer contribution)?
 
 ## Source discovery mode
@@ -107,18 +125,19 @@ This is the timeline-building use case — let editors reconstruct coverage for 
 
 ## How editors receive the output
 
-- **In chat / terminal:** the ranked table under a clear heading like **"TOP PUBLISH OPPORTUNITIES — ACT ON THESE FIRST"**, leading with 🆕 (Not on Geo yet), then 🔄 (needs update), each with its *why* and its **sources as clickable markdown links**.
-- **Status chips:** label each row with the verbatim status — **🆕 Not on Geo yet**, **🔄 Needs update**, **✅ Already on Geo**. Never the bare phrase "not covered".
+- **In chat / terminal:** the ranked **🆕 table** under a clear heading like **"TOP PUBLISH OPPORTUNITIES — ACT ON THESE FIRST"**, each row with its *why* and its **sources as clickable markdown links**, and the **headline itself linked to its primary source**. Then a **✅ Already on Geo table** (`Headline | Geo entity ID`, headline also linked) showing what's handled. **Both are markdown tables — do NOT render ✅ as a prose paragraph or bullet list.**
+- **Clickable headlines:** every headline is a markdown link to its primary source — the editor clicks the headline to reach the article.
+- **Status chips:** label each row with the verbatim status — **🆕 Not on Geo yet** or **✅ Already on Geo**. Never the bare phrase "not covered".
 - **Sources line — ALL of them, always linked:** list every outlet covering the story, each as its own link — `Sources: [NPR](url) · [CNN](url) · [AP](url) · [Reuters](url) · [Euronews](url)`. Don't truncate to a "main" source. An editor must be able to click straight to any article. A source with no URL is dropped, not shown as plain text.
 - **As a file (optional):** the agent can write the review to a markdown or JSON file so it's shareable / feeds a future dashboard. In the JSON, each source is `{ outlet, url }`, not a bare string. `geo-coverage.json` is always available as the structured Geo-side artifact.
 
-Lead the editor with the **top 3–5 🆕 stories** — that's the "publish next" list. Offer 🔄 updates as quick wins. Always attach the source URLs so they can verify.
+Lead the editor with the **top 3–5 🆕 stories** — that's the "publish next" list. Always attach the source URLs so they can verify.
 
 ## Hand-off (this skill recommends; it never publishes)
 
 When the editor picks something to act on:
 
-- **"Publish this missing story"** / **"update this one"** → hand the headline, the candidate source URLs, and the matching Geo story ID (if any) to **`geo-orchestrate`**, which runs the existence-check (golden rule — never duplicate), generates a dry-run script, shows the ops, and publishes only on explicit "go".
+- **"Publish this missing story"** → hand the headline, the candidate source URLs, and any related Geo thread ID to **`geo-orchestrate`**, which runs the existence-check (golden rule — never duplicate), generates a dry-run script, shows the ops, and publishes only on explicit "go".
 - **"Tell me more about what Geo has on X"** → hand off to **`geo-query`**.
 
 The review itself is safe by construction — read + compare + rank only.
@@ -126,7 +145,7 @@ The review itself is safe by construction — read + compare + rank only.
 ## Caveats / known limits
 
 - **Web search is non-deterministic.** It can miss stories or surface low-quality sources. Treat the external half as "best-effort press scan," not an exhaustive feed. State this to the editor — a 🆕 ("Not on Geo yet") is a *candidate*, confirm before publishing.
-- **Matching is judgment, not exact.** Same event can have very different headlines. Match on entities + action, and when unsure, mark it 🔄/🆕 and let the editor decide rather than silently calling it covered.
+- **Matching is judgment, not exact.** Same event can have very different headlines. Match on entities + action, and when unsure, mark it 🆕 and let the editor decide rather than silently calling it covered.
 - **Sources on Geo are labeled strings, not entities.** Outlet is parsed from a `"Headline | Outlet"` label; ~⅓ have no parseable outlet. So "is this source already cited" is fuzzy. (Structured Source entities would fix this — open question for Preston.)
 - **"This Space's topics"** is inferred from existing coverage (`topicCoverage`), since there's no canonical Space→Topics map yet.
 - **Publish date** is whatever Geo stores on `94e43fe8…`; if it's ingestion rather than event date, timelines are approximate.
