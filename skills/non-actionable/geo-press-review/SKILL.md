@@ -35,7 +35,7 @@ For every external story the press is covering, classify it against Geo. **Use t
 
 Do **not** use the bare phrase "not covered" — editors don't know what it means. Always say **"Not on Geo yet — publish new"** (or, in tight UI, the chip "🆕 Not on Geo yet").
 
-> **Scope note:** this skill classifies into these **two** buckets only. Do **not** emit an "On Geo — needs update" / 🔄 bucket — if a Geo story already covers the event, it's ✅ Already on Geo, full stop (comparing freshness/deltas of existing stories is deferred to a future version). The whole deliverable is the **🆕 publish-next list**, with ✅ shown only so the editor sees what's already handled.
+> **Only these two buckets exist — there is no third category.** A story either matches something already on Geo (✅) or it doesn't (🆕). If a Geo story covers the event, mark it ✅ and move on — do **not** assess, rank, or report how fresh, complete, or up-to-date existing Geo stories are, and do **not** add any "missing fact" / "delta" column (that comparison is out of scope for this version). The whole deliverable is the **🆕 publish-next list**; ✅ is just the "already handled" list.
 
 The deliverable is **two tables** (both rendered as real markdown tables, never bullet lists):
 - **🆕 table** — `Priority | Headline | Why | Sources`.
@@ -77,9 +77,18 @@ For each external story, find the best-matching Geo story from `geo-coverage.jso
 - **A Geo story matches the event** → ✅ Already on Geo (no action; do not assess whether it's "fresh enough" — matched = done).
 - **No match** → 🆕 Not on Geo yet — publish new.
 
-Rigor requirements (each verified to matter in the A/B test):
+Rigor requirements (each verified live to prevent a real mis-flag):
 - **Every ✅ row cites the matching Geo story's entity ID** (from the coverage map) — the editor must be able to open the exact entity, not re-search it.
-- **Before calling anything 🆕, run one name/topic search across Geo beyond the window's coverage map** (`entities(filter:{name:{includesInsensitive:…}})`). The event's *story* may be new while the space already has a related thread (topic page, data block, older story) — cite it so the editor links the new story into it instead of creating a disconnected duplicate.
+- **Before calling anything 🆕, re-check with an UNDATED search of the News-story TYPE in this space** — not just the window's coverage map, and not a generic name search. The coverage map only sees stories *inside* the window, so a story Geo published a day or two before the window (e.g. an India–Japan summit published Jul 2 for a Jul 3–6 review) will look missing when it isn't. Query:
+  ```graphql
+  { entities(typeId: "e550fe517e904b2c8fffdf13408f5634", spaceId: "SPACE_ID",
+      filter: { name: { includesInsensitive: "KEYWORD" } }, first: 5) { id name createdAt } }
+  ```
+  Run it per candidate 🆕 with a couple of salient keywords (person, country, event). If a real News story comes back, it's ✅ (cite the ID), not 🆕. Only after this check comes back empty is it a genuine gap.
+- **Match on the story's CLAIMS, not just its title + description.** A Geo News story's specific facts live in its `Notable claims` relations (verified: ~17 claims on a typical story), which the coverage map does NOT include. Before you assert a match is only partial or that Geo "lacks" some fact, fetch the candidate story's claims and read them — the fact is often already there (e.g. the Kyiv "68 missiles / 351 drones" numbers were already claims). Title+description alone under-reports what Geo has.
+  ```graphql
+  { entity(id: "STORY_ID") { relations(first: 50) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims
+  ```
 
 Then **rank** the 🆕 items and **justify** each rank.
 

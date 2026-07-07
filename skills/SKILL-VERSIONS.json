@@ -33,8 +33,8 @@
     },
     "non-actionable/geo-press-review": {
       "version": "0.5.0",
-      "approved_commit": "6264b2207f2ce5888b04f78d0576631aefd2c983",
-      "content_sha256": "976e9b2458e69baea623f78a4ac161272c56dad2ad6419e851bb918fea067123"
+      "approved_commit": "737641c33e86005ae9d7a52144e1ee08c9818ebe",
+      "content_sha256": "b79ca5e123510272c411126fcb5e505784c9d9652b942cdbe0efa834a66003cb"
     },
     "non-actionable/geo-query": {
       "version": "0.2.1",
