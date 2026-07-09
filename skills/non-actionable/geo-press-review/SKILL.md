@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published or not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.5.0
+  version: 0.5.1
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -49,7 +49,7 @@ In both, the **Headline cell is a clickable markdown link** to the story's prima
 
 ## How it works — two halves, then match
 
-### Half 1 — Geo coverage (deterministic, via script)
+### Half 1 — Geo coverage (deterministic, via the GraphQL API)
 
 Run the coverage map to get everything Geo has published in the window:
 
@@ -58,6 +58,12 @@ bun run scripts/press-review-coverage-map.ts --space AI --days 7 --json geo-cove
 ```
 
 This produces `geo-coverage.json` — every News story with name, publish date, topics, sources (by outlet), and claim count. This is the "what we already have" side. It also flags **went-quiet topics** and **single-source stories** purely from Geo data (useful even before the external comparison).
+
+**Half 1 uses the GraphQL API (`testnet-api.geobrowser.io`), addressed by SPACE ID — NOT the Hypergraph MCP connector.** Every DAO space is reachable there by its 32-hex space id (e.g. World affairs = `89bd89bf28ff8a0963faf92a8c905e20`, ~1,175 News stories). If the bun script can't run in your environment, query GraphQL directly (see `geo-query`) — same source of truth.
+
+> **⚠ NEVER build the coverage map from the Hypergraph MCP connector.** It exposes only a curated subset of spaces (World affairs, US Politics, and others are NOT in it) and — critically — it **silently fuzzy-matches a space name to the nearest one it does have** (a real case: `space="World affairs"` matched to **"AI"** with no error), which would produce a coverage map of the *wrong* space and silently corrupt the whole review.
+>
+> **Space-verification guard (mandatory before any coverage map):** confirm the resolved space's `id` AND `page.name` EXACTLY match what was requested — `{ space(id:"<SPACE_ID>") { id page { name } } }`. If the id returns "not found", or the name doesn't match, or a tool "helpfully" substituted a different space → **STOP and report it. Never proceed on a fuzzy-matched or substituted space.** A blank/absent result means "use the GraphQL path," not "this space is empty."
 
 ### Half 2 — External press (via web search)
 
@@ -86,8 +92,9 @@ Rigor requirements (each verified live to prevent a real mis-flag):
   ```
   Run it per candidate 🆕 with a couple of salient keywords (person, country, event). If a real News story comes back, it's ✅ (cite the ID), not 🆕. Only after this check comes back empty is it a genuine gap.
 - **Match on the story's CLAIMS, not just its title + description.** A Geo News story's specific facts live in its `Notable claims` relations (verified: ~17 claims on a typical story), which the coverage map does NOT include. Before you assert a match is only partial or that Geo "lacks" some fact, fetch the candidate story's claims and read them — the fact is often already there (e.g. the Kyiv "68 missiles / 351 drones" numbers were already claims). Title+description alone under-reports what Geo has.
+  **MANDATORY (not judgment): whenever a 🆕 suggestion is of the form "Geo has a related story but not this specific thread/development," you MUST fetch that related story's `Notable claims` and confirm the development is absent from them before keeping it as 🆕.** Skipping this is exactly what mis-flagged the "Mojtaba absent from the funeral" thread as new when the funeral stories already carried those claims. No "related but new" 🆕 ships without the claims read.
   ```graphql
-  { entity(id: "STORY_ID") { relations(first: 50) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims
+  { entity(id: "STORY_ID") { relations(first: 100) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims (100 — busy stories can carry many)
   ```
 
 Then **rank** the 🆕 items and **justify** each rank.
