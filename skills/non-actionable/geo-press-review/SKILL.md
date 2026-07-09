@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published or not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.5.0
+  version: 0.5.1
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -94,7 +94,7 @@ Rigor requirements (each verified live to prevent a real mis-flag):
 - **Match on the story's CLAIMS, not just its title + description.** A Geo News story's specific facts live in its `Notable claims` relations (verified: ~17 claims on a typical story), which the coverage map does NOT include. Before you assert a match is only partial or that Geo "lacks" some fact, fetch the candidate story's claims and read them — the fact is often already there (e.g. the Kyiv "68 missiles / 351 drones" numbers were already claims). Title+description alone under-reports what Geo has.
   **MANDATORY (not judgment): whenever a 🆕 suggestion is of the form "Geo has a related story but not this specific thread/development," you MUST fetch that related story's `Notable claims` and confirm the development is absent from them before keeping it as 🆕.** Skipping this is exactly what mis-flagged the "Mojtaba absent from the funeral" thread as new when the funeral stories already carried those claims. No "related but new" 🆕 ships without the claims read.
   ```graphql
-  { entity(id: "STORY_ID") { relations(first: 50) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims
+  { entity(id: "STORY_ID") { relations(first: 100) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims (100 — busy stories can carry many)
   ```
 
 Then **rank** the 🆕 items and **justify** each rank.
