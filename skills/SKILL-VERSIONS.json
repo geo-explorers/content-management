@@ -33,13 +33,13 @@
     },
     "non-actionable/geo-press-review": {
       "version": "0.5.1",
-      "approved_commit": "41e07ccd0e5fb3f5d6aaf6116748c05bacc54dbc",
-      "content_sha256": "528c877cb3f51246dac7787838513b73b6d227f4a3fbc02ce27753cfafdee02b"
+      "approved_commit": "a95d9290528c150ae6c20b8bf33eef038c529a2a",
+      "content_sha256": "b1661d57b52c30c70fd78a1bea85c35a0f37bfac780da25ed2364544fbbd5718"
     },
     "non-actionable/geo-query": {
-      "version": "0.2.1",
+      "version": "0.2.3",
       "approved_commit": "8ae81048c1221de5914df9db87914f21fe4b5dae",
-      "content_sha256": "edeca1d056b8d22afdf90089cd46ce5062e57c50a5530977b7a639b3b8b785ac"
+      "content_sha256": "6f0b7c2ad12ca19a2fbe12ba84a71efce439eb70ea79f49658919fe2b6ce86a2"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",
