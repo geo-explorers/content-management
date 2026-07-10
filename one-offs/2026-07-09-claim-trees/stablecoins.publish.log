@@ -1,0 +1,92 @@
+existing blocks: 5, first position: a1
+════════ Stablecoins claim tree ════════
+  L0-S1 slotted (live): 27fb88183c16449bae71bec7bdb46e50
+  L0-S2 yield: 90c9f965984b4024ad5557e3fe2a7914 (3 attached + 3 created args)
+  L0-S3 dollar: 4cb960bdae604f3cb6b0a6f54e77996e (+3🟢/3🔴)
+  articles: 7 · created args: 9 · attached: 3
+  🔥 Key claims block prepended: 188bfb14d74b42a1b1edba5069514e1d
+  66 ops
+{
+  "articles": {
+    "crs": "3cc4082de3b447fe9a37717d146557aa",
+    "forbes": "837654deb12647b889a09e57eb0c357a",
+    "coindesk": "fc19816b94094135849c145694a8e8b5",
+    "brookings": "f87e9c834ca34e769920bbbac31ce23b",
+    "bloomberg": "bdc81db1dea3401081f3b3d8a7dba73c",
+    "fxstreet": "7314ef62a9454ac4aebabd512512a45f",
+    "imf": "cd4908348f6e482b9f50179d6d3251f9"
+  },
+  "props": {
+    "yield": "90c9f965984b4024ad5557e3fe2a7914",
+    "dollar": "4cb960bdae604f3cb6b0a6f54e77996e"
+  },
+  "args": [
+    {
+      "prop": "yield",
+      "side": "supporting",
+      "id": "1d45fdc7216f4e74a91c38531599dec8"
+    },
+    {
+      "prop": "yield",
+      "side": "supporting",
+      "id": "3d3356da560d4d1c8b25b1bf703234a6"
+    },
+    {
+      "prop": "yield",
+      "side": "opposing",
+      "id": "0efc65a593674273bec4e27859bd46e9"
+    },
+    {
+      "prop": "dollar",
+      "side": "supporting",
+      "id": "6ce9447279f54819971b214773ba835a"
+    },
+    {
+      "prop": "dollar",
+      "side": "supporting",
+      "id": "333367b25ec145b3bd8d5ce4e4ee7cb8"
+    },
+    {
+      "prop": "dollar",
+      "side": "supporting",
+      "id": "e0b7ebdbfcc14cefb5f2fa19b5ace0ad"
+    },
+    {
+      "prop": "dollar",
+      "side": "opposing",
+      "id": "21d10441f2ca49619db0eab745afd8a4"
+    },
+    {
+      "prop": "dollar",
+      "side": "opposing",
+      "id": "e749f8979a3c4465bcee877efac30c46"
+    },
+    {
+      "prop": "dollar",
+      "side": "opposing",
+      "id": "a32ec199eb654879a8b6946f101d5046"
+    }
+  ],
+  "attached": [
+    {
+      "prop": "yield",
+      "side": "supporting",
+      "id": "39ac64cbc95f462381e4fbba7f489179"
+    },
+    {
+      "prop": "yield",
+      "side": "opposing",
+      "id": "77bd570de9d24ee8b72add6209b27a32"
+    },
+    {
+      "prop": "yield",
+      "side": "opposing",
+      "id": "92654b73e8b34287b64466b781226205"
+    }
+  ],
+  "keyClaimsBlock": "188bfb14d74b42a1b1edba5069514e1d"
+}
+
+proposalId: 0x08faf1b67e28429ba35f5837186cb690 
+proposeTx: 0xbfbfc492b57e514dcdaef010baa7d606407f76a3a2e928b6ac63f953d009cc3d
+voteYesTx: 0x61a7ac0254ccfbd402c966a968ca034e8ef58632dfa10ec7e3073ea8785f5f3c

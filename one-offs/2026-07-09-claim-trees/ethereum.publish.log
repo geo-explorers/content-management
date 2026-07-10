@@ -1,0 +1,49 @@
+════════ Ethereum claim tree + page ════════
+  L0-E1 stewards: f95df73ab23b4872ac8f8bfee09f6d90 (+3🟢/3🔴)
+  L0-E2 enriched (existing): 0df40ad2e07542fcb5dc605b21c0d8c8 (Is factual=false + desc + Topics)
+  3 Questions re-homed: Topics -> Ethereum
+  blocks: 🔥 Key claims 066ff444f83247abb5573d2eb4fe6560 (2 items) · ❓ Open debates 0c764c68f4184e2bb1b71e60b89af120 (query)
+  articles: 5 · created args: 6
+  52 ops
+{
+  "articles": {
+    "tradingview": "a46aa15a3f41481894388d8c1a7343f8",
+    "coindesk_labs": "50daecf2bbc54b03b763397d87a6950e",
+    "techtimes": "b19b555d29fd423f88ef24ca28bd9638",
+    "coindesk_gap": "9fe078eefbae4ecebff4ebc40169443e",
+    "cryptodaily": "d356337002444d29bfc661ad5f001363"
+  },
+  "args": [
+    {
+      "side": "supporting",
+      "id": "ef6b4ea544a74b3f9fe5513441a803db"
+    },
+    {
+      "side": "supporting",
+      "id": "54e58cbdbfd54af88697e551c9e40acd"
+    },
+    {
+      "side": "supporting",
+      "id": "26738375405143d7b7855c1efbb0eef2"
+    },
+    {
+      "side": "opposing",
+      "id": "52fe0408cb224981882df06e2a0d9802"
+    },
+    {
+      "side": "opposing",
+      "id": "98f3c099b5cd42dfa7cd2556d4d8eeba"
+    },
+    {
+      "side": "opposing",
+      "id": "f4965fa8cfec454c913b2e38f550038d"
+    }
+  ],
+  "e1": "f95df73ab23b4872ac8f8bfee09f6d90",
+  "keyClaimsBlock": "066ff444f83247abb5573d2eb4fe6560",
+  "openDebatesBlock": "0c764c68f4184e2bb1b71e60b89af120"
+}
+
+proposalId: 0xf88ec089090d44b89f6466ad645710bb 
+proposeTx: 0xa6a956459598d6a2b27cfee35099bc4c22478f085876d7fabff184890ea4848c
+voteYesTx: 0xd39b546d63fd9a97d3781e61bff720e6850f83d4651dbadd3374c5bca2da350e
