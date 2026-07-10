@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.1"
+  version: "0.2.3"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -181,39 +181,9 @@ Verified live:
 }
 ```
 
-### Cursor pagination loop (TypeScript)
+### Cursor pagination
 
-```typescript
-async function fetchAll(
-  typeId: string,
-  spaceId: string,
-): Promise<Array<{ id: string; name: string }>> {
-  const out: Array<{ id: string; name: string }> = [];
-  let cursor: string | null = null;
-
-  while (true) {
-    const afterClause = cursor ? `after: "${cursor}"` : "";
-    const res = await fetch("https://testnet-api.geobrowser.io/graphql", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `{
-        entitiesConnection(typeId: "${typeId}", spaceId: "${spaceId}", first: 500 ${afterClause}) {
-          nodes { id name }
-          pageInfo { hasNextPage endCursor }
-        }
-      }`,
-      }),
-    });
-    const { data } = await res.json();
-    const conn = data.entitiesConnection;
-    out.push(...(conn?.nodes ?? []));
-    if (!conn?.pageInfo?.hasNextPage) break;
-    cursor = conn.pageInfo.endCursor;
-  }
-  return out;
-}
-```
+Don't hand-roll it — use `paginate()` from the canonical client (below): `await paginate(Q.ENTITIES_BY_TYPE_CONNECTION, { typeId, spaceId })`. Manually, feed `pageInfo.endCursor` back as `after:` until `hasNextPage` is false — `entitiesConnection(…, first: 500, after: "<endCursor>") { nodes {…} pageInfo { hasNextPage endCursor } }`.
 
 ## Performance — think in filters, not loops (fixes the "5–10 minute query")
 
@@ -375,10 +345,28 @@ Use this when the user gives a `geobrowser.io/space/<SPACE_ID>/<ENTITY_ID>` URL 
    { entity(id: "PAGE_ID") { relations(filter: { typeId: { is: "beaba5cba67741a8b35377030613fc70" } }, orderBy: POSITION_ASC, first: 100) { nodes { id entityId position toEntity { id name } } } } }
    ```
    Verified against the live UI: `POSITION_ASC` order reproduces the page's table order exactly. Report blocks in that order — natural response order is NOT sorted (verified live).
-3. **Decode each block's filter** — run the single-entity query on the block; its `values`/`relations` describe what it queries (a `Type` relation = what it displays, plus property/relation filters, optional space scope). Read these off the block, not the UI.
-4. **Re-run each filter and paginate FULLY** — translate the block filter into an `entities(...)` query and page until exhausted. Offset caps at 1,000; for larger blocks use cursor pagination (`createdAt` ascending, feed the last row's `createdAt` back as `greaterThan`). Don't stop at page 1.
+3. **Decode each block's config — and its KIND** (`Data source type` relation). A **query block**
+   stores its query as a `Filter` **value** and its row order as a `Sort` **value** —
+   `{"sort_by":"<property-id>","sort_direction":…}` (verified live: a timeline block = Publish date,
+   descending). A **collection block** instead holds its rows as `Collection item` relations.
+4. **Re-run each filter, paginate FULLY, keep the block's OWN row order** — query block: `entities(...)`
+   with `orderBy` per its `Sort` value, paginating on the sort property (`greaterThan`/`lessThan`);
+   collection block: its `Collection item` relations with `orderBy: POSITION_ASC` (null positions last).
+   Offset caps at 1,000; don't stop at page 1. **Never substitute `createdAt` for the block's own
+   ordering** — that is exactly what shuffles tables vs the UI.
 5. **Inspect each row** per the review criteria — missing entries (cross-ref the expected list / domain knowledge), wrong descriptions (read the Description `text`), inaccurate properties (spot-check against the entity's Web URL).
 6. **Report once, structured** — per block: name + id, total rows (after full pagination), and per-issue flags `[OK]` / `[MISSING]` / `[WRONG DESCRIPTION]` / `[INACCURATE PROPERTY]`, plus a summary line (e.g. "Block 'Hospitals — California': 247 rows, 12 issues (3 missing, 7 wrong descriptions, 2 inaccurate prices)"). The reviewer needs the full picture before approve / send-back / partial-approve.
+
+### Front pages and tabs
+
+To reproduce a whole space page ("recreate the tables on every tab of the AI space"): front page =
+`{ space(id: "SPACE_ID") { page { id name } } }`; order its `Tabs` relations by position, same as blocks (verified live: the AI front page's 10 tabs match the rendered order; Tabs type id from `type { id name }`):
+
+```graphql
+{ entity(id: "PAGE_ID") { relations(filter: { typeId: { is: "TABS_REL_TYPE_ID" } }, orderBy: POSITION_ASC, first: 50) { nodes { position toEntity { id name } } } } }
+```
+
+Each tab is itself a page — enumerate its blocks by `position`, rows per each block's `Sort` value / `Collection item` positions.
 
 ## Finding type and property IDs by name
 
@@ -455,13 +443,42 @@ Common raw IDs (verified against the API — for GraphQL queries):
 
 More type, property, and space IDs live in `../../../src/constants.ts` and `../../../knowledge-graph-ontology.md`.
 
-## curl sanity check
+## Canonical client — use this, not hand-rolled curl
+
+`tooling/content-management/lib/gql.mjs` is the canonical read client (zero-dependency, Node 18+/Bun, endpoint baked in, 2 retries with backoff on 5xx/429/network + transient GraphQL errors, and it **throws with the full GraphQL error text** — it never swallows errors into an empty `data`, the classic false-"entity not found" bug). Prefer it over ad-hoc `curl`/`fetch` in every script and one-off:
+
+```js
+import { query, Q, paginate } from "../lib/gql.mjs"; // adjust relative path
+
+const data = await query(Q.ENTITY_BY_ID, { id: "ENTITY_ID" });
+const all = await paginate(Q.ENTITIES_BY_TYPE_CONNECTION, { typeId: "TYPE_ID", spaceId: "SPACE_ID" });
+```
+
+Exported templates (field shapes verified live): `Q.ENTITY_BY_ID`, `Q.ENTITIES_BY_TYPE`, `Q.ENTITIES_BY_TYPE_CONNECTION`, `Q.BACKLINKS`, `Q.PROPOSALS`. `paginate()` cursor-walks any `*Connection`.
+
+One-off from the shell — `lib/gql-cli.mjs` (prints JSON, exits 1 with the GraphQL error text on failure):
 
 ```bash
-curl -s --compressed 'https://testnet-api.geobrowser.io/graphql' \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"{ entities(typeId: \"7ed45f2bc48b419e8e4664d5ff680b0d\", first: 5) { id name } }"}' | jq .
+bun lib/gql-cli.mjs '{ entities(typeId: "7ed45f2bc48b419e8e4664d5ff680b0d", first: 3) { id name } }'
+bun lib/gql-cli.mjs 'query($id: UUID!) { entity(id: $id) { name spaceIds } }' '{"id":"ENTITY_ID"}'
 ```
+
+### Fields that DON'T exist (recurring mistakes)
+
+Every row below is a real, recurring schema error (verified against live introspection, 2026-07):
+
+| You wrote | What happens | Write instead |
+|---|---|---|
+| `{ nodes { … } }` on `entities` / `relations` / `values` / `proposals` | `Cannot query field "nodes"` — top-level flat lists return arrays | Select fields directly; want `nodes`/`totalCount`/`pageInfo`? use `entitiesConnection` etc. (Nested `entity.values` / `entity.relations` ARE connections and DO take `nodes`.) |
+| `spaceId` as an **Entity field** | `Cannot query field "spaceId" on type "Entity"` | Field is `spaceIds` (plural array). `spaceId` exists only as a top-level query ARG (`entities(spaceId: …)`). |
+| `type` in a **RelationFilter** | `… "type" is not defined by type "RelationFilter"` | `typeId: { is: "REL_TYPE_ID" }` (UUIDFilter); to filter on the type-as-entity use `typeEntity: { … }` (EntityFilter). |
+| `backlinks(spaceId: "…")` | `Unknown argument "spaceId"` — backlinks has no spaceId arg | `backlinks(filter: { spaceId: { is: "SPACE_ID" } })` |
+| Bare value/array in a filter: `filter: { typeId: "X" }`, `{ id: [a, b] }` | type mismatch — filter fields take filter OBJECTS | `id: { is: "X" }` · `id: { in: ["a", "b"] }` · `typeIds: { anyEqualTo: "X" }` |
+| `equalTo` in any filter | `… "equalTo" is not defined …` — it doesn't exist anywhere | UUIDFilter: `is` / `isNot` / `in` · StringFilter exact: `is` / `isInsensitive` · UUIDListFilter: `anyEqualTo` |
+
+## curl fallback
+
+No Node/Bun? `curl -s --compressed <endpoint> -H 'Content-Type: application/json' -d '{"query":"{ entities(typeId:\"…\", first:5){ id name } }"}' | jq .` — but prefer the canonical client (it retries + surfaces full GraphQL errors).
 
 ## Critical gotchas — quick reference
 
@@ -475,12 +492,13 @@ curl -s --compressed 'https://testnet-api.geobrowser.io/graphql' \
 8. **Relation `id` ≠ `entityId`** — `id` is the edge (for deletion); `entityId` is the relation-as-entity (for relation properties).
 9. **Never N+1.** One server-side filter beats a per-row loop by ~300× (469ms vs 131s measured) — see the Performance section before writing any loop.
 10. **No cache — only indexer lag.** Reads are always the latest indexed state; a fresh publish appears in seconds. Don't add cache-busting; just re-query after ~30s.
-11. **Page/table order = relation `position`** (lexicographic sort / `orderBy: POSITION_ASC`), not response order.
+11. **Page/table order = relation `position`** (lexicographic sort / `orderBy: POSITION_ASC`), not response order. **Rows INSIDE a table are different:** query-block rows follow the block's `Sort` value (sort_by property + direction); collection-block rows follow `Collection item` positions — never `createdAt`.
 12. **`entity(id:)` never nulls** — nonexistent IDs return an empty stub; test existence via `spaceIds`/`types`, never by null-check.
 
 ## More
 
 - `../../../knowledge-graph-ontology.md` — full ontology spec (types, properties, data types, blocks).
 - `../../../src/constants.ts` — well-known type/property/space IDs and the ranked SPACES list.
-- `../../../src/functions.ts` — reference `gql()` client with retry/backoff and pagination.
+- `../../../lib/gql.mjs` + `../../../lib/gql-cli.mjs` — the canonical client + CLI (see "Canonical client" above).
+- `../../../src/functions.ts` — older reference `gql()` client with retry/backoff and pagination (SDK-coupled; prefer `lib/gql.mjs`).
 - Sibling skills: `geo-publish` / `geo-orchestrate` (writes this hands off to), `geo-press-review` (built on these reads).
