@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.5.1
+  version: 0.5.2
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -154,6 +154,12 @@ else {
 (Repo users may instead import `publishOps`/`printOps` from `../src/functions.js` — that path uses `PK_SW`/`DEMO_SPACE_ID` and handles personal-vs-DAO automatically.)
 
 ## Bulk / dataset publishing — data goes in the file, not the script
+
+**Spreadsheet source? Convert to CSV first — the publish path reads CSV/JSON, not `.xlsx`/`.xls`/Sheets/Notion.** You publish from the `content-management` repo, so the converter is right there:
+```bash
+node src/xlsx-to-csv.cjs <file.xlsx>      # → <file>.csv  (uses `xlsx`; already installed via bun install)
+```
+Then publish that CSV. (No repo handy, or one quick file? Export to CSV by hand — Excel: Save As → CSV · Google Sheets: Download → CSV · Notion database: Export → CSV, since Notion only exports PDF/HTML/CSV.) Either way, **keep every column header verbatim** — headers are the schema-mapping keys.
 
 When the source is a **dataset** (a CSV/JSON of many rows — podcasts, people, books…), the generated script must **read and parse that file at runtime** and build ops by looping the rows. **Do NOT transcribe the rows into the script as a `const data = [ … ]` array.**
 
