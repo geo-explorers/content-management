@@ -19,7 +19,7 @@
     "actionable/geo-publish": {
       "version": "0.6.0",
       "approved_commit": "f851efa664d4b5a35158fb49006277a4e73e10de",
-      "content_sha256": "02e32124058de221df4f327c3a7610d03a10ae1ce666ba923209de480467ca1f"
+      "content_sha256": "f61d107868d618d3317248115215af6b6ffe41fadf997123150af4442db5421b"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",
