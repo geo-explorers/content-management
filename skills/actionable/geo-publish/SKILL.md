@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.5.2
+  version: 0.6.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -253,12 +253,156 @@ Every dataTypeName in the live API, mapped to the SDK value `type` (zero extra q
 - **Collect ALL ops into one array, publish ONCE.** Never publish in a loop.
 - Relations: set `toSpace` if the target is in a different space. Use deterministic IDs (`from.slice(0,16)+to.slice(0,16)`) for relation entities so reruns are idempotent.
 
+## Publishing page blocks (text, media, data, tabs)
+
+Pages carry **blocks** — the narrative/media/data content above an entity's properties. Every block is its own entity attached to the host via the **Blocks** relation `beaba5cba67741a8b35377030613fc70`, ordered by the relation's **`position`** (a fractional-index string). Blocks render on ANY entity (Topic, Claim, Page, …), not just `Page`. Verified live 2026-07-14 (canvas `b91409f702544bd989619de38f835dbe`); every op shape below was published and confirmed rendering.
+
+**Order blocks with `Position`:** `import { Position } from '@geoprotocol/geo-sdk'` → `let pos = null; pos = Position.generateBetween(pos, null)` per block, pass as the Blocks relation's `position`. To move a block later: `Graph.updateRelation({ id: <blocksRelationEdgeId>, position: Position.generateBetween(before, after) })`.
+
+### Well-known block IDs
+
+| Thing | ID |
+|---|---|
+| Blocks relation | `beaba5cba67741a8b35377030613fc70` |
+| Text block type · Markdown-content prop | `76474f2f00894e77a0410b39fb17d0bf` · `e3e363d1dd294ccb8e6ff3b76d99bc33` |
+| Data block type | `b8803a8665de412bbb357e0c84adf473` |
+| Data source type rel → Collection · Query source | `1f69cc9880d444abad493df6a7b15ee4` → `1295037a5d9c4d09b27c5502654b9177` · `3b069b04adbe4728917d1283fd4ac27e` |
+| Collection item rel · Filter val · Sort val | `a99f9ce12ffa4dac8c61f6310d46064a` · `14a46854bfd14b1882152785c2dab9f3` · `46afd0486bb5434e81adab6c7ad1204d` |
+| View prop · Properties(columns) prop | `1907fd1c81114a3ca378b1f353425b65` · `01412f8381894ab1836565c7fd358cc1` |
+| Views: Table · List · Gallery · Bulleted | `cba271cef7c140339047614d174c69f1` · `7d497dba09c249b8968f716bcf520473` · `ccb70fc917f04a54b86e3b4d20cc7130` · `0aaac6f7c916403eaf6d2e086dc92ada` |
+| Image type · Video type · IPFS-URL prop | `ba4e41460010499da0a3caaa7f579d0e` · `d7a4817c9795405b93e212df759c43f8` · `8a743832c0944a62b6650c3cc2f9c7bc` |
+| Cover rel · Avatar rel | `34f535072e6b42c5a84443981a77cfa2` · `1155befffad549b7a2e0da4777b8792c` |
+| Page type · Tabs prop | `480e3fc267f3499385fbacdf4ddeaa6b` · `4d9cba1c4766469881cd3273891a018b` |
+| Ranking block type · Aggregation-restriction rel · Editors-and-members | `150db6defe2344f0805afa57502e2c32` · `1e4caa2de3314efa8ac24e8d9d3e9fe9` · `10a7b10390f94a728087935052ffaa69` |
+
+### Text blocks — and everything that lives inside markdown
+
+`TextBlock.make({ fromId, text, position })` returns the ops for the block entity + its Blocks relation in one call (`import { TextBlock } from '@geoprotocol/geo-sdk'`). The `text` is **markdown**, and several "block types" the UI slash-menu shows are really just markdown inside a text block:
+
+```ts
+import { TextBlock, Position } from '@geoprotocol/geo-sdk';
+let pos = null;
+const push = (text) => { pos = Position.generateBetween(pos, null); ops.push(...TextBlock.make({ fromId: HOST, text, position: pos })); };
+
+push("## Heading\n\nIntro line.\n\n- bullet one\n- bullet two");          // headings + bullets
+push("See [CoinDesk](https://www.coindesk.com) for context.");            // web link (clickable)
+push("This mentions [Bitcoin](graph://2f8238b2f4c899fb23b4a2f8aabd996c)."); // INLINE ENTITY MENTION — navigates in-app
+push("```json\n{ \"a\": 1 }\n```");                                        // CODE BLOCK (fenced markdown; no Code block type exists)
+push("Inline $E=mc^2$ and display $$R=\\frac{a}{b}$$");                    // FORMULA (LaTeX; no Formula block type exists)
+```
+
+- **Inline entity mention** = a markdown link whose href is `graph://<entityId>` — renders as a mention and navigates to that entity in the app. This is the only way to reference an entity inside prose; it is documented nowhere else.
+- **Code and Formula are NOT block types.** The UI "Code block" / "Formula" menu items store fenced-code / `$…$`-`$$…$$` LaTeX markdown inside a normal text block. Publish them the same way.
+
+### Media blocks
+
+**Image block:** `Graph.createImage({ url, name, network: 'TESTNET' })` is **async** — it fetches the URL, uploads to IPFS, and returns `{ id, cid, dimensions, ops }`. Attach the returned entity via a Blocks relation.
+```ts
+const img = await Graph.createImage({ url, name: 'caption', network: 'TESTNET' });
+ops.push(...img.ops, ...Graph.createRelation({ fromEntity: HOST, toEntity: img.id, type: BLOCKS, position: nextPos() }).ops);
+```
+> **⚠ VALIDATE THE SOURCE URL FIRST.** `createImage` does `fetch(url)` with **no `response.ok`/content-type check** — if the source 400/403s (e.g. Wikimedia blocks bots, hotlink protection), the SDK silently uploads the **HTML error page as the image**; it publishes fine and only breaks at render. **Tell:** the resulting image entity has **no Width/Height** (`imageSize()` failed). Guard: pre-fetch and check `res.ok` + `content-type: image/*`, or download validated bytes and pass a Blob via `Ipfs.uploadImage({ blob }, 'TESTNET', true)` (returns `{ cid, dimensions }`) — refuse to publish if `dimensions` is missing. Prefer UA-friendly CDNs (pbs.twimg.com, assets.coingecko.com) over Wikimedia. (Core-team item: SDK should throw on bad fetch.)
+
+**Cover / Avatar:** same `createImage`, then a **Cover** (`34f5…`) or **Avatar** (`1155…`) relation from the host — not a Blocks relation.
+
+**Video block:** no SDK helper. Hand-roll the entity and attach via Blocks:
+```ts
+const vid = Graph.createEntity({ name: 'caption', types: ['d7a4817c9795405b93e212df759c43f8'],
+  values: [{ property: '8a743832c0944a62b6650c3cc2f9c7bc', type: 'text', value: mp4Url }] });
+```
+> **⚠ mp4 only.** Video blocks render a raw `<video>` tag: a direct `.mp4` plays; a **YouTube/Vimeo/external embed URL is a dead block**. No embed support today (core-team item).
+
+### Data blocks — collection, query, ranking
+
+A **Data block** is `Graph.createEntity({ name, types: [DATA_BLOCK] })` + a **Data source type** relation choosing its kind. **View and Columns live on the Blocks-relation ENTITY id, not on the block** (the same entity-id-vs-edge-id trap as Gate 3) — capture it by hex-decoding the relation op's `entity` field:
+
+```ts
+function blockRel(host, blockId, position) {
+  const rel = Graph.createRelation({ fromEntity: host, toEntity: blockId, type: BLOCKS, position });
+  ops.push(...rel.ops);
+  return Buffer.from(rel.ops[0].entity).toString('hex');   // ← the Blocks-relation entity id (View/Columns target)
+}
+```
+
+**Collection block** (hand-picked rows, your order):
+```ts
+const b = Graph.createEntity({ name: '🧪 My picks', types: [DATA_BLOCK] }); ops.push(...b.ops);
+ops.push(...Graph.createRelation({ fromEntity: b.id, toEntity: COLLECTION_SOURCE, type: DATA_SRC }).ops);
+const relEnt = blockRel(HOST, b.id, nextPos());
+ops.push(...Graph.createRelation({ fromEntity: relEnt, toEntity: LIST_VIEW, type: VIEW }).ops);        // view (default Table if omitted)
+ops.push(...Graph.createRelation({ fromEntity: relEnt, toEntity: DESCRIPTION_PROP, type: COLUMNS }).ops); // a shown column
+let ip = null;                                                                                          // ROW ORDER = item positions
+for (const id of ITEMS) { ip = Position.generateBetween(ip, null);
+  ops.push(...Graph.createRelation({ fromEntity: b.id, toEntity: id, type: COLLECTION_ITEM, position: ip, toSpace: crossSpace(id) }).ops); }
+```
+Row order follows the Collection-item **positions** (not name, not createdAt). Cross-space items render fine — set `toSpace`. Collections render **9 items per page**.
+
+**Query block** (live, filtered, sorted): same, but Data-source → Query source and two **text values** on the block:
+```ts
+const filter = JSON.stringify({ spaceId: { in: [SPACE] }, filter: { [TYPES_PROP]: { is: TYPE_ID }, [REL_PROP]: { is: TARGET_ID } } });
+const sort   = JSON.stringify({ sort_by: PUBLISH_DATE_PROP, sort_direction: 'descending' });
+const b = Graph.createEntity({ name: '📰 Latest', types: [DATA_BLOCK],
+  values: [{ property: FILTER, type: 'text', value: filter }, { property: SORT, type: 'text', value: sort }] });
+ops.push(...b.ops, ...Graph.createRelation({ fromEntity: b.id, toEntity: QUERY_SOURCE, type: DATA_SRC }).ops);
+blockRel(HOST, b.id, nextPos());
+```
+
+**Ranking block** (reader-submitted rankings): a dedicated type `150db6de…` (NOT a Data block), a `Filter` value (same prop as query blocks), and an **Aggregation restriction** relation:
+```ts
+const r = Graph.createEntity({ name: '🏆 Ranking', types: ['150db6defe2344f0805afa57502e2c32'],
+  values: [{ property: FILTER, type: 'text', value: filter }] }); ops.push(...r.ops);
+ops.push(...Graph.createRelation({ fromEntity: r.id, toEntity: '10a7b10390f94a728087935052ffaa69', type: '1e4caa2de3314efa8ac24e8d9d3e9fe9' }).ops); // Editors-and-members
+blockRel(HOST, r.id, nextPos());
+```
+
+**Switch a view later:** delete the old View relation + create the new one (a fresh block has no View rel → default Table).
+
+### Tabs
+
+A tab is a **Page** entity (`480e3fc2…`) linked from the host via the **Tabs** property `4d9cba1c…`; the tab's own blocks attach to the **Page**, not the host. The default Overview tab is implicit.
+```ts
+const page = Graph.createEntity({ name: 'News', types: ['480e3fc267f3499385fbacdf4ddeaa6b'] }); ops.push(...page.ops);
+ops.push(...Graph.createRelation({ fromEntity: HOST, toEntity: page.id, type: '4d9cba1c4766469881cd3273891a018b', position: nextPos() }).ops);
+// then build blocks with fromId = page.id
+```
+
+### ⚠ Block idempotency — re-publishing duplicates blocks
+
+`TextBlock.make` / `DataBlock.make` / `createEntity` **mint a fresh id every call**, so re-running the same publish creates a SECOND copy of every block (verified: 5 text blocks → 10). There is no platform dedup. If a block publish must be re-runnable, pass **deterministic ids** (e.g. `id` derived from `HOST + a stable slug`) to `createEntity`/`createRelation` so a rerun is a no-op. (Note: `TextBlock.make` doesn't accept an id — build the text block by hand with `createEntity({ id, types:[TEXT_BLOCK], values:[{property: MARKDOWN, type:'text', value}] })` + a deterministic Blocks relation when you need idempotency.)
+
+### Reading block order back (verification)
+
+The rendered order follows the SDK/UI ASCII fractional-index order. **Caveat:** GraphQL `orderBy: POSITION_ASC` collates positions **case-insensitively** and can disagree with the UI (a `Zz…` position renders first but sorts last via the API). When you verify order over the API, sort client-side with `Position.compare`, don't trust `POSITION_ASC` for mixed-case positions. (Core-team item.)
+
 ## Personal vs DAO spaces
 
 | | Personal | DAO |
 |---|---|---|
-| Publish | instant (`personalSpace.publishEdit`) | proposal + vote (`daoSpace.proposeEdit`) |
-| Access | your wallet only | must be an editor |
+| Publish | instant (`personalSpace.publishEdit`) | **proposal + YES vote** (`daoSpace.proposeEdit` → `voteProposal`) |
+| Access | your wallet only | must be an editor of the DAO |
+
+**DAO publish is a two-call flow — a FAST proposal still needs a YES vote to execute** (it does NOT auto-execute):
+```ts
+import { daoSpace, getSmartAccountWalletClient } from '@geoprotocol/geo-sdk';
+const wallet = await getSmartAccountWalletClient({ privateKey });
+const { proposalId, to, calldata } = await daoSpace.proposeEdit({
+  name: 'edit name', ops, author: AUTHOR,                    // AUTHOR = your person/space id (hex, no 0x)
+  daoSpaceAddress: DAO_ADDR,                                 // 0x… contract address of the space
+  callerSpaceId: `0x${AUTHOR}`, daoSpaceId: `0x${SPACE}`,    // both bytes16, 0x-prefixed
+  votingMode: 'FAST', network: 'TESTNET',
+});
+await wallet.sendTransaction({ to, data: calldata });
+const pid = String(proposalId).startsWith('0x') ? proposalId : `0x${proposalId}`;
+const v = daoSpace.voteProposal({ authorSpaceId: `0x${AUTHOR}`, spaceId: `0x${SPACE}`, proposalId: pid, vote: 'YES' });
+await wallet.sendTransaction({ to: v.to, data: v.calldata });
+```
+After publishing, poll the indexer (`tooling/scripts/wait-for-index.sh <id>`) before verifying — reads lag the write by seconds.
+
+### SDK gotchas (block/publish scripts)
+
+- **`Graph.deleteEntity` is async AND requires `spaceId`** — unique among op builders (`await Graph.deleteEntity({ id, spaceId })`). Every other builder is sync and space-less.
+- **`TextBlock.make` / `DataBlock.make` return `Op[]` only** — no created id. Generate the id yourself first (`import { Id } from '@geoprotocol/geo-sdk'`… or build the block via `createEntity`) when you need to reference the block (views/columns/idempotency).
+- `createImage` / `Ipfs.uploadImage` are async (network I/O); the rest of `Graph.*` are sync.
 
 ## What this skill does NOT do
 

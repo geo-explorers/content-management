@@ -49,7 +49,8 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## actionable/
 
-### geo-publish — 0.5.2
+### geo-publish — 0.6.0
+- 2026-07 · **Page-block recipes** (Monday QA, all op shapes verified live on canvas `b91409f7…`): new "Publishing page blocks" section — well-known block IDs; text blocks (markdown, inline entity mentions via `graph://<id>`, code/formula as fenced markdown — no separate block types); media (image via `createImage` + **bad-fetch guard**: SDK uploads HTML error pages silently, tell = no Width/Height; cover/avatar rels; mp4-only video); data blocks (collection/query/ranking — **View & Columns live on the Blocks-relation entity id**, same edge-vs-entity trap as Gate 3; collection row order = item positions, 9/page); tabs (Page entity via Tabs prop); block idempotency (fresh id per call duplicates on re-publish → deterministic ids); block-order read-back caveat (`POSITION_ASC` collates case-insensitively — sort client-side). Review: all 13 IDs + SDK exports re-verified live.
 - 2026-07 · Spreadsheet-source note in "Bulk / dataset publishing": the publish path reads CSV/JSON, not `.xlsx`/`.xls`/Sheets/Notion — convert first. Editors publish from the repo, so lead with the in-repo converter `src/xlsx-to-csv.cjs` (SheetJS; `xlsx` dep); manual export (Excel/Sheets/Notion→CSV) as the fallback. Validated end-to-end: `.xlsx` → CSV → 3 Person entities published to a personal space.
 
 ### geo-publish — 0.5.1
