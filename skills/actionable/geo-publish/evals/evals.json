@@ -23,6 +23,29 @@
         "Stops and surfaces a use-existing / publish-anyway choice if a likely duplicate is found",
         "Never publishes without an explicit confirmation"
       ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create an entity called 'Elon Musk' in my personal space. No type, just the name and a description.",
+      "expected_output": "Gate 4 fires: the skill refuses the typeless create, proposes a type (Person), and only proceeds once a type is agreed.",
+      "files": [],
+      "assertions": [
+        "Gate 4 (type-required) FIREs in the Gates block; the plan is not executed as asked",
+        "Proposes at least one concrete type for the entity instead of just refusing",
+        "Offers no 'publish anyway' path for a typeless create",
+        "The generated script uses the createTypedEntity wrapper (no raw Graph.createEntity)"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Publish the claim 'The sky is blue' (type Claim) to my personal space, and attach a new source entity for it pointing at https://example.com/sky.",
+      "expected_output": "Gate 4 checks the INLINE relation target too: the new source entity must also carry a type (e.g. Source/Article), not just the headline claim.",
+      "files": [],
+      "assertions": [
+        "The inline-created source entity gets a type; a typeless source target fires Gate 4",
+        "The dry-run output lists BOTH created entities as 'Creating: <name> [<type>]'",
+        "All ops collected into one array and published once"
+      ]
     }
   ]
 }

@@ -1,16 +1,16 @@
 ---
 name: geo-publish
-description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
+description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.6.0
+  version: 0.7.0
 ---
 
 # Geo Knowledge Graph — Publishing
 
 Create, update, and delete entities and relations in Geo using `@geoprotocol/geo-sdk`. Portable (works in any local-execution agent: Claude Code, Codex CLI/Desktop, Claude cowork). **Browser-only assistants cannot publish** — they have no local runtime; send them to `geo-query` for reads.
 
-Every write passes three mandatory safeguards FIRST: **semantic-duplicate check**, **schema check**, and **two-phase dry-run → explicit confirm**. These are not optional.
+Every write passes four mandatory safeguards FIRST: **semantic-duplicate check**, **schema check**, **type-required check**, and **two-phase dry-run → explicit confirm**. These are not optional.
 
 ## Prerequisites
 
@@ -39,6 +39,7 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
 7. **Properties on a relation go on the relation ENTITY id, NEVER the relation id.** A relation has two different IDs. Knowledge (values/name/types) written to the relation's own `id` is silently lost — the write "succeeds" and shows in the proposal, but renders nowhere. See [Relations — entity id vs relation id](#relations--entity-id-vs-relation-id-critical). This is not optional; getting it wrong mis-published ~1000 rows in production.
 8. **EVERY value's `type` must match the property's declared `dataTypeName` — check all of them against the mapping table, not just dates.** The discovery query already returns `dataTypeName` per property, so this is a zero-extra-queries table lookup (see [Data-type mapping](#data-type-mapping-datatypename--sdk-value-type)). ANY mismatch publishes but silently doesn't render (datetime-as-date is just the classic case). Mismatches → Gate 2.
 9. **Test ONE before any bulk publish.** Publish a single row first, open it on geobrowser.io, and confirm every field actually renders (not just "the API returned success"). Only then run the batch. Both failure modes above are *silent* — API/proposal say OK while the data is lost — so visual confirmation of one row is the only real check.
+10. **Every entity this publish CREATES must carry at least one type — nothing ships typeless.** Any type is acceptable; none is not ("I cannot publish Elon Musk and not type it Person; I cannot publish a claim without type Claim"). The check covers **every** created entity, not just the headline one: relation targets minted inline (a Source created to cite a claim), entities looped from CSV rows, block entities (those are typed by construction and pass automatically). A typeless create → **Gate 4**. Two carve-outs: (a) **updating** an entity that already exists typeless on Geo → WARN and propose adding a type in the same publish, don't block the repair; (b) a dataset with no Types column → resolve types **with the editor** before generating any ops — never invent them silently. Untyped entities are the #1 data-quality defect on Geo; the platform is expected to reject them eventually, so don't publish what tomorrow's Geo would bounce.
 
 ## Required output template (post BEFORE writing any script)
 
@@ -59,6 +60,7 @@ test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo
 - **Gate 1 (semantic-duplicate)**: PASS | FIRE — <reason/hits>
 - **Gate 2 (schema-violation)**: PASS | FIRE — <off-schema list AND every planned value checked against the dataType mapping table; list any mismatch (e.g. datetime-as-date, Checkbox-as-text, Relation-as-value)>
 - **Gate 3 (relation-target)**: PASS | FIRE — <any value targeting a relation `id` instead of the relation `entityId`; see Relations section>
+- **Gate 4 (type-required)**: PASS | FIRE — <EVERY created entity (incl. inline relation targets and per-row creates) carries ≥1 type in this publish; list any typeless creates WITH a proposed type each; warn-list any typeless existing entities being updated>
 If any FIRES, STOP, run the gate dialog, wait for the user.
 
 ## Plan (only if gates PASS or waived)
@@ -88,6 +90,15 @@ Reply **"go"** to authorize writing + dry-running the script.
 > - **Fix the target** → I'll {put it in `createRelation`'s `entityValues` | resolve the relation's `entityId` and target that} instead.
 > - (There is no "publish anyway" — writing to a relation id silently loses the data.)
 
+**Gate 4 — type-required fires:**
+> **{n} entities in this plan would publish without a type:** {list}.
+> Suggested types (from this space's schema / the ontology): {name} → **{proposed type}**, …
+> - **Apply suggested types** → I'll add the Types edges to the plan.
+> - **Set types yourself** → tell me the type per entity (any type works; none doesn't).
+> - (There is no "publish anyway" — typeless entities are the graph's #1 quality defect and the platform is expected to reject them.)
+>
+> *Warn-only variant (existing entity):* updating **{name}** (`{id}`), which is already on Geo **without a type** — recommend adding one in this publish. Proceeding either way.
+
 ## Discovery — how to produce the four outputs
 
 GraphQL against `https://testnet-api.geobrowser.io/graphql` (no auth). Delegate to `geo-query` if loaded.
@@ -114,7 +125,7 @@ Property IDs from `values.nodes[].property.id`; **the property's declared type f
 
 1. **Write** `scripts/<YYYY-MM-DD>-<slug>.ts` with `DRY_RUN = true` (template below).
 2. **Run** it yourself: `node --env-file=.env.geo-publish scripts/<file>.ts` (or `--env-file=.env` for repo/PK_SW users; or `bun run` with `--env-file`). Prints ops, touches nothing.
-3. **Surface** op count + first-op sample + path, then the publish/stop prompt.
+3. **Surface** op count + first-op sample + path, then the publish/stop prompt. The dry-run output MUST list every created entity as `Creating: <name> [<type>, …]` — type coverage stays visible at the human gate (see the Gate-4 helper below).
 4. On `publish`: set `DRY_RUN = false`, re-run, report tx hash + `https://www.geobrowser.io/space/<spaceId>/<entityId>`.
 
 Self-contained script template (portable — direct SDK, no repo helpers required):
@@ -153,6 +164,27 @@ else {
 
 (Repo users may instead import `publishOps`/`printOps` from `../src/functions.js` — that path uses `PK_SW`/`DEMO_SPACE_ID` and handles personal-vs-DAO automatically.)
 
+### Gate-4 helper — mandatory in every generated script
+
+Create **every** entity through this wrapper (headline entities, inline relation targets, per-row creates). It makes a typeless create impossible at runtime — the belt behind the Gate-4 suspenders — and produces the dry-run type listing:
+
+```typescript
+// Gate 4 (type-required): no entity ships typeless.
+const created: { id: string; name: string; types: string[] }[] = [];
+function createTypedEntity(params: Parameters<typeof Graph.createEntity>[0]) {
+  if (!params.types?.length)
+    throw new Error(`GATE 4: "${params.name ?? '(unnamed)'}" would publish without a type — every created entity needs at least one.`);
+  const r = Graph.createEntity(params);
+  created.push({ id: r.id, name: params.name ?? '(unnamed)', types: params.types });
+  return r;
+}
+// …build ops using createTypedEntity(...) everywhere…
+// dry-run visibility (print before the publish/stop prompt):
+for (const c of created) console.log(`Creating: ${c.name} [${c.types.join(', ')}]`);
+```
+
+Block entities pass automatically (the block recipes always set their types). Raw `Graph.createEntity` calls in a generated script are a review defect.
+
 ## Bulk / dataset publishing — data goes in the file, not the script
 
 **Spreadsheet source? Convert to CSV first — the publish path reads CSV/JSON, not `.xlsx`/`.xls`/Sheets/Notion.** You publish from the `content-management` repo, so the converter is right there:
@@ -162,6 +194,8 @@ node src/xlsx-to-csv.cjs <file.xlsx>      # → <file>.csv  (uses `xlsx`; alread
 Then publish that CSV. (No repo handy, or one quick file? Export to CSV by hand — Excel: Save As → CSV · Google Sheets: Download → CSV · Notion database: Export → CSV, since Notion only exports PDF/HTML/CSV.) Either way, **keep every column header verbatim** — headers are the schema-mapping keys.
 
 When the source is a **dataset** (a CSV/JSON of many rows — podcasts, people, books…), the generated script must **read and parse that file at runtime** and build ops by looping the rows. **Do NOT transcribe the rows into the script as a `const data = [ … ]` array.**
+
+**Types come first (Gate 4):** if the dataset has no Types column and no single agreed type, STOP and resolve the type(s) with the editor before generating ops — per-row from a column, or one confirmed constant for the whole file. Never invent types, and never let a row through without one.
 
 Why this is a hard rule (it caused a real publish outage):
 - **It doesn't scale / times out.** Embedding rows makes the model spend the whole run *copying data* into the file instead of writing logic. On a large dataset it hits the output-token limit ("file too large", "spent too long reading") and **never publishes**.
@@ -228,6 +262,7 @@ A relation (GraphQL `Relation`) has:
 
 ## Entity rules
 
+- **At least one type, always** (HARD RULE 10 / Gate 4). An entity without a type is invisible to schemas, queries and cleanup — the bare minimum for anything on Geo is a type.
 - Names **must NOT** end with a period. Descriptions **MUST** end with a period.
 - **Which value `type` a property wants is decided by its schema, not by how the value looks** — read `dataTypeName` from discovery and map it (table below). A mismatched value publishes but never renders.
 
