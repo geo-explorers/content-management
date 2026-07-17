@@ -1,19 +1,19 @@
 ---
 name: geo-clean
-description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (orphan check, backlink-based Main selection, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
+description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Geo Knowledge Graph — Cleaning
 
-Editor-facing skill for cleaning Geo: finding bad data, merging duplicates, deleting orphans, fixing types. Uses Bun + `@geoprotocol/geo-sdk` locally on the editor's machine. Every destructive op runs through a Discovery + Gates + Plan template, a dry-run, and an explicit `publish` confirmation.
+Editor-facing skill for cleaning Geo: finding bad data, merging duplicates, deleting orphans, moving entities, fixing types. Uses Bun + `@geoprotocol/geo-sdk` locally on the editor's machine. Every destructive op runs through a Discovery + Gates + Plan template, a dry-run, and an explicit `publish` confirmation.
 
 This skill complements the publishing skill (which creates new entities). Both share the same local setup. Works on any host (Claude Code, other desktop agents) that can read files, run bash, and reach the network.
 
 ## Prerequisites — verify before first run
 
-1. **`content-management` repo cloned** locally. The skill runs FROM this directory and imports helpers from `src/` (`mergeEntities`, `OpsBatch`, etc.).
+1. **`content-management` repo cloned** locally. The skill runs FROM this directory and imports helpers from `src/` (`mergeEntities`, `selectCanonicalTopic`, `OpsBatch`, etc.).
 2. **Bun installed** (`bun --version` works).
 3. **`bun install` already run** (`node_modules/` exists).
 4. **`.env` filled in**: `PK_SW=` and `DEMO_SPACE_ID=` set. Never `cat .env` or `grep PK_SW .env` — to verify presence use `test -f .env && grep -q '^PK_SW=' .env && echo ok`.
@@ -27,13 +27,14 @@ If any prerequisite is missing, STOP and ask the editor to fix it. Do not work a
 2. **Two-phase execution**:
    - After `go`: write the script with `DRY_RUN = true`, run the dry-run yourself, surface the summary to the editor.
    - Ask: *"Output looks right? Type **publish** to apply the cleanup, or **stop** to discard."*
-   - On `publish`: flip `DRY_RUN = false`, run again, report the tx hash + space verify URL.
+   - On `publish`: flip `DRY_RUN = false`, run again, report the per-space proposal URLs (or tx hash for a personal space) + space verify URL.
    - On `stop`: do nothing; leave the script for review.
 3. **Never auto-execute a destructive op without `publish`.** `go` only authorizes the dry-run.
-4. **Logging is mandatory.** Every dry-run prints per-entity decisions: `[MERGE] X (id) ← Y (id), Z (id)` / `[DELETE] X (id, 0 backlinks)` / `[SKIP] X (id, reason)`. No silent ops.
+4. **Logging is mandatory.** Every dry-run prints per-entity decisions: `[MERGE] X (id) ← Y (id), Z (id)` / `[DELETE] X (id, 0 backlinks)` / `[SKIP] X (id, reason)` / `[ESCALATE] X (both-scored)`. No silent ops.
 5. **Always use deterministic IDs for relation entities** created during merges: `from.slice(0,16) + to.slice(0,16)`. Reruns must be idempotent.
 6. **Additive-only when in doubt.** If a "fix" could be done either by adding new data or by deleting old, prefer adding. Only delete when the user explicitly authorized.
 7. **Data goes in the file, not in the script.** When a cleanup runs over a large list (the `scripts/<date>-*.json` exports this skill writes, or a candidate-ID/CSV list), the script **reads and parses that file at runtime** — it must NOT have the IDs/rows transcribed into it as a `const list = [ … ]` array. Baking the list in blows the token budget and times out on big sets, and risks the model corrupting IDs as it copies. The script holds only logic + helper imports; the list stays in the file. Full pattern: `geo-publish` → "Bulk / dataset publishing".
+8. **Voting data is untouchable.** Geo's entity-voting data — the **Score** value property (`85a4668a42fa4f488969c0a9de0c294b`, "net upvotes minus downvotes", system-maintained), **Rank Votes** relations (`19a4cfff45f24150abf2af0f43eb2eec`, one per voter, usually from the voter's personal space) and the vote ordinal/weighted value properties (`49ee1b8918204e75a1ae38a2dcaad4a5`, `103701ddcabe4a8e835b10345327b647`) — belongs to the voters and the system, not to the entity being cleaned. **No generated op may set, copy, unset, redirect, or delete any of it, in ANY operation.** Redirecting a Rank Votes backlink fabricates a vote; deleting one destroys a voter's data. The `src/` helpers exclude these at op-generation time (`EXCLUDED_VALUE_PROPERTY_IDS` / `EXCLUDED_RELATION_TYPE_IDS` in `src/constants.ts`); scripts that assemble ops by hand must apply the same exclusion and run a scrub pass over the final batch (see [`reference.md`](reference.md)). Accepted consequence: a merged-away duplicate keeps its votes and Score.
 
 ## The operations
 
@@ -46,8 +47,9 @@ Each operation has a dedicated section below with its own Discovery, Gates, and 
 | Find blank properties | No | — |
 | Find stale relations | No | — |
 | Find duplicate-type relations | No | — |
-| Merge duplicates | Yes | Canonical (DAO) wins + is never deleted; then most backlinks |
-| Delete orphan | Yes | Must have 0 incoming relations |
+| Merge duplicates | Yes | Deterministic canonical cascade + Both-Scored escalation + untouchable spaces |
+| Delete orphan | Yes | Must have 0 incoming relations (vote edges listed separately) |
+| Move / copy entity | Yes | Representative-topic guard; explicit `from_space` on multi-space sources |
 | Fix data type | Yes | Old value preserved as comment until publish |
 | Fix duplicate-type relations | Yes | Keep exactly one edge per (entity, type) |
 | Delete space data | Yes (mass) | Editor types space name to confirm |
@@ -61,7 +63,9 @@ Used standalone OR as the discovery step before a merge. **Two passes** — run 
 ### Pass 1 — Exact-name grouping (cheap, deterministic)
 Pattern B from `geo-query` (list entities of a type): list entities of the target type (paginate every page, not just the first 50). Group by `name.toLowerCase().trim()`. Surface groups with 2+ members.
 
-Pass 1 works well for **People / Orgs / Projects** (canonical names recur verbatim — "ethereum" published four times). It is **structurally blind to news/article near-duplicates**: two stories about the same event almost never share a byte-identical headline, so Pass 1 returns 0 groups even when genuine same-event dupes exist. Verified: exact-name grouping over 1,087 Crypto News stories → **0 groups**, while ~4 genuine same-event near-dupes were present.
+Pass 1 works well for **People / Orgs / Projects / Topics** (canonical names recur verbatim — "ethereum" published four times). It is **structurally blind to news/article near-duplicates**: two stories about the same event almost never share a byte-identical headline, so Pass 1 returns 0 groups even when genuine same-event dupes exist. Verified: exact-name grouping over 1,087 Crypto News stories → **0 groups**, while ~4 genuine same-event near-dupes were present.
+
+**Inventory mode (optional, for big sweeps):** when the editor wants a space-wide or multi-space dedup campaign, write the Pass-1 groups to `scripts/<date>-merge-inventory.json` (HARD RULE 7 format: one row per group — name, ids, optional forced `canonical_id`, optional `preferred_name`) and keep a **deferred-twins ledger** (`scripts/<date>-deferred-twins.json`) for out-of-scope twins found along the way (wrong type, multi-space assignments pending placement, both-scored groups). Deferred ≠ ignored: the ledger is the queue for a later pass.
 
 ### Pass 2 — Semantic near-duplicate detection (LLM judgment, NOT string similarity)
 Run this for text-heavy types. The goal is **same real-world event told twice**, e.g.:
@@ -92,7 +96,7 @@ Total entities scanned: {N}
 | "Senate advances GENIUS Act in new cloture vote" / "GENIUS Act advances toward final Senate vote" | yes | high | same Senate vote, same bill |
 | "Circle secures MiCA license" / "Kraken secures MiCA license" | no | high | template match, different firms — KEEP SEPARATE |
 
-Reply with the group(s) to merge (Pass 1: or "all"; Pass 2: name them explicitly — no "all"). Main = most backlinks.
+Reply with the group(s) to merge (Pass 1: or "all"; Pass 2: name them explicitly — no "all"). The canonical is picked by the deterministic cascade (see Merge).
 ```
 
 No write happens here. Output is the input for the Merge operation.
@@ -101,40 +105,86 @@ No write happens here. Output is the input for the Merge operation.
 
 ## Operation: Merge duplicates (destructive)
 
-The most-requested op. Other group members merge INTO the Main and are deleted.
+The most-requested op. Losing members merge INTO the canonical (Main) and are removed — **except** copies living in untouchable spaces, which survive there (see the Untouchable-Spaces rule). The canonical is picked by a **deterministic cascade**, not by eyeball.
 
-**Main-selection rule (canonical-safe):**
-1. **A canonical (DAO-space) entity always wins over a personal one** — it must be the Main, because the loser gets deleted and a canonical entity must never be deleted by an auto-merge.
-2. **Within the same class** (all personal, or — rare — disambiguated by the editor), **most incoming backlinks wins.**
-3. **Two or more members in DAO spaces → do NOT auto-merge** (see the Canonical-Delete gate). The `mergeEntities` helper enforces this: it throws unless a non-PERSONAL secondary is explicitly waived with `allowCanonicalDelete`.
+### Canonical selection — deterministic cascade
+
+Selection runs during Discovery, BEFORE any script is written. Same data in, same pick out. Implemented by `src/select_canonical.ts` (`fetchCandidateMeta` → `buildScoringContext` → `selectCanonicalTopic`) — generated scripts call the helper, never re-implement the rules.
+
+**Step 0 — hard exclusions.** A candidate resident in a **personal space** or a **dataset space** (`DATASET_SPACE_IDS` in `src/constants.ts`) can never be canonical — never reference a personal- or dataset-space copy, whatever its backlink count. **Root exception:** a candidate resident in Root (Geo) (`a19c345ab9866679b001d7d2138d88a1`) is ALWAYS eligible regardless of its other residencies — the Root copy IS the graph's canonical entity.
+
+**Step 1 — Both-Scored check.** If ≥2 eligible candidates carry a Score value → do NOT merge; fire the Both-Scored gate (below).
+
+**Step 2 — priority cascade.** First rule that separates the candidates wins:
+
+| # | Rule | The candidate that wins… |
+|---|---|---|
+| 1 | Canonical space | IS a canonical space's representative topic (`space(id){topicId}` resolves to it). E.g. reference Crypto `0fcd62b5798f4078b84fa535ac95fcf3` (the Crypto space's topic), not Crypto `c6d666eb7ffa40d29db1f713eb1943f3`. |
+| 2 | Canonical topic | lives in Root (Geo) space |
+| 3 | Properly placed | is NOT resident *only* in a catch-all space (currently: Podcasts `b5a31f8182b042437ede0f84ee02f104`). A demotion, not an exclusion — the catch-all-only copy still merges in as a secondary. |
+| 4 | Featured | has a `Tags → Featured topic` relation (`b69b8b1659df4e6d99d79956a30e8932`) — these render as Featured Timelines in the News App |
+| 5 | Scored | carries a Score value (the single scored candidate is strongly preferred) |
+| 6 | Curated | has a `Tags → Curated topic` relation (`7f796eb5bfc5449c98649bf7d996a2ca`) |
+| 7 | More backlinks | higher TRUE backlink count (`relationsConnection.totalCount`, all spaces — never a first-page count) |
+| 8 | More data | more values + relations |
+| 9 | Older | smaller `createdAt` |
+| 10 | Lowest id | `id.localeCompare` — stable final tiebreak |
+
+Rules 1–6 are topic-flavored: for types that carry no tags/scores/representative status they simply never fire, and the cascade falls through to 7–10 — so it is safe for **any entity type** (People, Projects, Shows, …). (Score deliberately sits below Featured, following the implemented selection rules; the guidance doc's prose reads it higher.)
+
+**Editor override.** An explicit editor-designated Main (reply with the id, or the `canonical_id` column in an inventory file) bypasses the cascade AND the Both-Scored escalation — a human has decided. Log it as `[forced]`.
+
+### Untouchable spaces — vacate semantics (automatic policy)
+
+Members partition three ways; the Plan must name each member's bucket:
+
+- **eligible** — no personal/dataset residency (or Root-resident): may be canonical; losers are fully merged + deleted.
+- **vacatable** — canonical-ineligible (personal/dataset residency) but ALSO resident in managed DAO spaces: **vacated from the managed spaces only**; the copy **survives untouched in its personal/dataset spaces**, and backlinks living in surviving spaces keep pointing at the surviving copy.
+- **excluded** — resident ONLY in personal/dataset spaces: left entirely untouched (not merged, not deleted — not our data). A group where every member is excluded is skipped (`no-eligible-candidate` escalation).
+
+Two standing guards:
+- **Representative-topic guard:** never vacate a space's representative topic (`space.topicId === entity`) from its own space — it is part of the space's identity. It survives there like a personal-space copy does.
+- **Editor's own personal space:** the exclusions protect OTHER people's spaces. If the editor explicitly asked to clean their own personal space, personal copies there are fair game — say so in the plan.
+
+### Cross-space semantics — merge consolidates, never relocates
+
+For a secondary resident in a foreign (non-anchor) space, the merge is **references-only**: backlinks in that space are redirected to the canonical (they resolve cross-space by global id); the twin's space-local values and outgoing relations are dropped with the residency. **A merge never grants the canonical new residencies** — a space that loses its twin gets the topic back only via a deliberate Move (see the Move/copy operation). The Plan's END STATE must warn about every such space.
 
 ### Discovery (mandatory before Plan)
 
 For every group the editor selected:
 
-1. **List every member** (id, name, space, types).
-2. **Count backlinks per member, paginated to completion.** Query `relations(filter: { toEntity: { id: { is: "<id>" } } })` with `first: 50` and cursor-paginate by last `createdAt` until a page returns fewer rows than `first`. **Do NOT stop at page 1.** Record the total page count alongside the row count.
-3. **Record each member's space type** (`spaces(filter: { id: { in: [...] } }) { id type }` — `DAO` = canonical, `PERSONAL` = personal). This drives Main selection and the Canonical-Delete gate.
-4. **Designate Main** per the canonical-safe rule above: any DAO member wins; otherwise most backlinks. (Two+ DAO members → stop, don't pick a Main.)
-5. **Inventory each non-Main member's values + outgoing relations** — these will be ported to Main.
-6. **Bucket the resulting ops by target space.** Each backlink op writes to the backlink's source space, not Main's space. A merge that touches Podcasts, Crypto, and PERSONAL becomes three separate transactions / governance proposals.
+1. **List every member** (id, name, spaces, types).
+2. **Fetch selection metadata per member** (one gql call each — query shapes in [`reference.md`](reference.md)): `spaceIds`, `representsSpaces` (spaces whose `topicId` is this entity), Score values, Featured/Curated tags, TRUE backlink `totalCount`, values+relations counts, `createdAt`.
+3. **Resolve the scoring context once per run**: each canonical space's representative-topic id, and which candidate spaces are `PERSONAL` (`space(id){ type }`).
+4. **Partition** members into eligible / vacatable / excluded; run the cascade → canonical + anchor space (a space shared by canonical and secondaries; topical canonical space preferred over Root).
+5. **Count backlinks per member, paginated to completion** (cursor-paginate `first: 500` until `hasNextPage` is false; record page count). The totalCount from step 2 ranks; the pagination proves completeness for migration.
+6. **Bucket the resulting ops by target space.** Each backlink op writes to the backlink's source space, not Main's space. A merge that touches Podcasts, Crypto, and a personal space becomes separate per-space transactions / governance proposals.
 
-### Gate — Canonical-Delete (HARD STOP)
+### Gate — Both-Scored (HARD STOP)
 
-Fires if **the would-be loser is in a DAO (canonical) space** — i.e. two+ members are in DAO spaces, or the only canonical member isn't the one with the most backlinks. A canonical entity must never be deleted by an auto-merge (this is the case that can nuke a canonical space).
+Fires if **two or more eligible members carry a Score value**. Scored topics are treated as canonical-grade; fusing two of them is a human call.
 
 STOP and tell the editor:
 
-> Group **"{name}"** can't be auto-merged — it would delete a **canonical** entity:
-> | Member | Space | Type | Backlinks |
+> Group **"{name}"** has {n} scored members — not merging (needs human review, escalate to Armando):
+> | Member | ID | Score | Spaces |
 > |---|---|---|---|
-> | … | … | DAO / PERSONAL | … |
+> | … | … | +12 | Crypto, Root |
+> | … | … | +3 | Podcasts |
 >
-> A canonical (DAO) entity must stay. Options:
-> - **One canonical + personal copies** → make the canonical entity the Main and merge the personal copies into it (safe). Reply **go** with that Main.
-> - **Two+ canonical duplicates** (e.g. two topics in the same DAO space) → this needs DAO **governance / the manual procedure**, not the auto-helper. Reply **skip**, or **force canonical-merge** to override (sets `allowCanonicalDelete` — you accept that a canonical entity will be deleted and will verify backlink migration yourself).
+> Options: **skip** (default — the group is written to the escalation report), or reply with the id to keep as Main (**forced override** — you accept merging scored topics).
 
-The `mergeEntities` helper backstops this gate: it refuses any non-PERSONAL secondary unless `allowCanonicalDelete: true` is passed.
+Escalated groups are appended to `scripts/<date>-escalations.txt` (name, ids, scores, spaces, reason `both-scored` / `no-eligible-candidate`) so the review queue survives the session.
+
+### Gate — Canonical-Delete (explicit authorization)
+
+Consolidation legitimately removes DAO-resident twins — but never silently. Two layers:
+
+1. **Plan layer:** the END STATE block (below) must name every canonical-space copy that gets removed and every space that LOSES the topic. The editor's `go` authorizes exactly that list.
+2. **Helper layer:** `mergeEntities` refuses any non-PERSONAL loser unless the script passes `allowCanonicalDelete: true`. The skill sets that flag ONLY in scripts generated after a `go` on a plan whose END STATE showed the removals. Never pass it preemptively.
+
+**Root invariant (⛔ absolute):** the Root (Geo) space must never lose a topic. If the planned END STATE removes a topic from Root, the plan is invalid — force the Root-resident twin as canonical or drop the group. Do not offer an override for this one.
 
 ### Gate — Big-Merge (HARD STOP)
 
@@ -158,13 +208,15 @@ Fires if the merge writes into **more than one space**.
 STOP and tell the editor:
 
 > This merge writes into **{S} spaces**:
-> | Space | createRelation | updateEntity | deleteRelation | deleteEntity |
-> |---|---|---|---|---|
-> | Crypto | 12 | 1 | 0 | 0 |
-> | Podcasts | 94 | 0 | 94 | 0 |
-> | PERSONAL | 1 | 0 | 0 | 1 |
+> | Space | createRelation | updateEntity | deleteRelation | deleteEntity | Can publish? |
+> |---|---|---|---|---|---|
+> | Crypto | 12 | 1 | 0 | 0 | yes (editor) |
+> | Podcasts | 94 | 0 | 94 | 0 | yes (editor) |
+> | World affairs | 3 | 0 | 3 | 0 | NO — fix package |
 >
 > Each non-personal space becomes its own DAO governance proposal. The Podcasts proposal in particular will churn the podcast app's topic links for **{N}** episodes.
+>
+> Ops for spaces where this wallet lacks editor access are NOT dropped and NOT force-published: they are exported as a **fix package** (`scripts/fix-packages/<space>/<date>/ops.json` + `report.txt` listing that space's editors) for the right editor to apply.
 >
 > Reply **go** to proceed across all spaces, or name spaces to exclude (e.g. `exclude Podcasts` — those backlinks stay pointing at the duplicate).
 
@@ -173,58 +225,101 @@ STOP and tell the editor:
 Discovery must surface, per member:
 
 ```
-Backlinks paginated to completion: YES (253 rows fetched across 6 pages of 50)
+Backlinks paginated to completion: YES (253 rows fetched across 6 pages, totalCount 253 ✓)
 ```
 
-If the helper returns a count without a page-count breakdown, the gate fires:
+If the paginated row count disagrees with `relationsConnection.totalCount`, or the helper returns a count without a page breakdown, the gate fires:
 
-> Backlink pagination for **{name}** ({id}) could not be confirmed as complete. The helper returned **{N}** rows but did not report page count. Refusing to proceed — under-migration risk. Update the helper or run the manual procedure.
+> Backlink pagination for **{name}** ({id}) could not be confirmed as complete. Refusing to proceed — under-migration risk. Investigate before merging.
 
-### Gate — Main selection
-If the Main is unclear (tied backlink counts, OR Main has 0 backlinks like every other member, OR Main is in a low-priority space), STOP and ask:
+### Gate — Selection ambiguity (residual)
 
-> Main is ambiguous for group **"{name}"**:
-> | Candidate | ID | Space | Backlinks |
-> |---|---|---|---|
-> | ... | ... | ... | ... |
->
-> Which entity should be Main? Reply with the id, or **skip** to leave this group untouched.
+The cascade is deterministic, so ties no longer stop the merge. This gate fires only when selection **cannot run**: metadata fetch failed for a member (entity not found / API errors), or the editor asked to override but named an id outside the group. Surface the metadata table and ask for an explicit Main or **skip**.
 
 ### Gate — Data-type mismatch
+
 If members have different data-type assignments for the same property name (e.g. one stores "Birth date" as `text`, another as `date`), STOP and ask which type wins. Don't silently coerce.
 
 ### Plan template
 
 ```
 ## Merge plan — type {type name}
-Groups: {G}
+Groups: {G}   Escalated: {E} (written to scripts/<date>-escalations.txt)
 Pagination: all members confirmed paginated to completion ✓
+Voting data: excluded from all ops (Score / Rank Votes stay put) ✓
 
 Per-space ops:
-| Space | createRelation | updateEntity | deleteRelation | deleteEntity |
-|---|---|---|---|---|
-| Crypto | 12 | 1 | 0 | 1 |
-| Podcasts | 94 | 0 | 94 | 0 |
-
-Duplicate handling: DELETE the duplicate entity after migration (default).
-(Reply `keep duplicate as ghost` before `go` to leave the duplicate as a nameless husk instead — only do this if you need to preserve the ID for an external system.)
+| Space | createRelation | updateEntity | deleteRelation | deleteEntity | Publish route |
+|---|---|---|---|---|---|
+| Crypto | 12 | 1 | 0 | 1 | proposal |
+| Podcasts | 94 | 0 | 94 | 0 | proposal |
+| World affairs | 3 | 0 | 3 | 0 | FIX PACKAGE (no editor access) |
 
 Per-group decisions:
-[MERGE] "ethereum"  Main: 4cd3dcb0… (Crypto, 142 backlinks, 3 pages)
-        ← 8bd19463… (Crypto datasets, 8 backlinks, 1 page) → DELETE
-        ← 61bc9cb3… (AI, 2 backlinks, 1 page) → DELETE
-        ← a54bc45b… (PERSONAL, 0 backlinks, 1 page) → DELETE
-[SKIP]  "bitcoin"   reason: ambiguous Main (tie 14 / 14)
-[SKIP]  "ai"        reason: Big-Merge gate (253 backlinks > 100)
+[MERGE] "ethereum"  CANONICAL: 4cd3dcb0… (Crypto, rule 1 — canonical-space topic)
+        ← 8bd19463… (Crypto datasets)  EXCLUDED — dataset space, left untouched
+        ← 61bc9cb3… (AI, 2 backlinks)  eligible loser → merged + deleted
+        ← a54bc45b… (PERSONAL + AI)    vacatable → vacated from AI, survives in PERSONAL
+[ESCALATE] "defi"   both-scored (+12 / +3) → skipped, in escalation report
+[SKIP]  "ai"        Big-Merge gate (253 backlinks > 100)
+
+END STATE (what the graph looks like after publish):
+  canonical 4cd3dcb0… → [Crypto, Root] (residencies unchanged — merge never adds any)
+  twin 61bc9cb3… → fully removed
+  twin a54bc45b… → survives only in [PERSONAL] (+ its votes/Score stay wherever set)
+  ⚠ topic LEAVES: [AI] — twin removed there, canonical not resident (returns only via a later move)
+  ⛔ Root check: no topic leaves Root ✓   (if one would: DO NOT PUBLISH — force the Root twin as canonical)
 
 Reply **go** to write + dry-run the script. (Then **publish** to actually merge.)
 ```
 
 ### Execution
 
-Use `mergeEntities` from `src/entity_ops.ts` (battle-tested) — it re-points backlinks (paginated to completion), ports unique values + outgoing relations to Main, strips the member, and emits a protocol-level `deleteEntity`. Batch ops via `OpsBatch`. **Always pass `summaryOut: new Map()`** so the helper fills per-space op counts for the Cross-Space-Impact gate. Full helper contract + the code template: see [`reference.md`](reference.md).
+Use `mergeEntities` from `src/entity_ops.ts` (battle-tested) with the selection results — full contract + code template in [`reference.md`](reference.md). Non-negotiables:
 
-After publish, report per-space tx hashes AND the post-merge backlink count on Main. Editor sanity-checks that Main's new backlink total ≈ the pre-merge sum (canonical + duplicates' migrated backlinks). A meaningful gap is a red flag for under-migration — investigate before approving the next merge.
+- `disableAutoSelect: true` and the cascade's pick as `mainEntityId` — otherwise the helper re-picks the Main itself and the approved plan is a lie.
+- `secondaries` entries carry `residentSpaceIds` + `keptSpaceIds` from selection; pass `untouchableSpaceIds` (dataset + personal spaces) so surviving copies are skipped.
+- `allowCanonicalDelete: true` ONLY after `go` on a plan whose END STATE named the canonical-space removals.
+- Accumulate everything into one `OpsBatch` (`opsBatch: Map<string, Op[]>`); the script publishes per space at the end only when `DRY_RUN = false`. Spaces without editor access → fix package, never a forced publish.
+- **Snapshot before publish:** during the dry-run, save each secondary's pre-merge state — `bun run validate_migration.ts <secondaryId> <canonicalId> --save-snapshot scripts/<date>-snap-<secondaryId>.json`.
+
+After publish:
+1. Report per-space **proposal URLs** (`publishOps` returns the proposalId for DAO spaces): `https://www.geobrowser.io/space/{spaceId}/governance?proposalId={id-without-0x}`.
+2. **Validate the migration** per secondary: `bun run validate_migration.ts <secondaryId> <canonicalId> --snapshot scripts/<date>-snap-<secondaryId>.json` — all three rules (values, outgoing relations, backlinks) must PASS. A FAIL is a red flag for under-migration — investigate before approving the next merge.
+3. Quick sanity: canonical's new backlink total ≈ pre-merge sum (canonical + migrated duplicates').
+
+---
+
+## Operation: Move / copy entity between spaces (destructive)
+
+Relocate (or replicate) an entity, keeping its global id. This is also the sanctioned repair when a merge's END STATE warned `topic LEAVES [space]` and the editor wants it back there.
+
+- **move** — recreate the entity's values + outgoing relations in `to_space`, remove them from `from_space`. **References to the entity are left untouched**: because the id is unchanged, they keep resolving to it cross-space. (Deliberately diverges from Geo's UI "Move to", which deletes source-space references.)
+- **copy** — like move but the source is kept, so the entity becomes multi-space (like Geo's "Copy to"). Copied relations get **fresh ids** so the two per-space copies stay independent.
+
+Only the entity's own data moves — not the entities it points to (those relations become cross-space) nor block children (not cascaded). Voting data stays put (HARD RULE 8).
+
+### Discovery
+1. Pattern C on the entity: name, types, values, outgoing relations, `spaceIds`.
+2. Resolve `from_space`: explicit if the editor gave one; inferred when the entity lives in exactly one space.
+3. Check `spaces(filter: { topicId: { is: "<id>" } })` — representative-topic guard.
+
+### Gates
+- **Multi-space source:** if the entity lives in several spaces and the editor didn't name `from_space`, STOP and ask (list the residencies).
+- **Representative-topic guard:** never MOVE a space's representative topic out of its own space (copy is fine). STOP: this topic is part of the space's identity.
+- **Already there:** `from_space === to_space` or already resident in `to_space` (for copy) → skip, tell the editor.
+
+### Plan template
+```
+## Move/copy plan
+[MOVE] "Ken Burns" (000ab247…)  Podcasts → World affairs   (references untouched, resolve cross-space)
+[COPY] "Nuclear weapons" (c2bc56fd…)  Podcasts → World affairs   (source kept; fresh relation ids)
+
+Ops: create {n} (to_space) + delete {m} (from_space, move only). Voting data untouched.
+Reply **go** to write + dry-run.
+```
+
+Uses `moveEntity` from `src/entity_ops.ts` (`mode: 'move' | 'copy'`).
 
 ---
 
@@ -236,11 +331,12 @@ Delete an entity that no longer belongs (typo, test entity, abandoned record). *
 For each candidate ID:
 1. Pattern C (its types, values, outgoing relations).
 2. Pattern D incoming — count backlinks. Paginate fully.
+3. Split incoming edges: **references** (block deletion) vs **Rank Votes edges** (votes — do not block, are never deleted/migrated, and remain after deletion by design).
 
 ### Gate — Backlink check (HARD)
-If the candidate has ANY incoming relations, STOP. Do not generate a delete op. Tell the editor:
+If the candidate has ANY incoming non-vote relations, STOP. Do not generate a delete op. Tell the editor:
 
-> Entity **{name}** (`{id}`) has **{N}** incoming relations:
+> Entity **{name}** (`{id}`) has **{N}** incoming relations (+ {V} vote edges, non-blocking, never touched):
 > | From | Type |
 > |---|---|
 > | ... | ... |
@@ -253,15 +349,15 @@ If the candidate has ANY incoming relations, STOP. Do not generate a delete op. 
 ### Plan template
 ```
 ## Delete plan
-[DELETE] {name} ({id}) — 0 backlinks, in space {space}
+[DELETE] {name} ({id}) — 0 blocking backlinks (2 vote edges left untouched), in space {space}
 [SKIP]   {name} ({id}) — has 4 backlinks (gate fired; see above)
 
-Will produce: deleteEntity={n}, deleteRelation={m} (outgoing relations cleaned up).
+Will produce: deleteEntity={n}, deleteRelation={m} (outgoing relations cleaned up; Score values and vote edges excluded).
 
 Reply **go** to write + dry-run.
 ```
 
-Uses `Graph.deleteEntity({ id })`. Also emit `deleteRelation` ops for the entity's outgoing relations (use the edge `id`, not `toEntity.id`).
+Uses `Graph.deleteEntity({ id })`. Also emit `deleteRelation` ops for the entity's outgoing relations (use the edge `id`, not `toEntity.id`) — except vote relations (HARD RULE 8). Score values are never unset, even on deletion.
 
 ---
 
@@ -337,6 +433,8 @@ Read-only. Hand off to a bulk publish op once the editor has source URLs.
 
 A property stored under the wrong SDK type (e.g. "Birth date" published as `text` when it should be `date`). Re-publish under correct type, unset the old.
 
+**Never applies to system value properties** — Score and the vote value properties (`EXCLUDED_VALUE_PROPERTY_IDS`) are system-maintained and off-limits (HARD RULE 8).
+
 ### Discovery
 1. Identify the property's correct data type (from the type's schema entry — Pattern C on a known-good instance).
 2. List entities of type T where the property exists.
@@ -386,7 +484,7 @@ Stale: {S} (target no longer exists).
 Reply **go** to write + dry-run a cleanup that deletes the stale edges.
 ```
 
-Cleanup ops use `Graph.deleteRelation({ id })` with the edge id.
+Cleanup ops use `Graph.deleteRelation({ id })` with the edge id. Vote edges are exempt even if their target vanished (HARD RULE 8) — list them separately.
 
 ---
 
@@ -447,6 +545,7 @@ The editor must type the space NAME exactly, not the ID. Skill computes the name
 ## Delete-space plan
 Space: "{name}" ({id})
 Will delete: {N} entities, {R} relations.
+Voting data (Score values / Rank Votes edges) in the space: left untouched.
 Outgoing breakage: {X} relations from OTHER spaces will go stale (those need a follow-up "Find stale relations" pass).
 
 Reply **go** to write + dry-run. (Then type the space name again to **publish**.)
@@ -461,10 +560,10 @@ Two confirmations: space-name-typed once before Plan, again before publish.
 Every operation emits ONE message in this shape before any Write/Bash:
 
 ````
-## Operation: {Find duplicates | Merge duplicates | Delete orphan | Fix data type | ...}
+## Operation: {Find duplicates | Merge duplicates | Delete orphan | Move/copy entity | Fix data type | ...}
 
 ## Discovery
-{operation-specific block: row counts, sampled entities, decisions}
+{operation-specific block: row counts, sampled entities, selection metadata, decisions}
 
 ## Gates
 - {gate name}: PASS | FIRE — {reason or list}
@@ -474,22 +573,28 @@ If any gate is FIRE, STOP HERE. Run the gate dialog and wait.
 
 ## Plan (only if gates all PASS or were waived)
 - Ops: {createEntity=n, createRelation=n, updateEntity=n, deleteRelation=n, deleteEntity=n}
+- END STATE (merges): residencies + LEAVES warnings + Root check
 - Script path: scripts/<YYYY-MM-DD>-<slug>.ts (will be written AFTER you reply `go`)
 - Dry-run command: bun run scripts/<file>.ts (I run this — you will NOT)
 
 Reply **go** to authorize.
 ````
 
-After `go`, the skill writes + dry-runs, surfaces the log lines (`[MERGE]` / `[DELETE]` / `[SKIP]` / `[FIX]`), then waits for `publish` or `stop`.
+After `go`, the skill writes + dry-runs, surfaces the log lines (`[MERGE]` / `[DELETE]` / `[SKIP]` / `[FIX]` / `[ESCALATE]`), then waits for `publish` or `stop`.
 
 ## Reference — read before writing any script
 
-Deep detail lives in [`reference.md`](reference.md) (bundled with the skill): **script-generation rules** (file naming, `DRY_RUN` default, publish-once, which `src/` helpers to import), the **`mergeEntities` helper contract + code template**, the **critical gotchas** (backlink pagination, edge-id ≠ entity-id, `typeIds` dedupe, no working server-side "untyped" filter, …), and **what to do when a publish fails mid-run** (sandbox network allowlist). Consult it before generating any cleanup script.
+Deep detail lives in [`reference.md`](reference.md) (bundled with the skill): **script-generation rules** (file naming, `DRY_RUN` default, publish-once, which `src/` helpers to import), the **`mergeEntities` + `selectCanonicalTopic` helper contracts + code template**, the **selection-metadata queries**, the **`validate_migration.ts` workflow**, the **voting-data scrub pass**, the **critical gotchas** (backlink pagination, inline 100-node cap, edge-id ≠ entity-id, `typeIds` dedupe, no working server-side "untyped" filter, …), and **what to do when a publish fails mid-run** (sandbox network allowlist). Consult it before generating any cleanup script.
 
 ## What this skill does NOT do
 
 - Skip Discovery, Gates, or Plan to "save time".
 - Auto-publish without an explicit `publish` reply (separate from `go`).
+- Pick a Main by eyeball — canonical selection is the deterministic cascade (or an explicit editor override), nothing else.
+- Merge two scored entities — both-scored groups are escalated, never fused.
+- Select a personal-space or dataset-space copy as canonical, or emit ops into those spaces (their copies survive; the editor's OWN personal space on explicit request is the one exception).
+- Touch voting data (Score / Rank Votes / vote values) — in any operation, ever.
+- Remove a topic from the Root (Geo) space via a merge. No override exists for this.
 - Force-delete entities with backlinks unless the editor typed `force delete {id}` exactly.
-- Touch DAO spaces unless the wallet is an editor of that DAO and the editor explicitly named the DAO space.
-- Reimplement merge/delete logic — use `src/` helpers (see [`reference.md`](reference.md)).
+- Touch DAO spaces unless the wallet is an editor of that DAO and the editor explicitly named the DAO space; ops for other spaces ship as fix packages, never forced.
+- Reimplement merge/selection logic — use `src/` helpers (see [`reference.md`](reference.md)).
