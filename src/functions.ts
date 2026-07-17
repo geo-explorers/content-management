@@ -18,7 +18,7 @@ const TESTNET_RPC_URL = "https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz";
 
 const API_URL = "https://testnet-api.geobrowser.io/graphql";
 
-export async function gql(query: string, variables?: Record<string, any>, maxRetries = 5) {
+export async function gql(query: string, variables?: Record<string, any>, maxRetries = 50) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(API_URL, {
@@ -29,7 +29,7 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 
       // Retry on 5xx / 429
       if ((res.status >= 500 || res.status === 429) && attempt < maxRetries) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
+        const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
         console.log(`  ⚠ API ${res.status}, retry ${attempt}/${maxRetries} in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -46,25 +46,24 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
         const msg = json.errors[0]?.message ?? 'Unknown';
         const isServerError = msg.includes('Unexpected error') || msg.includes('Internal');
         if (isServerError && attempt < maxRetries) {
-          const delay = Math.pow(2, attempt - 1) * 1000;
+          const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
           console.log(`  ⚠ GraphQL: "${msg}", retry ${attempt}/${maxRetries} in ${delay}ms`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
         console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
-        throw new Error(`GraphQL: ${msg}`);
+        // Deterministic GraphQL errors (bad query/filter) — retrying can't help.
+        const gqlError: any = new Error(`GraphQL: ${msg}`);
+        gqlError.nonRetryable = true;
+        throw gqlError;
       }
 
       return json.data;
     } catch (error: any) {
-      const isRetryable = error instanceof SyntaxError ||
-        error.message?.includes('fetch failed') ||
-        error.message?.includes('ECONNRESET') ||
-        error.message?.includes('ETIMEDOUT') ||
-        error.message?.includes('socket hang up');
-
-      if (isRetryable && attempt < maxRetries) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
+      // Retry everything except deterministic GraphQL errors — the testnet API
+      // 504s/stalls under load, so transient failures are the norm on long runs.
+      if (!error?.nonRetryable && attempt < maxRetries) {
+        const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
         console.log(`  ⚠ ${error.message}, retry ${attempt}/${maxRetries} in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -298,7 +297,10 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   //   const txHash = await client.sendTransaction({ account: client.account, to, data: calldata });
   //   console.log("Vote transaction hash:", txHash);
   // }
-  return txHash;
+  // For DAO publishes, return the proposalId (used to build governance URLs:
+  // https://www.geobrowser.io/space/{spaceId}/governance?proposalId={id-no-0x}).
+  // For personal-space publishes, no proposal is created — fall back to txHash.
+  return proposalId ?? txHash;
 }
 
 // ─── printOps ────────────────────────────────────────────────────────────────

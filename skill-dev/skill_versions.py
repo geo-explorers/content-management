@@ -45,11 +45,15 @@ def tracked_files(skill_dir):
 
 
 def content_hash(skill_dir):
-    """Deterministic sha256 over the skill's tracked files (path + bytes)."""
+    """Deterministic sha256 over the skill's tracked files (path + bytes).
+
+    CRLF is normalized to LF before hashing so a Windows checkout
+    (core.autocrlf) produces the same hash as the LF checkouts on macOS/CI.
+    No-op for LF files, so existing manifest hashes are unchanged."""
     h = hashlib.sha256()
     for f in tracked_files(skill_dir):
         h.update(f.encode() + b"\0")
-        h.update((REPO / f).read_bytes() + b"\0")
+        h.update((REPO / f).read_bytes().replace(b"\r\n", b"\n") + b"\0")
     return h.hexdigest()
 
 
@@ -61,7 +65,7 @@ def last_commit(skill_dir):
 
 def declared_version(skill_dir):
     """Read the version from SKILL.md frontmatter (metadata.version or top-level version)."""
-    text = (skill_dir / "SKILL.md").read_text()
+    text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     if text.startswith("---"):
         fm = text.split("---", 2)[1]
         for line in fm.splitlines():
@@ -102,7 +106,7 @@ def verify():
     if not MANIFEST.exists():
         print("No manifest. Run: python3 skill-dev/skill_versions.py generate")
         sys.exit(2)
-    approved = json.loads(MANIFEST.read_text())["skills"]
+    approved = json.loads(MANIFEST.read_text(encoding="utf-8"))["skills"]
     current = build()
     drift = []
     print(f"Verifying {len(current)} skills against {MANIFEST.relative_to(REPO)}:\n")
