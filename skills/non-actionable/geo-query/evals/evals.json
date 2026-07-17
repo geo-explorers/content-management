@@ -75,6 +75,18 @@
         "Uses values:{none:...} or valuesExist with a spaceId (and typeId) scope",
         "Does not run the exclusion unscoped across the whole graph without flagging the cost"
       ]
+    },
+    {
+      "id": 8,
+      "prompt": "The entity 2f8238b2f4c899fb23b4a2f8aabd996c shows the type 'Topic' six times. Does it have duplicate types that need cleaning up?",
+      "expected_output": "Groups the Types edges by relation spaceId: cross-space repeats are healthy multi-space assertions, NOT duplicates; only same-space repeats are flagged as true duplicates, named by space.",
+      "files": [],
+      "assertions": [
+        "Queries the Types relations (typeId 8f151ba4de204e3c9cb499ddf96f48f1) with the nodes{} wrapper and reads spaceId per edge",
+        "Does NOT report cross-space type repeats as duplicates; explains one Types edge per space is normal for multi-space entities",
+        "Flags only same-space repeats as true duplicates and names the space they're in",
+        "Notes that a cross-space edge can't be deleted from outside its own space (silent no-op)"
+      ]
     }
   ]
 }
