@@ -38,8 +38,8 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.4",
-      "approved_commit": "3e97f178880ee0794b8e905128c46fa4a43d7f01",
-      "content_sha256": "abe4a7b2123f23ba1d0adaaec3fe0d142052084e3ad01c05d372daa7973a47b0"
+      "approved_commit": "b7e747b5806ca07bfdc575a25439dd1c489f7dd0",
+      "content_sha256": "ca342de7755397d713321e52cc2fc6f9b9bb125ca9e0b69255579e9abf9b44d0"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",

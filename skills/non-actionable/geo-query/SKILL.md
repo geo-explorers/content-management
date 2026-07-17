@@ -154,20 +154,15 @@ Verified live:
 
 ### Multi-space entities — repeated types are NOT (necessarily) duplicates
 
-`entity.types` aggregates the Types edges from **every space the entity lives in** — a multi-space entity repeats the same type once per space. That's healthy, not a duplicate. "Duplicate types" reports on multi-space entities (a Person typed in crypto + AI + root) are almost always this.
-
-**Verdict rule — group the Types edges by `spaceId`:** same type in *different* spaces = multi-space assertion (leave it; deleting another space's edge from outside that space is a silent no-op anyway). Same type twice in the *same* space = a **true duplicate** — flag it, and fix it in that space.
+`entity.types` aggregates the Types edges from **every space the entity lives in** — a multi-space entity repeats the same type once per space. That's healthy, not a duplicate. **Verdict rule — group the edges by `spaceId`:** different spaces = multi-space assertion, leave it (deleting another space's edge from outside it is a silent no-op anyway); same type twice in the *same* space = a **true duplicate**, flag it and fix it in that space. Report editor-facing as *"lives in N spaces (one Types edge per space — normal)"* and reserve **duplicate** for same-space repeats. Same grouping applies to any repeated relation.
 
 ```graphql
 { entity(id: "ENTITY_ID") { name
     relations(filter: { typeId: { is: "8f151ba4de204e3c9cb499ddf96f48f1" } }, first: 20) {
-      nodes { spaceId toEntity { id name } } } } }
+      nodes { spaceId toEntity { id name } } } } }   # 8f151ba4… = Types property
 ```
-(`8f151ba4…` = the Types property. Same grouping logic applies to any repeated relation, not just types.)
 
-Verified live (Bitcoin `2f8238b2…`): 6 Topic edges → three spaces carry one each (healthy) and one space carries **three** (true duplicate: that space, 2 edges to remove). The naive reading — "Topic appears 6×, duplicates!" — is wrong in both directions: it over-flags the healthy edges and never names the space with the real problem.
-
-Report it editor-facing: *"lives in N spaces (one Types edge per space — normal)"*, and reserve the word **duplicate** for same-space repeats only.
+Verified live (Bitcoin `2f8238b2…`): 6 Topic edges = three spaces with one each (healthy) + one space with **three** (true duplicate — name that space, 2 edges to remove). The naive "Topic appears 6×, duplicates!" reading is wrong in both directions.
 
 ### Search entities by type (optionally by space)
 
