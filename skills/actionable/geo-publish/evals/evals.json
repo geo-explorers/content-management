@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "Create a Person entity 'Ada Lovelace' in my personal space with the Wikipedia page as a Web URL.",
-      "expected_output": "A plan-confirmation message first, both pre-publish gates run, then a DRY_RUN script that creates the entity correctly.",
+      "expected_output": "A plan-confirmation message first, the pre-publish gates run, then a DRY_RUN script that creates the entity correctly.",
       "files": [],
       "assertions": [
         "Posts the plan (Space / Name / Type / Description) and waits for 'go' before writing the script",

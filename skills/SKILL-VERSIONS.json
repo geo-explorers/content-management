@@ -18,8 +18,8 @@
     },
     "actionable/geo-publish": {
       "version": "0.7.0",
-      "approved_commit": "b330a78a664925ea7f5119f42901e99cc8129caa",
-      "content_sha256": "2a2141402e478cdaacc3bbbb06b38c58320c32c9257e6232fc5b438793bfd998"
+      "approved_commit": "4edfa8fc96637108d09573ee88f85cfcb8b2dfbf",
+      "content_sha256": "625eb92449dd5e51c7a2cd1a052001e86da105db0a5ff87c48416a925666c8c2"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",

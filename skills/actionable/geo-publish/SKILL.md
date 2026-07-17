@@ -142,7 +142,18 @@ const privateKey = (raw.startsWith('0x') ? raw : `0x${raw}`) as `0x${string}`;
 const SPACE = process.env.DEMO_SPACE_ID!;        // target = your personal space
 
 const allOps: Op[] = [];
-const { id: entityId, ops } = Graph.createEntity({
+
+// Gate 4 (type-required) — create EVERY entity through this wrapper; a typeless create throws.
+const created: { id: string; name: string; types: string[] }[] = [];
+function createTypedEntity(params: Parameters<typeof Graph.createEntity>[0]) {
+  if (!params.types?.length)
+    throw new Error(`GATE 4: "${params.name ?? '(unnamed)'}" would publish without a type.`);
+  const r = Graph.createEntity(params);
+  created.push({ id: r.id, name: params.name ?? '(unnamed)', types: params.types });
+  return r;
+}
+
+const { id: entityId, ops } = createTypedEntity({
   name: 'Hedy Lamarr',                        // NO trailing period
   description: 'Austrian-American inventor.',  // MUST end with a period
   types: ['7ed45f2bc48b419e8e4664d5ff680b0d'], // Person
@@ -150,6 +161,7 @@ const { id: entityId, ops } = Graph.createEntity({
 });
 allOps.push(...ops);
 
+for (const c of created) console.log(`Creating: ${c.name} [${c.types.join(', ')}]`);
 console.log(`${allOps.length} ops; entity ${entityId}`);
 if (DRY_RUN) { console.log('DRY_RUN — set false to publish.'); }
 else {
@@ -166,24 +178,9 @@ else {
 
 ### Gate-4 helper — mandatory in every generated script
 
-Create **every** entity through this wrapper (headline entities, inline relation targets, per-row creates). It makes a typeless create impossible at runtime — the belt behind the Gate-4 suspenders — and produces the dry-run type listing:
+The script template above defines `createTypedEntity` — route **every** entity creation through it (headline entities, inline relation targets, per-row creates). It makes a typeless create impossible at runtime — the belt behind the Gate-4 suspenders — and feeds the dry-run type listing (`Creating: <name> [<type>]`).
 
-```typescript
-// Gate 4 (type-required): no entity ships typeless.
-const created: { id: string; name: string; types: string[] }[] = [];
-function createTypedEntity(params: Parameters<typeof Graph.createEntity>[0]) {
-  if (!params.types?.length)
-    throw new Error(`GATE 4: "${params.name ?? '(unnamed)'}" would publish without a type — every created entity needs at least one.`);
-  const r = Graph.createEntity(params);
-  created.push({ id: r.id, name: params.name ?? '(unnamed)', types: params.types });
-  return r;
-}
-// …build ops using createTypedEntity(...) everywhere…
-// dry-run visibility (print before the publish/stop prompt):
-for (const c of created) console.log(`Creating: ${c.name} [${c.types.join(', ')}]`);
-```
-
-Block entities pass automatically (the block recipes always set their types). Raw `Graph.createEntity` calls in a generated script are a review defect.
+Block entities pass automatically (the block recipes always set their types; recipe snippets in this doc show raw `Graph.createEntity` for brevity, and each carries `types` inline). In a **generated script**, a raw create that bypasses the wrapper is a review defect.
 
 ## Bulk / dataset publishing — data goes in the file, not the script
 
@@ -218,7 +215,7 @@ const HOSTS_REL    = 'c72d9abbbca84e86b7e8b71e91d2b37e';  // — IDs only, never
 
 const allOps: Op[] = [];
 for (const row of rows) {                               // build ops from the FILE, at runtime
-  const { id, ops } = Graph.createEntity({ name: row.name, description: row.description, types: [PODCAST_TYPE], values: [] });
+  const { id, ops } = createTypedEntity({ name: row.name, description: row.description, types: [PODCAST_TYPE], values: [] }); // wrapper from the script template (Gate 4)
   allOps.push(...ops);
   // …createRelation(HOSTS_REL) per host, etc.
 }
