@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.3"
+  version: "0.2.4"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -151,6 +151,18 @@ Verified live:
 - Two-step still works when you already hold an `entityId`: `entity(id: "<entityId>")`.
 - One relation by edge id: `{ relation(id: "EDGE_ID") { id entityId position typeId fromEntityId toEntityId } }` — takes the EDGE id only (`entityId` there returns null).
 - `relationsList` / `valuesList` are flat variants of the nested connections when you don't need paging.
+
+### Multi-space entities — repeated types are NOT (necessarily) duplicates
+
+`entity.types` aggregates the Types edges from **every space the entity lives in** — a multi-space entity repeats the same type once per space. That's healthy, not a duplicate. **Verdict rule — group the edges by `spaceId`:** different spaces = multi-space assertion, leave it (deleting another space's edge from outside it is a silent no-op anyway); same type twice in the *same* space = a **true duplicate**, flag it and fix it in that space. Report editor-facing as *"lives in N spaces (one Types edge per space — normal)"* and reserve **duplicate** for same-space repeats. Same grouping applies to any repeated relation.
+
+```graphql
+{ entity(id: "ENTITY_ID") { name
+    relations(filter: { typeId: { is: "8f151ba4de204e3c9cb499ddf96f48f1" } }, first: 20) {
+      nodes { spaceId toEntity { id name } } } } }   # 8f151ba4… = Types property
+```
+
+Verified live (Bitcoin `2f8238b2…`): 6 Topic edges = three spaces with one each (healthy) + one space with **three** (true duplicate — name that space, 2 edges to remove). The naive "Topic appears 6×, duplicates!" reading is wrong in both directions.
 
 ### Search entities by type (optionally by space)
 
@@ -494,6 +506,7 @@ No Node/Bun? `curl -s --compressed <endpoint> -H 'Content-Type: application/json
 10. **No cache — only indexer lag.** Reads are always the latest indexed state; a fresh publish appears in seconds. Don't add cache-busting; just re-query after ~30s.
 11. **Page/table order = relation `position`** (lexicographic sort / `orderBy: POSITION_ASC`), not response order. **Rows INSIDE a table are different:** query-block rows follow the block's `Sort` value (sort_by property + direction); collection-block rows follow `Collection item` positions — never `createdAt`.
 12. **`entity(id:)` never nulls** — nonexistent IDs return an empty stub; test existence via `spaceIds`/`types`, never by null-check.
+13. **Repeated entries in `types` ≠ duplicate types.** Multi-space entities carry one Types edge per space — group by relation `spaceId`; only same-space repeats are real duplicates (see "Multi-space entities").
 
 ## More
 
