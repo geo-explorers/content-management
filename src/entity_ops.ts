@@ -1361,10 +1361,17 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
   const privateKey = process.env.PK_SW as `0x${string}`;
   let callerSpaceId: string | null = null;
   if (privateKey) {
-    const { getSmartAccountWalletClient } = await import('@geoprotocol/geo-sdk');
-    const client = await getSmartAccountWalletClient({
-      privateKey,
-      rpcUrl: 'https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz',
+    // v0.20: getSmartAccountWalletClient is gone — createGeoWalletClient + viem signer.
+    // RPC (chain 55516) comes from the network config; old: rpc-geo-test-zc16z3tcvf.t.conduit.xyz
+    const { createGeoWalletClient, defineGeoNetworkConfig, GeoTestnetConfig } = await import('@geoprotocol/geo-sdk');
+    const { privateKeyToAccount } = await import('viem/accounts');
+    const client = await createGeoWalletClient({
+      signer: privateKeyToAccount(privateKey),
+      network: defineGeoNetworkConfig({
+        ...GeoTestnetConfig,
+        apiOrigin: 'https://api-testnet.geobrowser.io',
+        chain: { ...GeoTestnetConfig.chain, id: 55516, rpcUrl: 'https://rpc-testnet.geobrowser.io' },
+      }),
     });
     const walletAddress = client.account.address;
     const personalData = await gql(`{

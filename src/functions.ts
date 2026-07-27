@@ -1,9 +1,11 @@
 import {
-  daoSpace,
-  getSmartAccountWalletClient,
-  personalSpace,
+  createGeoClient,
+  createGeoWalletClient,
+  defineGeoNetworkConfig,
+  GeoTestnetConfig,
   type Op,
 } from "@geoprotocol/geo-sdk";
+import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 import * as fs from "fs";
 import path from "node:path";
@@ -12,11 +14,35 @@ dotenv.config();
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
-const TESTNET_RPC_URL = "https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz";
+// Migration (v20 contracts): new RPC + chain ID 55516. The doc marks the RPC URL
+// "once the final URL is confirmed" — verify it responds before first publish.
+// Old (pre-migration): https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz
+const TESTNET_RPC_URL = "https://rpc-testnet.geobrowser.io";
+export const TESTNET_CHAIN_ID = 55516;
+
+// SDK v0.20: clients are created explicitly with a network config (string
+// network IDs are gone). beta.8's built-in GeoTestnetConfig still points at
+// interim URLs (testnet-api-v2 + a conduit RPC), so we override with the final
+// URLs from the migration doc. If the final 0.20.0 release ships these as
+// defaults, this override can be dropped.
+const GEO_NETWORK = defineGeoNetworkConfig({
+  ...GeoTestnetConfig,
+  apiOrigin: "https://api-testnet.geobrowser.io",
+  chain: { ...GeoTestnetConfig.chain, id: TESTNET_CHAIN_ID, rpcUrl: TESTNET_RPC_URL },
+});
+const geo = createGeoClient({ network: GEO_NETWORK });
+
+// v0.20 replacement for the removed getSmartAccountWalletClient.
+async function getWalletClient(privateKey: `0x${string}`) {
+  return createGeoWalletClient({
+    signer: privateKeyToAccount(privateKey),
+    network: GEO_NETWORK,
+  });
+}
 
 // ─── GraphQL Helper ──────────────────────────────────────────────────────────
 
-const API_URL = "https://testnet-api.geobrowser.io/graphql";
+const API_URL = "https://api-testnet.geobrowser.io/graphql";
 
 export async function gql(query: string, variables?: Record<string, any>, maxRetries = 5) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -82,10 +108,7 @@ export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<st
   const privateKey = process.env.PK_SW as `0x${string}`;
   if (!privateKey) throw new Error("PK_SW not set in .env");
 
-  const client = await getSmartAccountWalletClient({
-    privateKey,
-    rpcUrl: TESTNET_RPC_URL,
-  });
+  const client = await getWalletClient(privateKey);
   const author = client.account.address;
 
   const personalSpaceData = await gql(`{
@@ -175,10 +198,7 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   const privateKey = process.env.PK_SW as `0x${string}`;
   if (!privateKey) throw new Error("PK_SW not set in .env");
 
-  const client = await getSmartAccountWalletClient({
-    privateKey: privateKey,
-    rpcUrl: TESTNET_RPC_URL,
-  });
+  const client = await getWalletClient(privateKey);
   const author = client.account.address
 
   const personalSpaceData = await gql(`{
@@ -227,12 +247,12 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       return undefined;
     }
 
-    const result = await personalSpace.publishEdit({
+    // v0.20: network comes from the client, not a param
+    const result = await geo.personalSpaces.publishEdit({
       name: editName,
       spaceId,
       ops,
       author: spaceId,
-      network: "TESTNET",
     });
     console.log("CID:", result.cid);
     console.log("Edit ID:", result.editId);
@@ -261,11 +281,12 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       return undefined;
     }
 
-    const result = await daoSpace.proposeEdit({
+    // v0.20: geo.daoSpaces.proposeEdit (no network param). Space-id format kept
+    // 0x-prefixed as before — smoke-test the first DAO publish post-migration.
+    const result = await geo.daoSpaces.proposeEdit({
       name: editName,
       ops,
       author: callerSpaceId,
-      network: "TESTNET",
       callerSpaceId: `0x${callerSpaceId}` as `0x${string}`,
       daoSpaceId: `0x${spaceId}` as `0x${string}`,
       daoSpaceAddress: daoAddress as `0x${string}`,
@@ -286,8 +307,9 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   console.log("Transaction hash:", txHash);
 
   // Auto-vote disabled — propose only, let editors review before voting
+  // v0.20: flattened proposal methods — geo.daoSpaces.voteProposal / executeProposal
   // if (proposalId && isEditor && authorSpaceId) {
-  //   const result = daoSpace.voteProposal({
+  //   const result = geo.daoSpaces.voteProposal({
   //     authorSpaceId: authorSpaceId,
   //     spaceId: spaceId,
   //     proposalId: proposalId,
