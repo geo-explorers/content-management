@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published or not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.5.1
+  version: 0.5.2
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -59,6 +59,8 @@ bun run scripts/press-review-coverage-map.ts --space AI --days 7 --json geo-cove
 
 This produces `geo-coverage.json` — every News story with name, publish date, topics, sources (by outlet), and claim count. This is the "what we already have" side. It also flags **went-quiet topics** and **single-source stories** purely from Geo data (useful even before the external comparison).
 
+> **Empty/thin baseline — say so explicitly.** If the space has ~0 News stories in the window (or under ~10 total), the coverage map's reassuring "(none)" gap lines are **meaningless as a comparison** — with no baseline, *every* external story will classify 🆕. Do not present this as a gap analysis. Tell the editor plainly: *"this space has no coverage baseline in this window; treat the output as a seeding list, not a gap analysis."* The script prints a `⚠ NO/THIN BASELINE` warning in this case — surface it, don't bury it.
+
 **Half 1 uses the GraphQL API (`testnet-api.geobrowser.io`), addressed by SPACE ID — NOT the Hypergraph MCP connector.** Every DAO space is reachable there by its 32-hex space id (e.g. World affairs = `89bd89bf28ff8a0963faf92a8c905e20`, ~1,175 News stories). If the bun script can't run in your environment, query GraphQL directly (see `geo-query`) — same source of truth.
 
 > **⚠ NEVER build the coverage map from the Hypergraph MCP connector.** It exposes only a curated subset of spaces (World affairs, US Politics, and others are NOT in it) and — critically — it **silently fuzzy-matches a space name to the nearest one it does have** (a real case: `space="World affairs"` matched to **"AI"** with no error), which would produce a coverage map of the *wrong* space and silently corrupt the whole review.
@@ -85,17 +87,20 @@ For each external story, find the best-matching Geo story from `geo-coverage.jso
 
 Rigor requirements (each verified live to prevent a real mis-flag):
 - **Every ✅ row cites the matching Geo story's entity ID** (from the coverage map) — the editor must be able to open the exact entity, not re-search it.
-- **Before calling anything 🆕, re-check with an UNDATED search of the News-story TYPE in this space** — not just the window's coverage map, and not a generic name search. The coverage map only sees stories *inside* the window, so a story Geo published a day or two before the window (e.g. an India–Japan summit published Jul 2 for a Jul 3–6 review) will look missing when it isn't. Query:
+- **Before calling anything 🆕, re-check with an UNDATED search of the News-story TYPE in this space** — not just the window's coverage map, and not a generic name search. The coverage map only sees stories *inside* the window, and it filters on `Publish date`, so a story is invisible to it in **two** ways: (a) Geo published it a day or two before the window (e.g. an India–Japan summit published Jul 2 for a Jul 3–6 review), or (b) its `Publish date` is a **typo** (a real story had `2025-07-26` where its own text said 2026 — off by a year, so it fell outside every window). Either way the story exists; the undated re-check is what catches it. Query:
   ```graphql
   { entities(typeId: "e550fe517e904b2c8fffdf13408f5634", spaceId: "SPACE_ID",
-      filter: { name: { includesInsensitive: "KEYWORD" } }, first: 5) { id name createdAt } }
+      filter: { name: { includesInsensitive: "KEYWORD" } }, first: 25) { id name createdAt } }
   ```
-  Run it per candidate 🆕 with a couple of salient keywords (person, country, event). If a real News story comes back, it's ✅ (cite the ID), not 🆕. Only after this check comes back empty is it a genuine gap.
+  Run it per candidate 🆕 with a couple of salient keywords (person, country, event). **`first: 25`, not 5 — and if the result set comes back full, it may be truncated: a common keyword (`Venezuela`) can fill all slots with unrelated stories and hide the real match, so re-query with a more distinctive keyword (`International Criminal Court`) before concluding "no match."** (This exact truncation once returned five earthquake stories and hid the ICC-withdrawal story, nearly recommending a duplicate.) If a real News story comes back, it's ✅ (cite the ID), not 🆕. Only after this check comes back empty is it a genuine gap.
+- **Cross-space re-check for off-beat 🆕s.** The coverage map is single-space by construction and never looks sideways. For any 🆕 whose subject is plausibly another space's beat (health, technology, crypto, industries — e.g. an Ebola vaccine trial, a chip launch, a stablecoin ruling), run the **same undated re-check with the `spaceId` dropped** (or against the sibling topical spaces). Verified real: an Ebola-vaccine story came back "no match" in World affairs while living in the **health** space — publishing the 🆕 would have duplicated it. One extra batched request; cheap insurance against cross-space duplicates.
 - **Match on the story's CLAIMS, not just its title + description.** A Geo News story's specific facts live in its `Notable claims` relations (verified: ~17 claims on a typical story), which the coverage map does NOT include. Before you assert a match is only partial or that Geo "lacks" some fact, fetch the candidate story's claims and read them — the fact is often already there (e.g. the Kyiv "68 missiles / 351 drones" numbers were already claims). Title+description alone under-reports what Geo has.
   **MANDATORY (not judgment): whenever a 🆕 suggestion is of the form "Geo has a related story but not this specific thread/development," you MUST fetch that related story's `Notable claims` and confirm the development is absent from them before keeping it as 🆕.** Skipping this is exactly what mis-flagged the "Mojtaba absent from the funeral" thread as new when the funeral stories already carried those claims. No "related but new" 🆕 ships without the claims read.
   ```graphql
   { entity(id: "STORY_ID") { relations(first: 100) { nodes { type { name } toEntity { name } } } } }  # read the Notable claims (100 — busy stories can carry many)
   ```
+
+**These rigor checks are essentially free — do not skip them.** Batched, all the undated re-checks for a full review cost ~4 s and all the claims-reads ~2 s (they read as expensive, but a single GraphQL request each covers all candidates). The undated re-check, the cross-space re-check, and the claims read each prevented a real mis-flag in testing.
 
 Then **rank** the 🆕 items and **justify** each rank.
 
@@ -105,6 +110,7 @@ The #1 failure mode of this skill: recommending a *specific* story and attaching
 
 1. **The source actually substantiates THIS specific story** — not just the broad topic. A story titled "5th round of US-Iran ceasefire talks in Washington; Hormuz de-confliction cell agreed" needs sources that report *that development*. A generic "Iran war — live" blog is **not** a valid source for it. If you can't point to where the source states the claim, **drop that source** — don't pad the list.
 2. **The recommended story is only as specific as its sources support.** Don't synthesize a precise headline (named round number, named venue, named mechanism) that the sources don't actually state. Phrase the recommendation to match what the sources say; if the sources are vaguer, make the recommendation vaguer.
+3. **When tier-1 sources disagree on a number, cite the range — never a single figure the newest source doesn't back.** Death tolls and casualty counts routinely conflict across outlets and over time (e.g. Chile floods reported as 3 / 10 / 13 dead by three outlets on different days). Give the range and the most recent tier-1 figure ("3–13 dead depending on source; 13 per JPost, Jul 21"), not one number stated as fact.
 
 If, after the gate, a 🆕 item has **no source that genuinely backs its specific claim**, do NOT recommend it as a confident gap — either rewrite it to the level the sources support, or drop it. Better to recommend fewer, well-sourced opportunities than many over-specified ones. (Same discipline as `geo-describe`'s accuracy leg: verify the *framing*, not just that something is roughly on-topic.)
 

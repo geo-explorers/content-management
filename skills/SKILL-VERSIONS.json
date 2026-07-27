@@ -3,7 +3,7 @@
   "skills": {
     "actionable/geo-clean": {
       "version": "0.3.0",
-      "approved_commit": "d62fccdf3156ef58487168a2a0919f5b19150679",
+      "approved_commit": "ff98aa9fcdc1265f43dd81666bb511bec221a0f9",
       "content_sha256": "415c389f9bc4b0a459222b82c05a9faba8fbfd9a9656c4092943194699031770"
     },
     "actionable/geo-discovery": {
@@ -18,7 +18,7 @@
     },
     "actionable/geo-publish": {
       "version": "0.7.0",
-      "approved_commit": "b330a78a664925ea7f5119f42901e99cc8129caa",
+      "approved_commit": "2916568ca20690fe64ff0c80893d64b811a704e5",
       "content_sha256": "625eb92449dd5e51c7a2cd1a052001e86da105db0a5ff87c48416a925666c8c2"
     },
     "non-actionable/daily-report": {
@@ -32,13 +32,13 @@
       "content_sha256": "bf1cc781216c56ed8af740d4fa6cf8e723359fe516328b02b67aa9ab998379cb"
     },
     "non-actionable/geo-press-review": {
-      "version": "0.5.1",
+      "version": "0.5.2",
       "approved_commit": "a95d9290528c150ae6c20b8bf33eef038c529a2a",
-      "content_sha256": "b1661d57b52c30c70fd78a1bea85c35a0f37bfac780da25ed2364544fbbd5718"
+      "content_sha256": "419138843db588635a99d0299e8ad785c6055ecf29bf81bcd833b007725ae590"
     },
     "non-actionable/geo-query": {
       "version": "0.2.4",
-      "approved_commit": "d5d950d376f9e83a113147a9620470e87d0c7401",
+      "approved_commit": "392d38ade523d4e4f6b9194761827aeb1b1b6410",
       "content_sha256": "ca342de7755397d713321e52cc2fc6f9b9bb125ca9e0b69255579e9abf9b44d0"
     },
     "non-actionable/image-banner-recompose": {
