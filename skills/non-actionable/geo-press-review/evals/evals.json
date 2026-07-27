@@ -4,11 +4,11 @@
     {
       "id": 1,
       "prompt": "Do a press review for the AI space - what should we publish next?",
-      "expected_output": "Pulls external press coverage, compares it against what's published on Geo, and returns a ranked, justified list of stories classified as already-published / needs-update / not-yet-covered. Read-only - recommends, never publishes.",
+      "expected_output": "Pulls external press coverage, compares it against what's published on Geo, and returns a ranked, justified list using exactly two buckets: ✅ Already on Geo and 🆕 Not on Geo yet. No third 'needs-update' category. Read-only - recommends, never publishes.",
       "files": [],
       "assertions": [
-        "Classifies each story as already-published, needs-update, or not-yet-covered",
-        "Ranks the recommendations and justifies each",
+        "Classifies each story into exactly two buckets: ✅ Already on Geo or 🆕 Not on Geo yet (no third needs-update/delta category)",
+        "Ranks the 🆕 recommendations and justifies each",
         "Does not publish anything to Geo (read-only)"
       ]
     },

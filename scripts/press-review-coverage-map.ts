@@ -48,13 +48,15 @@ const NEWS_STORY_TYPE_ID = 'e550fe517e904b2c8fffdf13408f5634';
 // Spaces (name → id). Mirror of content-management/src/constants.ts plus the
 // AI space the brief referenced.
 const SPACES: Record<string, string> = {
-  geo:        'a19c345ab9866679b001d7d2138d88a1',
-  ai:         '41e851610e13a19441c4d980f2f2ce6b',
-  crypto:     'c9f267dcb0d270718c2a3c45a64afd32',
-  health:     '52c7ae149838b6d47ce0f3b2a5974546',
-  industries: 'd69608290513c2a91102c939b3265bd7',
-  technology: '870e3b3068661e6280fad2ab456829bc',
-  software:   '9b611b848b12491b9b6b43f3cf019b8b',
+  geo:              'a19c345ab9866679b001d7d2138d88a1',
+  ai:               '41e851610e13a19441c4d980f2f2ce6b',
+  crypto:           'c9f267dcb0d270718c2a3c45a64afd32',
+  health:           '52c7ae149838b6d47ce0f3b2a5974546',
+  industries:       'd69608290513c2a91102c939b3265bd7',
+  technology:       '870e3b3068661e6280fad2ab456829bc',
+  software:         '9b611b848b12491b9b6b43f3cf019b8b',
+  'world affairs':  '89bd89bf28ff8a0963faf92a8c905e20',  // the flagship news space (SKILL.md's primary example)
+  'us politics':    '4582fbbee28a16589154f7e36f1ee3c5',  // verified via space.page.name = "US politics"
 };
 
 // ─── GraphQL helper (retry on 5xx/429) ──────────────────────────────────────
@@ -108,30 +110,14 @@ function resolveSpace(input: string): { id: string; label: string } {
   if (/^[0-9a-f]{32}$/i.test(input)) return { id: input, label: input };
   const key = input.toLowerCase().trim();
   if (SPACES[key]) return { id: SPACES[key], label: input };
-  // fuzzy: startsWith
+  // fuzzy: startsWith. Log any non-exact resolution so a surprising match
+  // (e.g. "cryptomarkets" → crypto, "w" → world affairs) is visible, not silent.
   const hit = Object.keys(SPACES).find(k => k.startsWith(key) || key.startsWith(k));
-  if (hit) return { id: SPACES[hit], label: hit };
-  throw new Error(`Unknown space "${input}". Known: ${Object.keys(SPACES).join(', ')}, or pass a 32-char space ID.`);
-}
-
-// ─── Fetch all News stories in a space ──────────────────────────────────────
-async function fetchNewsStories(spaceId: string, typeId: string): Promise<string[]> {
-  const ids: string[] = [];
-  let cursor: string | null = null;
-  while (true) {
-    const after = cursor ? `after: "${cursor}"` : '';
-    const data = await gql(`{
-      entitiesConnection(spaceId: "${spaceId}", typeId: "${typeId}", first: 100, ${after}) {
-        edges { node { id } }
-        pageInfo { hasNextPage endCursor }
-      }
-    }`);
-    const conn = data.entitiesConnection;
-    for (const e of conn?.edges ?? []) ids.push(e.node.id);
-    if (!conn?.pageInfo?.hasNextPage) break;
-    cursor = conn.pageInfo.endCursor;
+  if (hit) {
+    if (hit !== key) console.error(`  ⚠ fuzzy space match: "${input}" → "${hit}" (${SPACES[hit]}). Verify this is the space you meant; pass a 32-char ID to be exact.`);
+    return { id: SPACES[hit], label: hit };
   }
-  return ids;
+  throw new Error(`Unknown space "${input}". Known: ${Object.keys(SPACES).join(', ')}, or pass a 32-char space ID.`);
 }
 
 interface Story {
@@ -144,20 +130,13 @@ interface Story {
   claimCount: number;
 }
 
-async function fetchStory(id: string): Promise<Story> {
-  const data = await gql(`{
-    entity(id: "${id}") {
-      name
-      values(first: 50) { nodes { property { id name } text datetime } }
-      relations(first: 250) { nodes { type { id name } toEntity { name } } }
-    }
-  }`);
-  const e = data.entity;
+// Parse one entitiesConnection node (values + relations inline) into a Story.
+function parseStory(e: any): Story {
   let publishDate: string | null = null;
   let description: string | null = null;
   for (const v of e.values?.nodes ?? []) {
-    if (v.property.id === PUBLISH_DATE_PROP) publishDate = v.datetime ?? null;
-    if (v.property.name === 'Description') description = v.text ?? null;
+    if (v.property?.id === PUBLISH_DATE_PROP) publishDate = v.datetime ?? null;
+    if (v.property?.name === 'Description') description = v.text ?? null;
   }
   const topics: string[] = [];
   const sources: string[] = [];
@@ -169,7 +148,37 @@ async function fetchStory(id: string): Promise<Story> {
     else if (tn === 'Sources' && target) sources.push(target);
     else if (tn === 'Notable claims') claimCount++;
   }
-  return { id, name: (e.name ?? '').trim(), publishDate, description, topics, sources, claimCount };
+  return { id: e.id, name: (e.name ?? '').trim(), publishDate, description, topics, sources, claimCount };
+}
+
+// ─── Fetch all News stories in a space (paged, values+relations INLINE) ──────
+// One request per 100 stories — NOT one request per story. entitiesConnection
+// returns values and relations inline, so the whole space loads in ~ceil(N/100)
+// requests instead of N (World affairs: ~14 requests / ~10s vs 1,395 / ~190s).
+async function fetchAllStories(spaceId: string, typeId: string): Promise<Story[]> {
+  const stories: Story[] = [];
+  let cursor: string | null = null;
+  let page = 0;
+  while (true) {
+    const after = cursor ? `after: "${cursor}"` : '';
+    const data = await gql(`{
+      entitiesConnection(spaceId: "${spaceId}", typeId: "${typeId}", first: 100, ${after}) {
+        edges { node {
+          id name
+          values(first: 50) { nodes { property { id name } text datetime } }
+          relations(first: 250) { nodes { type { id name } toEntity { name } } }
+        } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`);
+    const conn = data.entitiesConnection;
+    for (const edge of conn?.edges ?? []) stories.push(parseStory(edge.node));
+    process.stdout.write(`\r  ...${stories.length} stories (${++page} pages)`);
+    if (!conn?.pageInfo?.hasNextPage) break;
+    cursor = conn.pageInfo.endCursor;
+  }
+  process.stdout.write('\n');
+  return stories;
 }
 
 // ─── Source outlet extraction ────────────────────────────────────────────────
@@ -292,16 +301,15 @@ async function main() {
   console.log(`   Space : ${space.label} (${space.id})`);
   console.log(`   Window: ${from ?? 'any'} → ${to ?? 'any'}\n`);
 
-  console.log('Fetching story list...');
-  const ids = await fetchNewsStories(space.id, NEWS_STORY_TYPE_ID);
-  console.log(`  ${ids.length} News stories in space. Loading details...\n`);
+  console.log('Fetching all News stories (paged, values+relations inline)...');
+  const allStories = await fetchAllStories(space.id, NEWS_STORY_TYPE_ID);
+  console.log(`  ${allStories.length} News stories in space.\n`);
 
   const stories: Story[] = [];
   // All-time topic frequency across the WHOLE space (every story, ignoring the
   // window) — the baseline that makes "thin in this window" meaningful.
   const allTimeTopicCount: Record<string, number> = {};
-  for (let i = 0; i < ids.length; i++) {
-    const s = await fetchStory(ids[i]);
+  for (const s of allStories) {
     for (const t of s.topics) allTimeTopicCount[t] = (allTimeTopicCount[t] ?? 0) + 1;
     if (s.publishDate) {
       const ts = new Date(s.publishDate).getTime();
@@ -310,11 +318,23 @@ async function main() {
       continue; // no date but a window was requested → skip
     }
     stories.push(s);
-    if ((i + 1) % 50 === 0) console.log(`  ...${i + 1}/${ids.length}`);
   }
 
   // Sort newest first
   stories.sort((a, b) => (b.publishDate ?? '').localeCompare(a.publishDate ?? ''));
+
+  // ─── No/thin-baseline guard ─────────────────────────────────────────────────
+  // With ~0 stories in the window (or a near-empty space), the "(none)" gap lines
+  // below are meaningless as a COMPARISON — every external story will classify 🆕.
+  // Flag it loudly so the review isn't mistaken for a real gap analysis.
+  const thinBaseline = stories.length === 0 || allStories.length < 10;
+  if (thinBaseline) {
+    console.log('⚠'.repeat(40));
+    console.log(`⚠ NO/THIN BASELINE: ${stories.length} stories in window, ${allStories.length} in the space total.`);
+    console.log('  No meaningful coverage baseline here — every external story will classify 🆕.');
+    console.log('  Treat the output as a SEEDING LIST, not a gap analysis, and tell the editor so.');
+    console.log('⚠'.repeat(40) + '\n');
+  }
 
   // ─── Report ────────────────────────────────────────────────────────────────
   console.log(`\n${'='.repeat(80)}`);
@@ -388,6 +408,8 @@ async function main() {
       window: { from, to },
       generatedFrom: 'press-review-coverage-map.ts',
       storyCount: stories.length,
+      spaceStoryTotal: allStories.length,
+      thinBaseline,
       stories,
       topicCoverage: byTopic,
       outletFootprint: outletCount,
