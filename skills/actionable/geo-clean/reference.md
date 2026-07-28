@@ -13,9 +13,20 @@ Deep detail split out of `SKILL.md`. Read this before generating any cleanup scr
 - **Import battle-tested helpers** from `src/` — don't reimplement these:
   - `mergeEntities`, `deleteEntity`, `changeEntityId`, `moveEntity` (move/copy), `OpsBatch` — `src/entity_ops.ts`
   - `fetchCandidateMeta`, `buildScoringContext`, `selectCanonicalTopic`, `managedSpaces`, `survivingSpaces` — `src/select_canonical.ts`
-  - `gql`, `publishOps`, `printOps`, `getPublishableSpaceIds`, `getSpaceOwnerInfo` — `src/functions.ts`
+  - `gql`, `publishOps`, `printOps`, `getPublishableSpaceIds`, `getSpaceOwnerInfo`, `geo` (SDK client), `NETWORK`, `getWalletClient`, `getWalletAddress` — `src/functions.ts`
   - `DATASET_SPACE_IDS`, `CANONICAL_SPACE_IDS`, `EXCLUDED_VALUE_PROPERTY_IDS`, `EXCLUDED_RELATION_TYPE_IDS` — `src/constants.ts`
   - `validate_migration.ts` (repo root) — post-merge verification CLI.
+- **No hardcoded endpoints, chain ids, or contract addresses.** Every network touch goes through `gql` / `publishOps` / the `src/` helpers; contract addresses resolve from the SDK's network config (next section). A pasted URL or address in a script is a latent break, not a convenience.
+
+## Infrastructure & SDK (2026-07 migration)
+
+The 2026-07 infrastructure migration replaced every endpoint and shipped a breaking SDK (v0.19.x → v0.20.0; repo migrated on `0.20.0-beta.8`). SKILL.md prerequisite 4 gates on the repo being migrated. How it works now:
+
+- **All endpoints + contract addresses derive from `GeoTestnetConfig`** (`src/functions.ts` exports it as `NETWORK`); nothing is hardcoded. Live-verified values on beta.8 (2026-07-28): GraphQL origin `https://testnet-api-v2.geobrowser.io` (the announced `https://api-testnet.geobrowser.io/graphql` serves the same data), RPC `https://rpc-geo-testnet-irdc0cgb0w.t.conduit.xyz` (chain id **55516**), gas sponsorship `rpc.zerodev.app`. The announced vanity RPC `rpc-testnet.geobrowser.io` was NOT live as of 2026-07-28 — trust the config, not the announcement.
+- **Wallet**: `getSmartAccountWalletClient` no longer exists in the SDK. `src/functions.ts` wraps the replacement: `getWalletClient()` (lazy `createGeoWalletClient({ signer, network })` — EIP-7702 smart account, gas-sponsored) and `getWalletAddress()`. Verified: the wallet address resolves to the editor's personal space on the new indexer.
+- **Client**: `src/functions.ts` exports `geo = createGeoClient({ network: NETWORK })`. String network ids (`network: "TESTNET"`) no longer exist anywhere in the API. Publish entry points hang off the client — `geo.personalSpaces.publishEdit({ … })`, `geo.daoSpaces.proposeEdit({ … })` — and still return `{ to, calldata }` for the wallet to send. Proposal methods are flattened: `geo.daoSpaces.voteProposal(…)` / `geo.daoSpaces.executeProposal(…)` — the `proposals.*` nesting is gone.
+- **`Graph.*` op builders are deprecated but still work** (the SDK steers toward `Ops.*` + client workflows). `src/entity_ops.ts` and generated scripts keep using `Graph.*`; a wholesale `Graph`→`Ops` port is future repo work — don't mix styles inside one script.
+- **DAO voting settings** renamed + expanded: `slowPathPercentageThreshold` → `partialPercentageSupportThreshold`, `fastPathFlatThreshold` → `flatSupportThreshold`, plus three new required fields (`universalPercentageSupportThreshold`, `disableFastPathAccessForNewMembers`, `executionGracePeriodInDays`). geo-clean never writes governance settings — this matters only when reading them during discovery.
 
 ## Canonical selection — helper contract
 

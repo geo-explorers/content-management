@@ -2,12 +2,12 @@
 name: geo-clean
 description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Geo Knowledge Graph — Cleaning
 
-Editor-facing skill for cleaning Geo: finding bad data, merging duplicates, deleting orphans, moving entities, fixing types. Uses Bun + `@geoprotocol/geo-sdk` locally on the editor's machine. Every destructive op runs through a Discovery + Gates + Plan template, a dry-run, and an explicit `publish` confirmation.
+Editor-facing skill for cleaning Geo: finding bad data, merging duplicates, deleting orphans, moving entities, fixing types. Uses Bun + `@geoprotocol/geo-sdk` **v0.20.0+** locally on the editor's machine (older SDKs target the decommissioned pre-2026-07 infrastructure — see prerequisite 4). Every destructive op runs through a Discovery + Gates + Plan template, a dry-run, and an explicit `publish` confirmation.
 
 This skill complements the publishing skill (which creates new entities). Both share the same local setup. Works on any host (Claude Code, other desktop agents) that can read files, run bash, and reach the network.
 
@@ -16,8 +16,9 @@ This skill complements the publishing skill (which creates new entities). Both s
 1. **`content-management` repo cloned** locally. The skill runs FROM this directory and imports helpers from `src/` (`mergeEntities`, `selectCanonicalTopic`, `OpsBatch`, etc.).
 2. **Bun installed** (`bun --version` works).
 3. **`bun install` already run** (`node_modules/` exists).
-4. **`.env` filled in**: `PK_SW=` and `DEMO_SPACE_ID=` set. Never `cat .env` or `grep PK_SW .env` — to verify presence use `test -f .env && grep -q '^PK_SW=' .env && echo ok`.
-5. **Network allowlist** (if the host sandboxes outbound traffic) includes `testnet-api.geobrowser.io` plus the publish-time hosts (IPFS gateway, RPC, governance contract resolver). Hosts surface on first failed publish — add as they appear.
+4. **Repo migrated to the 2026-07 Geo infrastructure**: `@geoprotocol/geo-sdk` pinned **≥ 0.20.0** (beta pins like `^0.20.0-beta.8` count) in `package.json`, with all endpoints derived from the SDK's network config — quick check: `grep -q 'GeoTestnetConfig' src/functions.ts && echo migrated`. The old infrastructure (SDK ≤ 0.19.x, hardcoded `testnet-api.geobrowser.io` / old Conduit RPC URLs) is decommissioned: during the short post-migration grace window the old endpoints still respond — everything LOOKS fine — but edits published there are not carried over, and then the endpoints go offline for good. If the check fails, STOP — migrating `src/` and the SDK pin is repo work, never something to patch around inside a generated script.
+5. **`.env` filled in**: `PK_SW=` and `DEMO_SPACE_ID=` set. Never `cat .env` or `grep PK_SW .env` — to verify presence use `test -f .env && grep -q '^PK_SW=' .env && echo ok`.
+6. **Network allowlist** (if the host sandboxes outbound traffic): the hosts come from the SDK's `GeoTestnetConfig` (apiOrigin, chain.rpcUrl, sponsorship.rpcUrl) — currently `testnet-api-v2.geobrowser.io` (GraphQL; the announced `api-testnet.geobrowser.io` alias serves the same data), `rpc-geo-testnet-irdc0cgb0w.t.conduit.xyz` (RPC, chain id 55516) and `rpc.zerodev.app` (gas sponsorship, publish-time), plus the IPFS gateway. Hosts surface on first failed publish — add as they appear, and re-check the config after SDK bumps (final vanity URLs like `rpc-testnet.geobrowser.io` may land in a later release).
 
 If any prerequisite is missing, STOP and ask the editor to fix it. Do not work around.
 
