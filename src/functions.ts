@@ -1,50 +1,52 @@
 import {
   createGeoClient,
   createGeoWalletClient,
-  defineGeoNetworkConfig,
   GeoTestnetConfig,
+  type GeoWalletClient,
   type Op,
 } from "@geoprotocol/geo-sdk";
-import { privateKeyToAccount } from "viem/accounts";
 import dotenv from "dotenv";
 import * as fs from "fs";
 import path from "node:path";
+import { privateKeyToAccount } from "viem/accounts";
 
 dotenv.config();
 
 // ─── Configuration ───────────────────────────────────────────────────────────
+// 2026-07 infra migration: endpoints, chain id, and contract addresses all come
+// from the SDK's network config — never hardcode them here. A `bun install`
+// picks up URL changes with zero code edits.
 
-// Migration (v20 contracts): new RPC + chain ID 55516. The doc marks the RPC URL
-// "once the final URL is confirmed" — verify it responds before first publish.
-// Old (pre-migration): https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz
-const TESTNET_RPC_URL = "https://rpc-testnet.geobrowser.io";
-export const TESTNET_CHAIN_ID = 55516;
+export const NETWORK = GeoTestnetConfig;
 
-// SDK v0.20: clients are created explicitly with a network config (string
-// network IDs are gone). beta.8's built-in GeoTestnetConfig still points at
-// interim URLs (testnet-api-v2 + a conduit RPC), so we override with the final
-// URLs from the migration doc. If the final 0.20.0 release ships these as
-// defaults, this override can be dropped.
-const GEO_NETWORK = defineGeoNetworkConfig({
-  ...GeoTestnetConfig,
-  apiOrigin: "https://api-testnet.geobrowser.io",
-  chain: { ...GeoTestnetConfig.chain, id: TESTNET_CHAIN_ID, rpcUrl: TESTNET_RPC_URL },
-});
-const geo = createGeoClient({ network: GEO_NETWORK });
+export const geo = createGeoClient({ network: NETWORK });
 
-// v0.20 replacement for the removed getSmartAccountWalletClient.
-async function getWalletClient(privateKey: `0x${string}`) {
-  return createGeoWalletClient({
-    signer: privateKeyToAccount(privateKey),
-    network: GEO_NETWORK,
-  });
+// Geo wallet client (EIP-7702 smart account, gas-sponsored). Lazy singleton so
+// read-only runs never touch the RPC.
+let walletClientPromise: Promise<GeoWalletClient> | undefined;
+export function getWalletClient(): Promise<GeoWalletClient> {
+  if (!walletClientPromise) {
+    const privateKey = process.env.PK_SW as `0x${string}` | undefined;
+    if (!privateKey) throw new Error("PK_SW not set in .env");
+    walletClientPromise = createGeoWalletClient({
+      signer: privateKeyToAccount(privateKey),
+      network: NETWORK,
+    });
+  }
+  return walletClientPromise;
+}
+
+export async function getWalletAddress(): Promise<`0x${string}`> {
+  const client = await getWalletClient();
+  if (!client.account) throw new Error("Geo wallet client has no account");
+  return client.account.address;
 }
 
 // ─── GraphQL Helper ──────────────────────────────────────────────────────────
 
-const API_URL = "https://api-testnet.geobrowser.io/graphql";
+const API_URL = `${NETWORK.apiOrigin}/graphql`;
 
-export async function gql(query: string, variables?: Record<string, any>, maxRetries = 5) {
+export async function gql(query: string, variables?: Record<string, any>, maxRetries = 50) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(API_URL, {
@@ -55,7 +57,7 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 
       // Retry on 5xx / 429
       if ((res.status >= 500 || res.status === 429) && attempt < maxRetries) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
+        const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
         console.log(`  ⚠ API ${res.status}, retry ${attempt}/${maxRetries} in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -72,25 +74,24 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
         const msg = json.errors[0]?.message ?? 'Unknown';
         const isServerError = msg.includes('Unexpected error') || msg.includes('Internal');
         if (isServerError && attempt < maxRetries) {
-          const delay = Math.pow(2, attempt - 1) * 1000;
+          const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
           console.log(`  ⚠ GraphQL: "${msg}", retry ${attempt}/${maxRetries} in ${delay}ms`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
         console.error("GraphQL errors:", JSON.stringify(json.errors, null, 2));
-        throw new Error(`GraphQL: ${msg}`);
+        // Deterministic GraphQL errors (bad query/filter) — retrying can't help.
+        const gqlError: any = new Error(`GraphQL: ${msg}`);
+        gqlError.nonRetryable = true;
+        throw gqlError;
       }
 
       return json.data;
     } catch (error: any) {
-      const isRetryable = error instanceof SyntaxError ||
-        error.message?.includes('fetch failed') ||
-        error.message?.includes('ECONNRESET') ||
-        error.message?.includes('ETIMEDOUT') ||
-        error.message?.includes('socket hang up');
-
-      if (isRetryable && attempt < maxRetries) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
+      // Retry everything except deterministic GraphQL errors — the testnet API
+      // 504s/stalls under load, so transient failures are the norm on long runs.
+      if (!error?.nonRetryable && attempt < maxRetries) {
+        const delay = Math.min(Math.pow(2, attempt - 1) * 1000, 16000);
         console.log(`  ⚠ ${error.message}, retry ${attempt}/${maxRetries} in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -105,11 +106,7 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 // Returns the set of space IDs the caller can publish to (is editor or owner).
 
 export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<string>> {
-  const privateKey = process.env.PK_SW as `0x${string}`;
-  if (!privateKey) throw new Error("PK_SW not set in .env");
-
-  const client = await getWalletClient(privateKey);
-  const author = client.account.address;
+  const author = await getWalletAddress();
 
   const personalSpaceData = await gql(`{
     spaces(filter: { address: { is: "${author}" } }) { id type }
@@ -195,18 +192,14 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   }
   if (!spaceId) throw new Error("DEMO_SPACE_ID not set in .env");
 
-  const privateKey = process.env.PK_SW as `0x${string}`;
-  if (!privateKey) throw new Error("PK_SW not set in .env");
-
-  const client = await getWalletClient(privateKey);
-  const author = client.account.address
+  const client = await getWalletClient();
+  const account = client.account;
+  if (!account) throw new Error("Geo wallet client has no account");
+  const author = account.address;
 
   const personalSpaceData = await gql(`{
     spaces(filter: { address: { is: "${author}" } }) { id type }
   }`);
-  
-  if (!author)
-    throw new Error("Smart Wallet address not found from private key.");
 
   console.log(`\nQuerying space ${spaceId} from the API...`);
 
@@ -247,7 +240,6 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       return undefined;
     }
 
-    // v0.20: network comes from the client, not a param
     const result = await geo.personalSpaces.publishEdit({
       name: editName,
       spaceId,
@@ -281,14 +273,12 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       return undefined;
     }
 
-    // v0.20: geo.daoSpaces.proposeEdit (no network param). Space-id format kept
-    // 0x-prefixed as before — smoke-test the first DAO publish post-migration.
     const result = await geo.daoSpaces.proposeEdit({
       name: editName,
       ops,
       author: callerSpaceId,
-      callerSpaceId: `0x${callerSpaceId}` as `0x${string}`,
-      daoSpaceId: `0x${spaceId}` as `0x${string}`,
+      callerSpaceId: `0x${callerSpaceId}`,
+      daoSpaceId: `0x${spaceId}`,
       daoSpaceAddress: daoAddress as `0x${string}`,
       votingMode: isEditor ? "FAST" : "SLOW",
     });
@@ -303,24 +293,24 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   }
 
   
-  const txHash = await client.sendTransaction({ account: client.account, to, data: calldata });
+  const txHash = await client.sendTransaction({ account, chain: null, to, data: calldata });
   console.log("Transaction hash:", txHash);
 
   // Auto-vote disabled — propose only, let editors review before voting
-  // v0.20: flattened proposal methods — geo.daoSpaces.voteProposal / executeProposal
   // if (proposalId && isEditor && authorSpaceId) {
-  //   const result = geo.daoSpaces.voteProposal({
+  //   const v = geo.daoSpaces.voteProposal({
   //     authorSpaceId: authorSpaceId,
   //     spaceId: spaceId,
   //     proposalId: proposalId,
-  //     vote: "YES"
-  //   })
-  //   to = result.to;
-  //   calldata = result.calldata;
-  //   const txHash = await client.sendTransaction({ account: client.account, to, data: calldata });
-  //   console.log("Vote transaction hash:", txHash);
+  //     vote: "YES",
+  //   });
+  //   const voteTx = await client.sendTransaction({ account, to: v.to, data: v.calldata });
+  //   console.log("Vote transaction hash:", voteTx);
   // }
-  return txHash;
+  // For DAO publishes, return the proposalId (used to build governance URLs:
+  // https://www.geobrowser.io/space/{spaceId}/governance?proposalId={id-no-0x}).
+  // For personal-space publishes, no proposal is created — fall back to txHash.
+  return proposalId ?? txHash;
 }
 
 // ─── printOps ────────────────────────────────────────────────────────────────

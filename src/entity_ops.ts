@@ -1,5 +1,5 @@
 import { Graph, type Op, type PropertyValueParam } from '@geoprotocol/geo-sdk';
-import { gql, publishOps } from './functions.ts';
+import { getWalletAddress, gql, publishOps } from './functions.ts';
 import { TYPES, PROPERTIES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK } from './constants.ts';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1361,19 +1361,9 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
   const privateKey = process.env.PK_SW as `0x${string}`;
   let callerSpaceId: string | null = null;
   if (privateKey) {
-    // v0.20: getSmartAccountWalletClient is gone — createGeoWalletClient + viem signer.
-    // RPC (chain 55516) comes from the network config; old: rpc-geo-test-zc16z3tcvf.t.conduit.xyz
-    const { createGeoWalletClient, defineGeoNetworkConfig, GeoTestnetConfig } = await import('@geoprotocol/geo-sdk');
-    const { privateKeyToAccount } = await import('viem/accounts');
-    const client = await createGeoWalletClient({
-      signer: privateKeyToAccount(privateKey),
-      network: defineGeoNetworkConfig({
-        ...GeoTestnetConfig,
-        apiOrigin: 'https://api-testnet.geobrowser.io',
-        chain: { ...GeoTestnetConfig.chain, id: 55516, rpcUrl: 'https://rpc-testnet.geobrowser.io' },
-      }),
-    });
-    const walletAddress = client.account.address;
+    // v0.20: wallet address via the shared config-derived helper in functions.ts
+    // (no hardcoded endpoints — all URLs come from GeoTestnetConfig).
+    const walletAddress = await getWalletAddress();
     const personalData = await gql(`{
       spaces(filter: { address: { is: "${walletAddress}" } }) { id type }
     }`);

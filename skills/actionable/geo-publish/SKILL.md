@@ -134,7 +134,7 @@ Self-contained script template (portable — direct SDK, no repo helpers require
 // SDK v0.20+ (post-migration): explicit client + network config; string network
 // IDs and getSmartAccountWalletClient are GONE.
 import {
-  Graph, createGeoClient, createGeoWalletClient, defineGeoNetworkConfig,
+  Graph, createGeoClient, createGeoWalletClient,
   GeoTestnetConfig, SystemIds, type Op,
 } from '@geoprotocol/geo-sdk';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -147,15 +147,11 @@ if (!raw) throw new Error('No key. Set GEO_PRIVATE_KEY in .env.geo-publish (or P
 const privateKey = (raw.startsWith('0x') ? raw : `0x${raw}`) as `0x${string}`;
 const SPACE = process.env.DEMO_SPACE_ID!;        // target = your personal space
 
-// Network: GraphQL api-testnet.geobrowser.io, RPC rpc-testnet.geobrowser.io, chain 55516.
-// (Override needed while the SDK's built-in GeoTestnetConfig still carries interim URLs;
-// drop the override once the final 0.20.0 defaults match.)
-const GEO_NETWORK = defineGeoNetworkConfig({
-  ...GeoTestnetConfig,
-  apiOrigin: 'https://api-testnet.geobrowser.io',
-  chain: { ...GeoTestnetConfig.chain, id: 55516, rpcUrl: 'https://rpc-testnet.geobrowser.io' },
-});
-const geo = createGeoClient({ network: GEO_NETWORK });
+// Network: endpoints + chain id (55516) + contract addresses ALL come from the SDK's
+// GeoTestnetConfig — never hardcode them (the announced vanity URLs aren't all live yet;
+// `bun install` picks up final URLs automatically). Repo users can import NETWORK/geo
+// from ../src/functions.js instead of re-deriving here.
+const geo = createGeoClient({ network: GeoTestnetConfig });
 
 const allOps: Op[] = [];
 
@@ -181,7 +177,7 @@ for (const c of created) console.log(`Creating: ${c.name} [${c.types.join(', ')}
 console.log(`${allOps.length} ops; entity ${entityId}`);
 if (DRY_RUN) { console.log('DRY_RUN — set false to publish.'); }
 else {
-  const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GEO_NETWORK });
+  const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GeoTestnetConfig });
   const { to, calldata, editId } = await geo.personalSpaces.publishEdit({
     name: 'Add Hedy Lamarr', spaceId: SPACE, ops: allOps, author: SPACE,   // no network param — the client carries it
   });
@@ -218,7 +214,7 @@ Why this is a hard rule (it caused a real publish outage):
 The script holds only the **ontology (type/property/relation IDs) + the row→ops mapping**. The data stays in the file:
 
 ```typescript
-import { Graph, createGeoClient, createGeoWalletClient, defineGeoNetworkConfig, GeoTestnetConfig, type Op } from '@geoprotocol/geo-sdk';  // v0.20 client — same GEO_NETWORK setup as the script template
+import { Graph, createGeoClient, createGeoWalletClient, GeoTestnetConfig, type Op } from '@geoprotocol/geo-sdk';  // v0.20 client — createGeoClient({ network: GeoTestnetConfig }) as in the script template
 import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';   // or JSON.parse for a .json dataset
 
@@ -431,8 +427,8 @@ The rendered order follows the SDK/UI ASCII fractional-index order. **Caveat:** 
 
 **DAO publish is a two-call flow — a FAST proposal still needs a YES vote to execute** (it does NOT auto-execute). v0.20: proposal methods are flattened onto `daoSpaces` (`voteProposal` / `executeProposal` — no `.proposals.` namespace):
 ```ts
-// geo + GEO_NETWORK from the same createGeoClient setup as the script template
-const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GEO_NETWORK });
+// geo from the same createGeoClient({ network: GeoTestnetConfig }) setup as the script template
+const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GeoTestnetConfig });
 const { proposalId, to, calldata } = await geo.daoSpaces.proposeEdit({
   name: 'edit name', ops, author: AUTHOR,                    // AUTHOR = your person/space id (hex, no 0x)
   daoSpaceAddress: DAO_ADDR,                                 // 0x… contract address of the space

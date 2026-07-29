@@ -3,17 +3,17 @@
   "skills": {
     "actionable/geo-publish": {
       "version": "0.8.0",
-      "approved_commit": "671cdb1d799abb84471c9ff68cdc373e760c0483",
-      "content_sha256": "33182af9bf3afeb8b63cbec5534bf9596623482c8a8ae622b3ace14619a8d14f"
+      "approved_commit": "3ec3d4c17411bdad5c8a469f5b17d9cba3c3cb9b",
+      "content_sha256": "89deddee0efa6cb3648a8e33baf5b242e508e97d2d74c0ced83731759a5916b0"
     },
     "non-actionable/geo-press-review": {
       "version": "0.5.3",
-      "approved_commit": "e1cfaa930484745cb3375ce6d92f9f6179868fe6",
+      "approved_commit": "3ec3d4c17411bdad5c8a469f5b17d9cba3c3cb9b",
       "content_sha256": "4937fa50308c4be0a6d29c3cbf711231748ede7e11770f6dda286ef2e26478c1"
     },
     "non-actionable/geo-query": {
       "version": "0.2.5",
-      "approved_commit": "671cdb1d799abb84471c9ff68cdc373e760c0483",
+      "approved_commit": "3ec3d4c17411bdad5c8a469f5b17d9cba3c3cb9b",
       "content_sha256": "edb900b1bfd550e207634dc0dd5babc1d438afa6ff2c3ba6e27e86a8755d5a59"
     }
   }
