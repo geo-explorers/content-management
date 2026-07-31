@@ -11,3 +11,4 @@ test_csvs/
 output
 snapshots/
 logs/
+tmp/
