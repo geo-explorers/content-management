@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.7.0
+  version: 0.8.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -15,7 +15,7 @@ Every write passes four mandatory safeguards FIRST: **semantic-duplicate check**
 ## Prerequisites
 
 1. **Runtime**: Node 20.6+ or Bun (both support `--env-file`).
-2. **SDK available**: either the `content-management` repo cloned with `bun install` run (`node_modules/@geoprotocol/geo-sdk` exists), or the skill's own `node_modules`.
+2. **SDK available**: either the `content-management` repo cloned with `bun install` run (`node_modules/@geoprotocol/geo-sdk` exists), or the skill's own `node_modules`. **Post-migration (v20 contracts) this must be `@geoprotocol/geo-sdk` v0.20+** — 0.19.x and earlier publish to the retired contracts and their edits silently go nowhere after the grace window.
 3. **Wallet key** in an env file at the project root — `GEO_PRIVATE_KEY=0x...` in `.env.geo-publish` (preferred), or the repo's existing `PK_SW=0x...` in `.env`. Scripts read **`GEO_PRIVATE_KEY` first, then fall back to `PK_SW`**, so repo users need no second file. Export the key from <https://www.geobrowser.io/export-wallet>.
 
 **Never put the key in the transcript.** Do NOT `cat`/`grep` the value, do NOT `export` it in-session, do NOT ask the user to paste it. If no key file exists, ask the user to create one themselves in their editor (one line, e.g. `GEO_PRIVATE_KEY=0x...`) and reply "done". You may create a `.env.geo-publish.example` placeholder and add the filename to `.gitignore` for them. To check it's configured without reading it:
@@ -101,7 +101,7 @@ Reply **"go"** to authorize writing + dry-running the script.
 
 ## Discovery — how to produce the four outputs
 
-GraphQL against `https://testnet-api.geobrowser.io/graphql` (no auth). Delegate to `geo-query` if loaded.
+GraphQL against `https://api-testnet.geobrowser.io/graphql` (no auth). Delegate to `geo-query` if loaded.
 
 **Schema** (type ID + property/relation IDs + property dataTypes from a known instance):
 ```graphql
@@ -131,7 +131,13 @@ Property IDs from `values.nodes[].property.id`; **the property's declared type f
 Self-contained script template (portable — direct SDK, no repo helpers required):
 
 ```typescript
-import { Graph, personalSpace, getSmartAccountWalletClient, SystemIds, type Op } from '@geoprotocol/geo-sdk';
+// SDK v0.20+ (post-migration): explicit client + network config; string network
+// IDs and getSmartAccountWalletClient are GONE.
+import {
+  Graph, createGeoClient, createGeoWalletClient,
+  GeoTestnetConfig, SystemIds, type Op,
+} from '@geoprotocol/geo-sdk';
+import { privateKeyToAccount } from 'viem/accounts';
 
 const DRY_RUN = true;
 
@@ -140,6 +146,12 @@ const raw = process.env.GEO_PRIVATE_KEY ?? process.env.PK_SW;
 if (!raw) throw new Error('No key. Set GEO_PRIVATE_KEY in .env.geo-publish (or PK_SW in .env).');
 const privateKey = (raw.startsWith('0x') ? raw : `0x${raw}`) as `0x${string}`;
 const SPACE = process.env.DEMO_SPACE_ID!;        // target = your personal space
+
+// Network: endpoints + chain id (55516) + contract addresses ALL come from the SDK's
+// GeoTestnetConfig — never hardcode them (the announced vanity URLs aren't all live yet;
+// `bun install` picks up final URLs automatically). Repo users can import NETWORK/geo
+// from ../src/functions.js instead of re-deriving here.
+const geo = createGeoClient({ network: GeoTestnetConfig });
 
 const allOps: Op[] = [];
 
@@ -165,9 +177,9 @@ for (const c of created) console.log(`Creating: ${c.name} [${c.types.join(', ')}
 console.log(`${allOps.length} ops; entity ${entityId}`);
 if (DRY_RUN) { console.log('DRY_RUN — set false to publish.'); }
 else {
-  const wallet = await getSmartAccountWalletClient({ privateKey });
-  const { to, calldata, editId } = await personalSpace.publishEdit({
-    name: 'Add Hedy Lamarr', spaceId: SPACE, ops: allOps, author: SPACE, network: 'TESTNET',
+  const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GeoTestnetConfig });
+  const { to, calldata, editId } = await geo.personalSpaces.publishEdit({
+    name: 'Add Hedy Lamarr', spaceId: SPACE, ops: allOps, author: SPACE,   // no network param — the client carries it
   });
   const tx = await wallet.sendTransaction({ account: wallet.account, to, data: calldata });
   console.log('editId', editId, 'tx', tx);
@@ -202,7 +214,7 @@ Why this is a hard rule (it caused a real publish outage):
 The script holds only the **ontology (type/property/relation IDs) + the row→ops mapping**. The data stays in the file:
 
 ```typescript
-import { Graph, personalSpace, getSmartAccountWalletClient, type Op } from '@geoprotocol/geo-sdk';
+import { Graph, createGeoClient, createGeoWalletClient, GeoTestnetConfig, type Op } from '@geoprotocol/geo-sdk';  // v0.20 client — createGeoClient({ network: GeoTestnetConfig }) as in the script template
 import { readFileSync } from 'node:fs';
 import { parse } from 'csv-parse/sync';   // or JSON.parse for a .json dataset
 
@@ -410,24 +422,25 @@ The rendered order follows the SDK/UI ASCII fractional-index order. **Caveat:** 
 
 | | Personal | DAO |
 |---|---|---|
-| Publish | instant (`personalSpace.publishEdit`) | **proposal + YES vote** (`daoSpace.proposeEdit` → `voteProposal`) |
+| Publish | instant (`geo.personalSpaces.publishEdit`) | **proposal + YES vote** (`geo.daoSpaces.proposeEdit` → `voteProposal`) |
 | Access | your wallet only | must be an editor of the DAO |
 
-**DAO publish is a two-call flow — a FAST proposal still needs a YES vote to execute** (it does NOT auto-execute):
+**DAO publish is a two-call flow — a FAST proposal still needs a YES vote to execute** (it does NOT auto-execute). v0.20: proposal methods are flattened onto `daoSpaces` (`voteProposal` / `executeProposal` — no `.proposals.` namespace):
 ```ts
-import { daoSpace, getSmartAccountWalletClient } from '@geoprotocol/geo-sdk';
-const wallet = await getSmartAccountWalletClient({ privateKey });
-const { proposalId, to, calldata } = await daoSpace.proposeEdit({
+// geo from the same createGeoClient({ network: GeoTestnetConfig }) setup as the script template
+const wallet = await createGeoWalletClient({ signer: privateKeyToAccount(privateKey), network: GeoTestnetConfig });
+const { proposalId, to, calldata } = await geo.daoSpaces.proposeEdit({
   name: 'edit name', ops, author: AUTHOR,                    // AUTHOR = your person/space id (hex, no 0x)
   daoSpaceAddress: DAO_ADDR,                                 // 0x… contract address of the space
   callerSpaceId: `0x${AUTHOR}`, daoSpaceId: `0x${SPACE}`,    // both bytes16, 0x-prefixed
-  votingMode: 'FAST', network: 'TESTNET',
+  votingMode: 'FAST',                                        // no network param — the client carries it
 });
 await wallet.sendTransaction({ to, data: calldata });
 const pid = String(proposalId).startsWith('0x') ? proposalId : `0x${proposalId}`;
-const v = daoSpace.voteProposal({ authorSpaceId: `0x${AUTHOR}`, spaceId: `0x${SPACE}`, proposalId: pid, vote: 'YES' });
+const v = geo.daoSpaces.voteProposal({ authorSpaceId: `0x${AUTHOR}`, spaceId: `0x${SPACE}`, proposalId: pid, vote: 'YES' });
 await wallet.sendTransaction({ to: v.to, data: v.calldata });
 ```
+**Voting settings (if your script touches governance):** `slowPathPercentageThreshold` → `partialPercentageSupportThreshold`, `fastPathFlatThreshold` → `flatSupportThreshold`, plus three NEW required fields: `universalPercentageSupportThreshold`, `disableFastPathAccessForNewMembers`, `executionGracePeriodInDays`. Governance flows need real testing post-migration — don't assume.
 After publishing, poll the indexer (`tooling/scripts/wait-for-index.sh <id>`) before verifying — reads lag the write by seconds.
 
 ### SDK gotchas (block/publish scripts)

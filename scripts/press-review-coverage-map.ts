@@ -36,7 +36,7 @@
 
 import * as fs from 'fs';
 
-const API_URL = 'https://testnet-api.geobrowser.io/graphql';
+const API_URL = 'https://api-testnet.geobrowser.io/graphql';
 
 // ─── Known IDs ───────────────────────────────────────────────────────────────
 const PUBLISH_DATE_PROP = '94e43fe8faf241009eb887ab4f999723';

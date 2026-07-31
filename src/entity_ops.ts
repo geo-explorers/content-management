@@ -1,5 +1,5 @@
 import { Graph, type Op, type PropertyValueParam } from '@geoprotocol/geo-sdk';
-import { gql, publishOps } from './functions.ts';
+import { getWalletAddress, gql, publishOps } from './functions.ts';
 import {
   TYPES, PROPERTIES, DATA_TYPE_PROPERTY, DATA_TYPE_TO_SDK,
   CURATED_TOPIC_ENTITY_ID, FEATURED_TOPIC_ENTITY_ID, TAGS_RELATION_TYPE_ID,
@@ -1866,12 +1866,9 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
   const privateKey = process.env.PK_SW as `0x${string}`;
   let callerSpaceId: string | null = null;
   if (privateKey) {
-    const { getSmartAccountWalletClient } = await import('@geoprotocol/geo-sdk');
-    const client = await getSmartAccountWalletClient({
-      privateKey,
-      rpcUrl: 'https://rpc-geo-test-zc16z3tcvf.t.conduit.xyz',
-    });
-    const walletAddress = client.account.address;
+    // v0.20: config-derived wallet via functions.ts (no hardcoded RPC).
+    // Address lowercased — new infra stores addresses lowercase, case-sensitive filter.
+    const walletAddress = (await getWalletAddress()).toLowerCase();
     const personalData = await gql(`{
       spaces(filter: { address: { is: "${walletAddress}" } }) { id type }
     }`);
