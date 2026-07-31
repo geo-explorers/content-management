@@ -1,10 +1,35 @@
 {
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
+    "actionable/geo-clean": {
+      "version": "0.3.0",
+      "approved_commit": "",
+      "content_sha256": "415c389f9bc4b0a459222b82c05a9faba8fbfd9a9656c4092943194699031770"
+    },
+    "actionable/geo-discovery": {
+      "version": "0.1.0",
+      "approved_commit": "",
+      "content_sha256": "c72b7c04bc8939766e058e92ed714981c57eb97b1442f27e6e92cc6eb8c5a944"
+    },
+    "actionable/geo-orchestrate": {
+      "version": "0.2.0",
+      "approved_commit": "",
+      "content_sha256": "5e328080a18f8a4e8f040a73d831d338f9f2b8a3065d85ac5ece2e52005e0931"
+    },
     "actionable/geo-publish": {
       "version": "0.8.0",
-      "approved_commit": "3ec3d4c17411bdad5c8a469f5b17d9cba3c3cb9b",
+      "approved_commit": "543116bca395f09dde8f0df06c94cb750fdad47e",
       "content_sha256": "89deddee0efa6cb3648a8e33baf5b242e508e97d2d74c0ced83731759a5916b0"
+    },
+    "non-actionable/daily-report": {
+      "version": "0.1.0",
+      "approved_commit": "",
+      "content_sha256": "0f13aecd820756cca87d1eebd5677357fb5a00a6ce9cdf6caa0baa6fd83d47a4"
+    },
+    "non-actionable/geo-describe": {
+      "version": "0.2.0",
+      "approved_commit": "",
+      "content_sha256": "bf1cc781216c56ed8af740d4fa6cf8e723359fe516328b02b67aa9ab998379cb"
     },
     "non-actionable/geo-press-review": {
       "version": "0.5.3",
@@ -15,6 +40,16 @@
       "version": "0.2.5",
       "approved_commit": "3ec3d4c17411bdad5c8a469f5b17d9cba3c3cb9b",
       "content_sha256": "edb900b1bfd550e207634dc0dd5babc1d438afa6ff2c3ba6e27e86a8755d5a59"
+    },
+    "non-actionable/image-banner-recompose": {
+      "version": "0.2.0",
+      "approved_commit": "",
+      "content_sha256": "ea9e37588885018e2246020f7b885c792ff1b8bb73730fdda8edd01deb1ce6a5"
+    },
+    "non-actionable/ontology-advisor": {
+      "version": "0.1.0",
+      "approved_commit": "",
+      "content_sha256": "5ea2bb42ca7d873114e8278daa2890bc148f5460ac248bcf5a89b2a8082d592d"
     }
   }
 }
