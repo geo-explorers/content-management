@@ -106,7 +106,9 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 // Returns the set of space IDs the caller can publish to (is editor or owner).
 
 export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<string>> {
-  const author = await getWalletAddress();
+  // v0.20 infra stores space addresses lowercase and the `is` filter is
+  // case-sensitive — the wallet client returns a checksummed address, so lowercase it.
+  const author = (await getWalletAddress()).toLowerCase();
 
   const personalSpaceData = await gql(`{
     spaces(filter: { address: { is: "${author}" } }) { id type }
@@ -195,7 +197,9 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   const client = await getWalletClient();
   const account = client.account;
   if (!account) throw new Error("Geo wallet client has no account");
-  const author = account.address;
+  // v0.20 infra stores space addresses lowercase and the `is` filter is
+  // case-sensitive — the wallet client returns a checksummed address, so lowercase it.
+  const author = account.address.toLowerCase();
 
   const personalSpaceData = await gql(`{
     spaces(filter: { address: { is: "${author}" } }) { id type }
