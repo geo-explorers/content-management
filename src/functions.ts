@@ -283,7 +283,8 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       author: callerSpaceId,
       callerSpaceId: `0x${callerSpaceId}`,
       daoSpaceId: `0x${spaceId}`,
-      daoSpaceAddress: daoAddress as `0x${string}`,
+      // geo-sdk 0.20.2: daoSpaceAddress param removed — the target contract
+      // (Space Registry) is resolved from the network config; result.to carries it.
       votingMode: isEditor ? "FAST" : "SLOW",
     });
     console.log("proposalId:", result.proposalId)

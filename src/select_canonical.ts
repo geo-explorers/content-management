@@ -372,7 +372,7 @@ export function selectCanonicalTopic(
     // Secondaries = every other touchable candidate: eligible + vacatable.
     const secMetas = [...eligible, ...vacatableMetas].filter(m => m.id !== forcedCanonicalId);
     const canonical = forcedMeta ?? {
-      id: forcedCanonicalId, name: '', found: false, spaceIds: [], createdAt: Number.POSITIVE_INFINITY,
+      id: forcedCanonicalId, name: '', found: false, spaceIds: [], representsSpaces: [], createdAt: Number.POSITIVE_INFINITY,
       backlinkCount: 0, dataCount: 0, hasFeatured: false, hasCurated: false, scoreValues: [],
     } as CandidateMeta;
     const { anchorSpaceId } = chooseAnchor(canonical, secMetas);
