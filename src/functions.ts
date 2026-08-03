@@ -106,12 +106,12 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 // Returns the set of space IDs the caller can publish to (is editor or owner).
 
 export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<string>> {
-  const author = await getWalletAddress();
+  // v0.20 infra stores space addresses lowercase and the `is` filter is
+  // case-sensitive — the wallet client returns a checksummed address, so lowercase it.
+  const author = (await getWalletAddress()).toLowerCase();
 
-  // The v2 API's address filter is case-sensitive and the indexer stores
-  // addresses lowercase; viem returns EIP-55 checksummed — normalize.
   const personalSpaceData = await gql(`{
-    spaces(filter: { address: { is: "${author.toLowerCase()}" } }) { id type }
+    spaces(filter: { address: { is: "${author}" } }) { id type }
   }`);
   const callerSpace = personalSpaceData.spaces?.find((s: any) => s.type === "PERSONAL");
   if (!callerSpace) throw new Error(`No personal space found for wallet ${author}.`);
@@ -197,11 +197,12 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   const client = await getWalletClient();
   const account = client.account;
   if (!account) throw new Error("Geo wallet client has no account");
-  const author = account.address;
+  // v0.20 infra stores space addresses lowercase and the `is` filter is
+  // case-sensitive — the wallet client returns a checksummed address, so lowercase it.
+  const author = account.address.toLowerCase();
 
-  // Case-sensitive address filter on the v2 API — query with lowercase.
   const personalSpaceData = await gql(`{
-    spaces(filter: { address: { is: "${author.toLowerCase()}" } }) { id type }
+    spaces(filter: { address: { is: "${author}" } }) { id type }
   }`);
 
   console.log(`\nQuerying space ${spaceId} from the API...`);

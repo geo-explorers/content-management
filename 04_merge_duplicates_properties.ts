@@ -466,7 +466,7 @@ across **${ops.length}** operations.
 If something goes wrong, check that:
 - Your \`PK_SW\` is correct and the associated wallet is an editor of this space
 - You have run \`bun install\` from the project root
-- The Geo testnet API is reachable (\`https://testnet-api.geobrowser.io/graphql\`)
+- The Geo testnet API is reachable (\`https://api-testnet.geobrowser.io/graphql\`)
 `;
   fs.writeFileSync(path.join(dir, 'README.md'), readme);
 
@@ -491,7 +491,7 @@ const SPACE_ID = '${spaceId}';
 const SPACE_NAME = '${name}';
 
 async function gql(query: string, variables?: Record<string, any>) {
-  const res = await fetch('https://testnet-api.geobrowser.io/graphql', {
+  const res = await fetch('https://api-testnet.geobrowser.io/graphql', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),

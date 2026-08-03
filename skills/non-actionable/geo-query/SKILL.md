@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.4"
+  version: "0.2.5"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -25,7 +25,7 @@ Use this skill when the user wants to:
 
 ## API basics
 
-- **Endpoint:** `https://testnet-api.geobrowser.io/graphql`
+- **Endpoint:** `https://api-testnet.geobrowser.io/graphql`
 - **Method:** `POST` with `Content-Type: application/json`
 - **Auth:** none required for reads.
 - **UUIDs:** 32-char hex, no dashes (e.g. `7ed45f2bc48b419e8e4664d5ff680b0d`).

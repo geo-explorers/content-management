@@ -1866,7 +1866,9 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
   const privateKey = process.env.PK_SW as `0x${string}`;
   let callerSpaceId: string | null = null;
   if (privateKey) {
-    const walletAddress = await getWalletAddress();
+    // v0.20: config-derived wallet via functions.ts (no hardcoded RPC).
+    // Address lowercased — new infra stores addresses lowercase, case-sensitive filter.
+    const walletAddress = (await getWalletAddress()).toLowerCase();
     const personalData = await gql(`{
       spaces(filter: { address: { is: "${walletAddress}" } }) { id type }
     }`);

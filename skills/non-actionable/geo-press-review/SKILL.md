@@ -3,7 +3,7 @@ name: geo-press-review
 description: Compare external press coverage (Google News / web) against what's published on Geo, and tell editors what to publish next. Classifies stories as already-published or not-yet-covered, ranked and justified. Also does source discovery for a topic+date. Read-only — it compares and recommends, never publishes. Triggers on "press review", "what's missing on Geo", "compare press coverage", "what should we publish", "is this covered", "find sources for", "coverage gaps", "timeline for", "what news did we miss".
 metadata:
   author: geobrowser
-  version: 0.5.2
+  version: 0.5.3
 ---
 
 # Geo Knowledge Graph — Press Review
@@ -61,7 +61,7 @@ This produces `geo-coverage.json` — every News story with name, publish date, 
 
 > **Empty/thin baseline — say so explicitly.** If the space has ~0 News stories in the window (or under ~10 total), the coverage map's reassuring "(none)" gap lines are **meaningless as a comparison** — with no baseline, *every* external story will classify 🆕. Do not present this as a gap analysis. Tell the editor plainly: *"this space has no coverage baseline in this window; treat the output as a seeding list, not a gap analysis."* The script prints a `⚠ NO/THIN BASELINE` warning in this case — surface it, don't bury it.
 
-**Half 1 uses the GraphQL API (`testnet-api.geobrowser.io`), addressed by SPACE ID — NOT the Hypergraph MCP connector.** Every DAO space is reachable there by its 32-hex space id (e.g. World affairs = `89bd89bf28ff8a0963faf92a8c905e20`, ~1,175 News stories). If the bun script can't run in your environment, query GraphQL directly (see `geo-query`) — same source of truth.
+**Half 1 uses the GraphQL API (`api-testnet.geobrowser.io`), addressed by SPACE ID — NOT the Hypergraph MCP connector.** Every DAO space is reachable there by its 32-hex space id (e.g. World affairs = `89bd89bf28ff8a0963faf92a8c905e20`, ~1,175 News stories). If the bun script can't run in your environment, query GraphQL directly (see `geo-query`) — same source of truth.
 
 > **⚠ NEVER build the coverage map from the Hypergraph MCP connector.** It exposes only a curated subset of spaces (World affairs, US Politics, and others are NOT in it) and — critically — it **silently fuzzy-matches a space name to the nearest one it does have** (a real case: `space="World affairs"` matched to **"AI"** with no error), which would produce a coverage map of the *wrong* space and silently corrupt the whole review.
 >
