@@ -108,8 +108,10 @@ export async function gql(query: string, variables?: Record<string, any>, maxRet
 export async function getPublishableSpaceIds(spaceIds: string[]): Promise<Set<string>> {
   const author = await getWalletAddress();
 
+  // The v2 API's address filter is case-sensitive and the indexer stores
+  // addresses lowercase; viem returns EIP-55 checksummed — normalize.
   const personalSpaceData = await gql(`{
-    spaces(filter: { address: { is: "${author}" } }) { id type }
+    spaces(filter: { address: { is: "${author.toLowerCase()}" } }) { id type }
   }`);
   const callerSpace = personalSpaceData.spaces?.find((s: any) => s.type === "PERSONAL");
   if (!callerSpace) throw new Error(`No personal space found for wallet ${author}.`);
@@ -197,8 +199,9 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   if (!account) throw new Error("Geo wallet client has no account");
   const author = account.address;
 
+  // Case-sensitive address filter on the v2 API — query with lowercase.
   const personalSpaceData = await gql(`{
-    spaces(filter: { address: { is: "${author}" } }) { id type }
+    spaces(filter: { address: { is: "${author.toLowerCase()}" } }) { id type }
   }`);
 
   console.log(`\nQuerying space ${spaceId} from the API...`);
@@ -279,7 +282,8 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
       author: callerSpaceId,
       callerSpaceId: `0x${callerSpaceId}`,
       daoSpaceId: `0x${spaceId}`,
-      daoSpaceAddress: daoAddress as `0x${string}`,
+      // geo-sdk 0.20.2: daoSpaceAddress param removed — the target contract
+      // (Space Registry) is resolved from the network config; result.to carries it.
       votingMode: isEditor ? "FAST" : "SLOW",
     });
     console.log("proposalId:", result.proposalId)

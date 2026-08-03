@@ -26,7 +26,8 @@ console.log('announced host (api-testnet) same space:', JSON.stringify(alt.data?
 
 const addr = await getWalletAddress();
 console.log('wallet address (EIP-7702):', addr);
-const ps = await gql(`{ spaces(filter: { address: { is: "${addr}" } }) { id type } }`);
+// v2 API address filter is case-sensitive; indexer stores lowercase.
+const ps = await gql(`{ spaces(filter: { address: { is: "${addr.toLowerCase()}" } }) { id type } }`);
 console.log('spaces registered to wallet:', JSON.stringify(ps.spaces));
 const match = ps.spaces?.some((s: any) => s.id === process.env.DEMO_SPACE_ID && s.type === 'PERSONAL');
 console.log('personal space matches DEMO_SPACE_ID:', match ? 'YES' : 'NO');
