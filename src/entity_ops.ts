@@ -1863,7 +1863,7 @@ export async function migratePropertyReferences(options: MigratePropertyIdOption
   console.log(`  Found references in ${affectedSpaceIds.length} space(s): ${affectedSpaceIds.join(', ')}`);
 
   // Resolve our wallet's personal space ID for membership checks
-  const privateKey = process.env.PK_SW as `0x${string}`;
+  const privateKey = (process.env.GEO_PRIVATE_KEY ?? process.env.PK_SW) as `0x${string}`;
   let callerSpaceId: string | null = null;
   if (privateKey) {
     // v0.20: config-derived wallet via functions.ts (no hardcoded RPC).

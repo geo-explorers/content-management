@@ -26,7 +26,7 @@ export const geo = createGeoClient({ network: NETWORK });
 let walletClientPromise: Promise<GeoWalletClient> | undefined;
 export function getWalletClient(): Promise<GeoWalletClient> {
   if (!walletClientPromise) {
-    const privateKey = process.env.PK_SW as `0x${string}` | undefined;
+    const privateKey = (process.env.GEO_PRIVATE_KEY ?? process.env.PK_SW) as `0x${string}` | undefined;
     if (!privateKey) throw new Error("PK_SW not set in .env");
     walletClientPromise = createGeoWalletClient({
       signer: privateKeyToAccount(privateKey),
