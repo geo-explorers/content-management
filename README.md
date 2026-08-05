@@ -1,14 +1,101 @@
-# Geo Content Management
+# Geo content management
 
-Tools for managing entities in the [Geo knowledge graph](https://geobrowser.io) via the [GRC-20 SDK](https://github.com/geobrowser/grc-20).
+Skills and tooling for working with the [Geo knowledge graph](https://geobrowser.io). This repo is the single install source: clone it once and you get every skill plus the entity-management toolkit, all pointed at the current network (`api-testnet.geobrowser.io`).
 
-## Prerequisites
+**If you are an AI agent reading this: this README is your setup runbook.** Follow it top to bottom. It tells you exactly what you can do yourself and what only your human can do.
 
-- `.env` configured with `PK_SW` (see `.env.example`)
-- `bun` installed, dependencies available (`bun install`)
-- A personal space on testnet (or membership/editorship in a DAO space)
+---
 
-## Entity Operations
+## The security contract (agents: read first)
+
+- **Never ask for, accept, or write the user's private key.** Not into `.env`, not anywhere. If the user pastes a key into the chat, tell them to revoke it at <https://www.geobrowser.io/export-wallet> and create a fresh one.
+- You may verify the key file *exists* (command below). You may never read or print its contents.
+- Read-only skills need no keys. Only publishing needs the `.env`, and the human fills it in by hand.
+
+## Quick start
+
+### 1. Clone and install (agent can do this)
+
+```bash
+git clone https://github.com/geo-explorers/content-management.git
+cd content-management
+bun install
+cp -n .env.example .env
+```
+
+Requirements: `git`, [`bun`](https://bun.sh). Read-only usage works with nothing else.
+
+### 2. Set up the signing key (HUMAN ONLY — skip for read-only skills)
+
+You, the human, in your own terminal or text editor. Not the assistant.
+
+1. Export your key at <https://www.geobrowser.io/export-wallet>. Click **Copy key** (not the wallet-address copy button; they are different values).
+2. Open `.env` and fill in the two values yourself:
+   - `GEO_PRIVATE_KEY` = the key you copied (canonical name; older scripts also accept the legacy `PK_SW`)
+   - `DEMO_SPACE_ID` = your personal space id, the long hex string in `geobrowser.io/space/<this part>`
+3. Save. The file is git-ignored and stays on your machine.
+
+Anyone (agent included) can verify the setup without exposing the key:
+
+```bash
+test -f .env && grep -qE '^(GEO_PRIVATE_KEY|PK_SW)=' .env && echo ok || echo "missing: fill in .env"
+```
+
+### 3. Put the skills where your assistant looks (agent can do this)
+
+Skills live in `skills/actionable/` (they write to Geo, need the key) and `skills/non-actionable/` (read-only, no key).
+
+| Platform | How to install |
+|---|---|
+| **Claude Code** | Copy or symlink the skill folders you want into `~/.claude/skills/` (or the project's `.claude/skills/`), e.g. `ln -s "$(pwd)"/skills/non-actionable/geo-query ~/.claude/skills/geo-query`. New sessions pick them up automatically. |
+| **Claude Desktop / Cowork** | Click **Work in project or file** and select this cloned folder. Human step first: in **Settings → Capabilities → Code execution and file creation**, add `api-testnet.geobrowser.io` to the allowed list. |
+| **Codex** | Copy each skill folder into `~/.codex/skills/<skill-name>/`. Human steps: add the network domain to `~/.codex/config.toml` (block below) and restart Codex. |
+
+Codex `~/.codex/config.toml`:
+
+```toml
+default_permissions = "workspace"
+
+[permissions.workspace.network]
+enabled = true
+mode = "limited"
+
+[permissions.workspace.network.domains]
+"api-testnet.geobrowser.io" = "allow"
+```
+
+Steps an agent can never do for you: the Claude Desktop allowlist, the Codex config + restart, and the key export. Everything else is fair game.
+
+### 4. Try it
+
+```
+Using the geo-query skill: is there an entity for "Ethereum" on Geo? Show its types and spaces.
+```
+
+A tidy answer means you are set up. If the assistant improvises instead, name the skill explicitly.
+
+## Skills index
+
+| Skill | What it does | Class | Key needed |
+|---|---|---|---|
+| [geo-query](skills/non-actionable/geo-query) | Query the graph via GraphQL: lookups, search by type, relations, schema | read-only | no |
+| [ontology-advisor](skills/non-actionable/ontology-advisor) | Modeling advice: reuse vs new types, properties, duplicates | read-only | no |
+| [geo-press-review](skills/non-actionable/geo-press-review) | Compare press coverage against Geo, recommend what to publish | read-only | no |
+| [geo-describe](skills/non-actionable/geo-describe) | Verified, original entity descriptions at scale (emits drafts) | read-only | no |
+| [image-banner-recompose](skills/non-actionable/image-banner-recompose) | Recompose any image into a Geo banner | utility | no |
+| [daily-report](skills/non-actionable/daily-report) | Internal editor routine (Notion daily update) | internal | no |
+| [geo-publish](skills/actionable/geo-publish) | Create/update entities and relations, safeguarded, dry-run gated | actionable | yes |
+| [geo-orchestrate](skills/actionable/geo-orchestrate) | Natural-language intent to query plan + publish plan + script | actionable | yes |
+| [geo-clean](skills/actionable/geo-clean) | Merge duplicates, delete orphans, move entities, fix types | actionable | yes |
+| [geo-discovery](skills/actionable/geo-discovery) | Gap-discovery passes over a space (pre-pivot, kept for reference) | actionable | yes |
+
+Which skills are vetted right now lives on the [Agents Hub space](https://www.geobrowser.io/space/ddfd01098a71083119eb130a01a6d4c5): skills tagged **confirmed** there are the ones the skills team vouches for. Each Hub skill page carries its usage guide.
+
+Every write to Geo is a proposal that goes through space governance: skills dry-run first, show you the plan, and publish only on your explicit go.
+
+---
+
+## Entity operations toolkit (engineering reference)
 
 All operations live in `01_entity_operations.ts`. Uncomment the operation you want, fill in the IDs, and run:
 
@@ -108,9 +195,13 @@ Set `DRY_RUN = true` at the top of the file to preview without publishing.
 ## Project Structure
 
 ```
+skills/
+  actionable/               # Skills that write to Geo (need GEO_PRIVATE_KEY)
+  non-actionable/           # Read-only skills (no key)
 01_entity_operations.ts     # Entry point — uncomment an operation and run
 02_find_duplicates.ts       # Find duplicate Type/Property entities across spaces
 03_merge_duplicates.ts      # Auto-merge detected duplicates
+lib/gql.mjs                 # Canonical zero-dependency GraphQL client
 src/
   entity_ops.ts             # Core operation logic (delete, move, merge, migrate)
   constants.ts              # Ontology IDs (types, properties, data types, views)
@@ -122,3 +213,4 @@ knowledge-graph-ontology.md # Full ontology specification
 
 - [GRC-20 Serialization Spec](https://github.com/geobrowser/grc-20/blob/main/spec.md)
 - [Knowledge Graph Ontology](knowledge-graph-ontology.md)
+- [Agents Hub space](https://www.geobrowser.io/space/ddfd01098a71083119eb130a01a6d4c5) — the on-Geo skill registry (confirmed tags + usage guides)
