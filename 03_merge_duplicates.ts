@@ -489,7 +489,7 @@ async function gql(query: string, variables?: Record<string, any>) {
 }
 
 async function main() {
-  const privateKey = process.env.PK_SW as \`0x\${string}\`;
+  const privateKey = (process.env.GEO_PRIVATE_KEY ?? process.env.PK_SW) as \`0x\${string}\`;
   if (!privateKey) throw new Error('PK_SW not set in .env');
 
   // Load ops and restore UUID hex strings to Uint8Array(16)
