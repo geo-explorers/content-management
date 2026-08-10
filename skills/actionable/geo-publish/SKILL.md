@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.8.0
+  version: 0.8.1
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -16,12 +16,20 @@ Every write passes four mandatory safeguards FIRST: **semantic-duplicate check**
 
 1. **Runtime**: Node 20.6+ or Bun (both support `--env-file`).
 2. **SDK available**: either the `content-management` repo cloned with `bun install` run (`node_modules/@geoprotocol/geo-sdk` exists), or the skill's own `node_modules`. **Post-migration (v20 contracts) this must be `@geoprotocol/geo-sdk` v0.20+** — 0.19.x and earlier publish to the retired contracts and their edits silently go nowhere after the grace window.
-3. **Wallet key** in an env file at the project root — `GEO_PRIVATE_KEY=0x...` in `.env.geo-publish` (preferred), or the repo's existing `PK_SW=0x...` in `.env`. Scripts read **`GEO_PRIVATE_KEY` first, then fall back to `PK_SW`**, so repo users need no second file. Export the key from <https://www.geobrowser.io/export-wallet>.
+3. **Wallet key** in **`.env` at the project root** — `GEO_PRIVATE_KEY=0x...` (this is exactly what the setup guide creates, alongside `DEMO_SPACE_ID=`). Scripts read `GEO_PRIVATE_KEY`, fall back to the legacy `PK_SW`, and also accept a separate `.env.geo-publish` if present. Export the key from <https://www.geobrowser.io/export-wallet>.
 
-**Never put the key in the transcript.** Do NOT `cat`/`grep` the value, do NOT `export` it in-session, do NOT ask the user to paste it. If no key file exists, ask the user to create one themselves in their editor (one line, e.g. `GEO_PRIVATE_KEY=0x...`) and reply "done". You may create a `.env.geo-publish.example` placeholder and add the filename to `.gitignore` for them. To check it's configured without reading it:
+**Never put the key in the transcript.** Do NOT `cat`/`grep` the value, do NOT `export` it in-session, do NOT ask the user to paste it. To check it's configured without reading it — this accepts **all** valid setups (`.env` with `GEO_PRIVATE_KEY`, `.env` with legacy `PK_SW`, or `.env.geo-publish`):
 ```bash
-test -f .env.geo-publish && grep -q '^GEO_PRIVATE_KEY=' .env.geo-publish && echo ok || (test -f .env && grep -q '^PK_SW=' .env && echo ok)
+cat .env .env.geo-publish 2>/dev/null | grep -qE '^(GEO_PRIVATE_KEY|PK_SW)=' && echo ok || echo "missing — add GEO_PRIVATE_KEY=0x... to .env"
 ```
+Only if that prints `missing`, ask the user to add one line themselves in their editor — `GEO_PRIVATE_KEY=0x...` in `.env` — and reply "done". **Do not block on a missing key when `.env` already has `GEO_PRIVATE_KEY`** (that was a real bug: the old check looked for `PK_SW` only and wrongly reported no key).
+
+4. **Network egress (sandboxed environments only).** Reads and the dry-run only need `api-testnet.geobrowser.io`. **Publishing needs three more hosts** and is commonly blocked when an allowlist was set up for reads only (or pre-migration):
+   - `api-testnet.geobrowser.io` — IPFS upload of the edit (happens *before* the transaction; a reads-only or old `testnet-api` allowlist misses it)
+   - `rpc-geo-testnet-irdc0cgb0w.t.conduit.xyz` — transaction RPC (chain 55516)
+   - `rpc.zerodev.app` — gas sponsorship
+
+   These come from the SDK's `GeoTestnetConfig` (re-check after SDK bumps). **Symptom:** dry-run succeeds, then `publish` fails at the IPFS/broadcast step with nothing written — that's a missing egress host, an **org-admin / environment setting**, not something the script can fix. If it can't be allowlisted, hand the finished script to the user to run on their own machine (full network + `bun install`).
 
 ## HARD RULES (failure = bug)
 
