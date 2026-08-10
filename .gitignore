@@ -1,5 +1,6 @@
 .env
-.claude
+.claude/*
+!.claude/settings.json
 .DS_Store
 docs/
 node_modules

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Bash(bun install)",
+      "Bash(bun install *)",
+      "Bash(bun run scripts/*)",
+      "Bash(node scripts/*)",
+      "Bash(node --env-file=.env scripts/*)",
+      "Bash(node --env-file=.env.geo-publish scripts/*)",
+      "Bash(curl *)"
+    ]
+  }
+}
