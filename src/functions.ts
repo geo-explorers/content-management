@@ -194,6 +194,25 @@ export async function publishOps(ops: Op[], editName: string, input_space?: stri
   }
   if (!spaceId) throw new Error("DEMO_SPACE_ID not set in .env");
 
+  // ── Destructive-op circuit-breaker ─────────────────────────────────────────
+  // Backstop against an improvised script mass-deleting a space (an agent wrote
+  // its own delete loop and nuked a personal space). Deletion shows up as
+  // `deleteRelation` + `updateEntity` with an `unset` array; a space wipe is
+  // hundreds/thousands of these in one batch. Refuse a large destructive batch
+  // unless the caller explicitly opts in. The geo-clean skill — which has its own
+  // orphan check + human confirmation — sets CONFIRM_DESTRUCTIVE=1 after that
+  // confirmation; a hand-written script won't, so it gets stopped here.
+  const destructiveOps = ops.filter((o: any) =>
+    o?.type === "deleteRelation" || (o?.type === "updateEntity" && o?.unset?.length > 0)).length;
+  const DESTRUCTIVE_LIMIT = 50; // ~25 entities; normal cleanups pass, a space-nuke does not
+  if (destructiveOps > DESTRUCTIVE_LIMIT && process.env.CONFIRM_DESTRUCTIVE !== "1") {
+    throw new Error(
+      `SAFETY STOP: this publish would remove data from ~${destructiveOps} relations/values in space ${spaceId} — ` +
+      `that is a bulk delete. Refusing to broadcast. Deletion must go through the geo-clean skill ` +
+      `(orphan check + explicit confirmation). If you are certain this is intended, set CONFIRM_DESTRUCTIVE=1. ` +
+      `Never mass-delete Geo data with a hand-written script.`);
+  }
+
   const client = await getWalletClient();
   const account = client.account;
   if (!account) throw new Error("Geo wallet client has no account");
