@@ -57,6 +57,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## actionable/
 
+### geo-publish — 0.8.2
+- 2026-08-11 · **Bun `fetch` gotcha (publish stalled on "socket closed / retrying").** In some sandboxed environments Bun's `fetch` can't reach `api-testnet.geobrowser.io` while `curl` and Node's `fetch` reach it fine — so a dry-run passes but `bun run` hangs at the publish/broadcast step with nothing written. Runtime prereq now says **prefer Node for the publish step**, and if `bun run` stalls on network, re-run with `node --env-file=.env scripts/<file>.ts` (Bun quirk, not an outage). Surfaced during a live Cowork publish (Ingrida Šimonytė).
+
 ### geo-publish — 0.8.1
 - 2026-08-10 · **Publish-time network hosts documented (new prerequisite 4).** Dry-run succeeds but `publish` fails at the IPFS step when the sandbox egress allowlist only has the reads host (or the old pre-migration `testnet-api`). Listed the three hosts publishing actually needs — `api-testnet.geobrowser.io` (IPFS upload), `rpc-geo-testnet-irdc0cgb0w.t.conduit.xyz` (tx RPC), `rpc.zerodev.app` (gas sponsorship) — with the symptom + that it's an org-admin/environment setting, and the fall-back of handing the script to the user to run locally.
 - 2026-08-10 · **Key-check fix (editors were falsely blocked from publishing).** The prerequisite check only looked for `.env.geo-publish` (GEO_PRIVATE_KEY) or `.env` (legacy `PK_SW`) — it never checked `.env` for `GEO_PRIVATE_KEY`, which is exactly what the setup guide creates. So editors who set up correctly got "no wallet key configured" and had to explicitly say "just use .env". Now the check accepts all valid setups (`grep -qsE '^(GEO_PRIVATE_KEY|PK_SW)=' .env .env.geo-publish`) and `.env` + `GEO_PRIVATE_KEY` is documented as the canonical location. Added an explicit "do not block when `.env` already has `GEO_PRIVATE_KEY`" note.

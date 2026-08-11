@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.8.1
+  version: 0.8.2
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -14,7 +14,7 @@ Every write passes four mandatory safeguards FIRST: **semantic-duplicate check**
 
 ## Prerequisites
 
-1. **Runtime**: Node 20.6+ or Bun (both support `--env-file`).
+1. **Runtime**: Node 20.6+ or Bun (both support `--env-file`). **For the publish step, prefer Node** — Bun's `fetch` has hit a bug reaching the API host (`api-testnet.geobrowser.io`) in some environments, stalling the publish on "socket closed / retrying" while `curl` and Node's `fetch` reach the same host fine. If a dry-run works but `bun run` stalls on network during publish, re-run with `node --env-file=.env scripts/<file>.ts` — it's a Bun fetch quirk, not an outage.
 2. **SDK available**: either the `content-management` repo cloned with `bun install` run (`node_modules/@geoprotocol/geo-sdk` exists), or the skill's own `node_modules`. **Post-migration (v20 contracts) this must be `@geoprotocol/geo-sdk` v0.20+** — 0.19.x and earlier publish to the retired contracts and their edits silently go nowhere after the grace window.
 3. **Wallet key** in **`.env` at the project root** — `GEO_PRIVATE_KEY=0x...` (this is exactly what the setup guide creates, alongside `DEMO_SPACE_ID=`). Scripts read `GEO_PRIVATE_KEY`, fall back to the legacy `PK_SW`, and also accept a separate `.env.geo-publish` if present. Export the key from <https://www.geobrowser.io/export-wallet>.
 
