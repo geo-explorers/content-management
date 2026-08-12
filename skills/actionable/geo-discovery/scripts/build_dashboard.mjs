@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import { Graph, TextBlock, Position, daoSpace, personalSpace, getSmartAccountWalletClient } from "@geoprotocol/geo-sdk";
 
-const ENDPOINT = "https://testnet-api.geobrowser.io/graphql";
+const ENDPOINT = "https://api-testnet.geobrowser.io/graphql";
 const TOPIC_TYPE = "5ef5a5860f274d8e8f6c59ae5b3e89e2", DATA_BLOCK_TYPE = "b8803a8665de412bbb357e0c84adf473";
 const FILTER_PROP = "14a46854bfd14b1882152785c2dab9f3", DS_TYPE_REL = "1f69cc9880d444abad493df6a7b15ee4";
 const QUERY_DS = "3b069b04adbe4728917d1283fd4ac27e", BLOCKS_REL = "beaba5cba67741a8b35377030613fc70";

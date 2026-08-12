@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import { Graph, daoSpace, personalSpace, getSmartAccountWalletClient } from "@geoprotocol/geo-sdk";
 
-const ENDPOINT = "https://testnet-api.geobrowser.io/graphql";
+const ENDPOINT = "https://api-testnet.geobrowser.io/graphql";
 
 // ---- shared Gap-finding ontology (fixed across all datasets spaces — reused by ID) ----
 const ONT = {

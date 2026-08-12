@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-query — 0.2.6
+- 2026-08-12 · **"Published" timestamp disambiguation** (Arturas' report: "how many news stories published in the last 9 hours" answered **0**, true answer **13** — the agent filtered on the wrong field). A News story has two times: the **`Publish datetime`** property (`94e43fe8…`) = source-outlet dateline, and entity **`createdAt`** = when it was added to Geo. Editors' "published recently" means added-to-Geo → filter `createdAt`, not the property (the ingestion pipeline bulk-adds stories hours after their dateline). Added a "'Published' is two different timestamps" section (table + rule + per-space `createdAt` count query + migration caveat that pre-migration `createdAt` is flattened), the `Publish datetime` property ID to Well-known IDs, and gotcha 14.
+
 ### geo-query — 0.2.5
 - 2026-07-27 · **v20 migration:** GraphQL endpoint → `api-testnet.geobrowser.io/graphql` (old `testnet-api.…` keeps working ~a week post-migration, then dies; note the word-swap — easy to misread). `lib/gql.mjs` re-pointed and verified live against the new endpoint. No query-shape changes — endpoint URL only.
 
@@ -88,6 +91,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 ### geo-orchestrate — 0.2.0
 - 2026-06 · Runtime data loading rule in script-generation: generated scripts read the dataset file at runtime, never transcribe rows as constants; fixed the "Add Web URL from CSV" job accordingly.
 - 2026-06 · Initial. Intent → plan → generate script → dry-run → confirm → publish; routes to query + publish.
+
+### geo-discovery — 0.1.1
+- 2026-08-12 · **Stale endpoint fix** (Arturas' report: skill's query hit the decommissioned `testnet-api.geobrowser.io` — the pre-migration word-swapped host — and was rejected by the network allowlist). `ENDPOINT` in `scripts/publish_gaps.mjs` + `scripts/build_dashboard.mjs` re-pointed to `api-testnet.geobrowser.io/graphql`, matching `lib/gql.mjs`. Unblocks the read/query path. **Known debt:** the publish path is still on the v0.19 SDK API (`getSmartAccountWalletClient`, `daoSpace.*`/`personalSpace.*`, `network:"TESTNET"`) that v20 removed — a full migration to `createGeoClient` / `geo.daoSpaces.*` (as geo-publish/geo-clean already got) is still pending, and there is no SDK-version guard here yet.
 
 ### geo-discovery — 0.1.0
 - 2026-06 · Initial. 6-stage gap-discovery pass over a space's daily stream → ranked Gap findings; read-only until human-reviewed publish stage. (Version normalized from `latest`.)
