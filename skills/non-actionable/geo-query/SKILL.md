@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.5"
+  version: "0.2.6"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -262,6 +262,32 @@ Editors asked whether queries return stale/cached data after publishing. **Measu
   ```
   When your edit's name shows up there, every query reflects it.
 
+## "Published" is two different timestamps — pick the right one
+
+A **News story** carries **two** times, and they answer different questions. Confusing them silently returns the wrong count.
+
+| Field | What it records | Use it for |
+| --- | --- | --- |
+| **`Publish datetime`** property (`94e43fe8faf241009eb887ab4f999723`, a `date` value) | when the **source outlet** originally published the article — the real-world dateline | "when did the news happen", ordering stories by article date |
+| entity **`createdAt`** | when the story was **added to Geo** (indexed into the space) | **"published/added recently", "new stories in the last N hours", freshness monitoring** |
+
+When an editor asks *"how many news stories were **published** in {space} in the last N hours"*, they almost always mean **added to Geo** → filter on **`createdAt`**, **not** the `Publish datetime` property. The ingestion pipeline bulk-adds stories hours after their source dateline, so the two routinely differ by many hours — an article with an Aug-11 dateline can enter Geo on Aug-12. If the intent is genuinely ambiguous, report both or ask which one they mean.
+
+Count News stories added to a space within a window (per space):
+
+```graphql
+{
+  entitiesConnection(
+    typeId: "e550fe517e904b2c8fffdf13408f5634"   # News story
+    spaceId: "<SPACE_ID>"
+    filter: { createdAt: { greaterThanOrEqualTo: "2026-08-12T01:25:00Z" } }
+    first: 0                                       # totalCount only — cheap
+  ) { totalCount }
+}
+```
+
+> ⚠ **Migration caveat.** On the current endpoint, entity `createdAt` for entities that existed **before** the 2026-08 infra migration was flattened to the migration date. For "recent / new" questions this is harmless (those stories are post-migration and carry real `createdAt`), but for a window that **crosses the migration boundary**, `createdAt` undercounts — use the story's earliest `editVersion` createdAt instead.
+
 ## Filtering
 
 The `filter` arg accepts `EntityFilter` for field-level conditions:
@@ -451,6 +477,7 @@ Common raw IDs (verified against the API — for GraphQL queries):
 | Article         | `a2a5ed0cacef46b1835de457956ce915` |
 | Topic           | `5ef5a5860f274d8e8f6c59ae5b3e89e2` |
 | News story      | `e550fe517e904b2c8fffdf13408f5634` |
+| Publish datetime (prop) | `94e43fe8faf241009eb887ab4f999723` |
 | Blocks (rel)    | `beaba5cba67741a8b35377030613fc70` |
 
 More type, property, and space IDs live in `../../../src/constants.ts` and `../../../knowledge-graph-ontology.md`.
@@ -507,6 +534,7 @@ No Node/Bun? `curl -s --compressed <endpoint> -H 'Content-Type: application/json
 11. **Page/table order = relation `position`** (lexicographic sort / `orderBy: POSITION_ASC`), not response order. **Rows INSIDE a table are different:** query-block rows follow the block's `Sort` value (sort_by property + direction); collection-block rows follow `Collection item` positions — never `createdAt`.
 12. **`entity(id:)` never nulls** — nonexistent IDs return an empty stub; test existence via `spaceIds`/`types`, never by null-check.
 13. **Repeated entries in `types` ≠ duplicate types.** Multi-space entities carry one Types edge per space — group by relation `spaceId`; only same-space repeats are real duplicates (see "Multi-space entities").
+14. **"Published" = entity `createdAt` (added to Geo), NOT the `Publish datetime` property (source dateline).** For "how many published in the last N hours" questions, filter entity `createdAt`; the `Publish datetime` property is the outlet's original dateline and runs hours earlier — mixing them up answered "0" when the true count was 13. See "'Published' is two different timestamps."
 
 ## More
 
