@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.8.2
+  version: 0.9.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -456,6 +456,31 @@ After publishing, poll the indexer (`tooling/scripts/wait-for-index.sh <id>`) be
 - **`Graph.deleteEntity` is async AND requires `spaceId`** — unique among op builders (`await Graph.deleteEntity({ id, spaceId })`). Every other builder is sync and space-less.
 - **`TextBlock.make` / `DataBlock.make` return `Op[]` only** — no created id. Generate the id yourself first (`import { Id } from '@geoprotocol/geo-sdk'`… or build the block via `createEntity`) when you need to reference the block (views/columns/idempotency).
 - `createImage` / `Ipfs.uploadImage` are async (network I/O); the rest of `Graph.*` are sync.
+
+## Inject mode — publish from a pasted URL
+
+When the editor **pastes a URL instead of giving entity fields** ("publish this tweet", "add this article", a bare x.com / news / reddit / wikipedia link), don't hand-build the entity. The **injector** (news-worker) fetches and structures the link and returns a ready GRC-20 Edit; you decode it to ops and publish through the SAME gated path as everything else. The injector writes **nothing** on-chain — only your publish step does.
+
+**Config** (in `.env`, gitignored): `INJECT_BASE_URL` + `INJECT_API_KEY`. Staging/testing: `INJECT_BASE_URL=https://news-worker-production.up.railway.app` (cron-disabled box, safe to spam). Never point at `news-worker.up.railway.app` — that's the live production cron worker. (Production auth will move to Privy; the API key is testing-only.) On a sandboxed surface (cowork/claude.ai) the `INJECT_BASE_URL` host must be added to the network allowlist.
+
+**Flow:**
+1. **Detect type** from the URL, or pass it: `tweet` (x.com), `post` (reddit), `person` (wikipedia/linkedin), else `news-story-single` (any article — the worker auto-discovers more sources). `detectInjectType()` does this.
+2. **Inject + poll + decode** with the helper — the worker `space` here is EXTRACTION context (`crypto|ai|world-affairs|health`), **not** the publish target:
+   ```ts
+   import { injectAndDecode } from '../lib/inject.ts';
+   import { publishOps } from '../src/functions.ts';
+   const r = await injectAndDecode(url, { space: 'world-affairs',
+     onPoll: (i, s) => process.stdout.write(`\r  poll ${i}: ${s}   `) });
+   ```
+   Jobs take ~60–120 s; the helper polls automatically. It throws on `failed`/timeout.
+3. **Inspect `r.errors` even on success** (stage failures don't always fail the job) and show the editor `r.preview` (headline, summary, sources, topics, entities, coverUrl) — this is the review surface.
+4. **Run Gate 1 (semantic-duplicate)** on `r.name` via `geo-query` — same as any publish. (The worker also has its own on-chain dedup and rejects repeat URLs with "Curate rejected…" in `r.errors`; re-inject a repeat only with `gates: { bypassExactDedup: true }`.) Emit the Gates block and wait for **`go`**, then **`publish`** as usual.
+5. **Publish** the decoded ops to the editor's space — routes personal-vs-DAO and applies the circuit-breaker automatically:
+   ```ts
+   const tx = await publishOps(r.ops, r.name, /* publish-space-id or omit → DEMO_SPACE_ID */);
+   ```
+
+Run on **Node, not Bun** (`node --env-file=.env scripts/<file>.ts`) — Bun's fetch hits a bug on the geo API host that `publishOps` calls. `scripts/inject-publish-example.ts` is a worked end-to-end example.
 
 ## What this skill does NOT do
 
