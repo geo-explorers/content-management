@@ -60,6 +60,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## actionable/
 
+### geo-publish — 0.9.0
+- 2026-08-17 · **Inject mode — publish from a pasted URL** (Rushab/Armando: an editor couldn't publish an X post; the news-worker "injector" was never wired to the skill). New "Inject mode" section: when the editor pastes a URL (tweet / news / reddit / wikipedia), call the injector, decode its base64 GRC-20 Edit to ops, and publish through the SAME gated path (Gate 1 dup-check on the extracted name → `go`/`publish` → `publishOps`, personal-vs-DAO routing + circuit-breaker intact). Added reusable `lib/inject.ts` (`detectInjectType` host-detect + `injectAndDecode` = inject→poll→decode), pinned `@geoprotocol/grc-20` in package.json, and a worked example `scripts/inject-publish-example.ts`. Config via `.env` `INJECT_BASE_URL`/`INJECT_API_KEY` (staging `news-worker-production.up.railway.app`, cron-disabled; NOT the live `news-worker.up.railway.app`); prod auth → Privy later. Verified end-to-end: tweet → 14 ops → published + indexed in a personal space.
+
 ### geo-publish — 0.8.2
 - 2026-08-11 · **Bun `fetch` gotcha (publish stalled on "socket closed / retrying").** In some sandboxed environments Bun's `fetch` can't reach `api-testnet.geobrowser.io` while `curl` and Node's `fetch` reach it fine — so a dry-run passes but `bun run` hangs at the publish/broadcast step with nothing written. Runtime prereq now says **prefer Node for the publish step**, and if `bun run` stalls on network, re-run with `node --env-file=.env scripts/<file>.ts` (Bun quirk, not an outage). Surfaced during a live Cowork publish (Ingrida Šimonytė).
 
