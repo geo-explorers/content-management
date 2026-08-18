@@ -13,8 +13,8 @@ Deep detail split out of `SKILL.md`. Read this before generating any cleanup scr
 - **Import battle-tested helpers** from `src/` — don't reimplement these:
   - `mergeEntities`, `deleteEntity`, `changeEntityId`, `moveEntity` (move/copy), `OpsBatch` — `src/entity_ops.ts`
   - `fetchCandidateMeta`, `buildScoringContext`, `selectCanonicalTopic`, `managedSpaces`, `survivingSpaces` — `src/select_canonical.ts`
-  - `gql`, `publishOps`, `printOps`, `getPublishableSpaceIds`, `getSpaceOwnerInfo`, `geo` (SDK client), `NETWORK`, `getWalletClient`, `getWalletAddress` — `src/functions.ts`
-  - `DATASET_SPACE_IDS`, `CANONICAL_SPACE_IDS`, `EXCLUDED_VALUE_PROPERTY_IDS`, `EXCLUDED_RELATION_TYPE_IDS` — `src/constants.ts`
+  - `gql`, `publishOps`, `printOps`, `getPublishableSpaceIds`, `getSpaceOwnerInfo`, `getAnchoredEntityIds`, `geo` (SDK client), `NETWORK`, `getWalletClient`, `getWalletAddress` — `src/functions.ts`
+  - `DATASET_SPACE_IDS`, `CANONICAL_SPACE_IDS`, `EXCLUDED_VALUE_PROPERTY_IDS`, `EXCLUDED_RELATION_TYPE_IDS`, `ANCHORED_IMAGE_RELATION_TYPE_IDS` — `src/constants.ts`
   - `validate_migration.ts` (repo root) — post-merge verification CLI.
 - **No hardcoded endpoints, chain ids, or contract addresses.** Every network touch goes through `gql` / `publishOps` / the `src/` helpers; contract addresses resolve from the SDK's network config (next section). A pasted URL or address in a script is a latent break, not a convenience.
 
@@ -128,6 +128,39 @@ for (const [spaceId, ops] of opsBatch) {
 ```
 
 Log what was dropped; a non-zero count means a helper bug — report it.
+
+## Anchored-entity exclusion (space wipes / bulk deletes)
+
+For any op that DELETES (space wipe, bulk orphan delete), resolve the space's identity entities and drop them from the delete set unless the editor gave the `delete anchored too` override (SKILL HARD RULE 9):
+
+```typescript
+import { getAnchoredEntityIds } from '../src/functions.js';
+const anchored = await getAnchoredEntityIds(spaceId); // {page + avatar + cover} entity IDs
+const kept: string[] = [];
+for (const [spaceId, ops] of opsBatch) {
+  opsBatch.set(spaceId, (ops as any[]).filter(o => {
+    const target = o.type === 'deleteEntity' ? hex(o.id ?? o.entity) : null;
+    if (target && anchored.has(target)) { kept.push(target); return false; }
+    return true;
+  }));
+}
+console.log(`Anchored entities excluded: ${anchored.size} (kept: ${kept.length})`); // dry-run line
+```
+
+Print `Anchored entities excluded: N` in the dry-run summary. Skipping this on a space wipe is how the Aug-2026 incident deleted the profile photo + space description.
+
+## Destructive-op circuit-breaker (`CONFIRM_DESTRUCTIVE`)
+
+`publishOps` refuses any batch removing data from >50 relations/values unless `process.env.CONFIRM_DESTRUCTIVE === '1'` — a backstop against an improvised script mass-deleting a space. A legitimate space wipe or big merge WILL exceed 50, so its **confirmed publish** run must set the flag:
+
+```bash
+# dry-run — NEVER sets the flag
+bun run scripts/2026-08-18-wipe-test-space.ts
+# confirmed publish only, AFTER the editor's explicit `publish` + anchored/voting exclusions applied
+CONFIRM_DESTRUCTIVE=1 bun run scripts/2026-08-18-wipe-test-space.ts
+```
+
+Set it ONLY on the real publish, never on the dry-run and never to silence the breaker on a hand-written delete loop (HARD RULE 11 — those must not exist). If the breaker fires on an op you did NOT intend to be a mass delete, STOP: it means the op set is wrong, not that the flag is missing.
 
 ## `validate_migration.ts` — post-merge verification
 

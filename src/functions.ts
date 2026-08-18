@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import * as fs from "fs";
 import path from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
+import { ANCHORED_IMAGE_RELATION_TYPE_IDS } from "./constants.ts";
 
 dotenv.config();
 
@@ -183,6 +184,32 @@ export async function getSpaceOwnerInfo(spaceIds: string[]): Promise<SpaceOwnerI
 // Only DEMO_SPACE_ID is required — the space type & address are queried
 // automatically from the API.  For DAO spaces the caller's member space is
 // resolved by matching SW_ADDRESS against the DAO's members or editors list.
+
+/**
+ * Anchored (identity) entities of a space: its `page` (home) entity plus the
+ * Image entities its Avatar (profile photo) and Cover relations point at.
+ * A space wipe must exclude these by default — deleting them empties the space's
+ * identity (the Aug-2026 personal-space wipe deleted the profile photo + space
+ * description because no such guard existed). Returns lowercase-safe hex IDs.
+ * Fail-CLOSED: on any query error this throws, so a caller that forgets to
+ * handle it cannot silently proceed to delete anchored entities.
+ */
+export async function getAnchoredEntityIds(spaceId: string): Promise<Set<string>> {
+  const anchored = new Set<string>();
+  const spaceData = await gql(`{ space(id: "${spaceId}") { page { id } } }`);
+  const pageId: string | undefined = spaceData?.space?.page?.id;
+  if (!pageId) return anchored; // no home entity → nothing to anchor
+  anchored.add(pageId);
+  const pageData = await gql(`{
+    entity(id: "${pageId}") { relationsList { typeId toEntityId } }
+  }`);
+  for (const r of pageData?.entity?.relationsList ?? []) {
+    if (ANCHORED_IMAGE_RELATION_TYPE_IDS.has(r.typeId) && r.toEntityId) {
+      anchored.add(r.toEntityId);
+    }
+  }
+  return anchored;
+}
 
 export async function publishOps(ops: Op[], editName: string, input_space?: string): Promise<string | undefined> {
   let proposalId;
