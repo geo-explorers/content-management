@@ -83,6 +83,25 @@ export const EXCLUDED_RELATION_TYPE_IDS = new Set<string>([
   RANK_VOTES_RELATION_TYPE_ID,
 ]);
 
+// ─── Anchored (identity) entities ─────────────────────────────────────────────
+// A space's IDENTITY lives on its `page` (home) entity: the space name,
+// description, Avatar (profile photo) and Cover images. These are "anchored" —
+// deleting them empties the space's identity even if the rest is repopulated.
+// A space wipe must SKIP them by default (see getAnchoredEntityIds() in
+// functions.ts). Historical context: the Aug-2026 personal-space wipe deleted
+// the profile photo + space description because no anchored-entity guard existed
+// — the bulk script processed the page entity + Avatar/Cover images as ordinary
+// rows. Removing them requires an explicit, separate override.
+/** Avatar (profile photo) relation type — SDK ContentIds.AVATAR_PROPERTY. */
+export const AVATAR_PROPERTY_ID = "1155befffad549b7a2e0da4777b8792c";
+/** Cover image relation type — SDK SystemIds.COVER_PROPERTY. */
+export const COVER_PROPERTY_ID = "34f535072e6b42c5a84443981a77cfa2";
+/** Relation types that anchor a space's identity image entities. */
+export const ANCHORED_IMAGE_RELATION_TYPE_IDS = new Set<string>([
+  AVATAR_PROPERTY_ID,
+  COVER_PROPERTY_ID,
+]);
+
 /**
  * The Podcasts space is a catch-all: every entity touched by a podcast episode
  * gets published here rather than its proper topical space. A topic whose ONLY

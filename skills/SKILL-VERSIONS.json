@@ -2,13 +2,13 @@
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
     "actionable/geo-clean": {
-      "version": "0.3.1",
+      "version": "0.4.0",
       "approved_commit": "8a3c4b516b3da377f7f76c7a505e45aa8e450116",
-      "content_sha256": "cb2ea17cfe0cf7af90257537578198f791e981d95303b94456bd6af5fe111f1b"
+      "content_sha256": "dd150f84e87fa8f9126e502336a8ddcc0546459457a62d253d734f974e4abcc7"
     },
     "actionable/geo-discovery": {
       "version": "0.1.1",
-      "approved_commit": "201c12bdbe95874afb4647af9d8ec2d1da44c00a",
+      "approved_commit": "12fc0fb79136f648d320db77cbf49a62d5840ae7",
       "content_sha256": "8c19551b8d15a2c7694144ac2b4a8a381b4fe8bc8c330d253511ad6e18bbc727"
     },
     "actionable/geo-orchestrate": {
@@ -38,8 +38,8 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.6",
-      "approved_commit": "6b48016a74031f15d1d9c690a7295f0acce89d8e",
-      "content_sha256": "5778470c3c5d0cbd4b7b3a4f05d69bcab336dec2e416fbdd8c67ec6d23c8556b"
+      "approved_commit": "12fc0fb79136f648d320db77cbf49a62d5840ae7",
+      "content_sha256": "0a465636ad00b62d0d4178d261dede3e902d4c9fb5622af7aa14cbccd42a0c15"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",

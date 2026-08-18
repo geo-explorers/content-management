@@ -1,8 +1,8 @@
 ---
 name: geo-clean
-description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
+description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, anchored-entity (page/avatar/cover) protection, dry-run expiry, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
 metadata:
-  version: "0.3.1"
+  version: "0.4.0"
 ---
 
 # Geo Knowledge Graph — Cleaning
@@ -36,6 +36,9 @@ If any prerequisite is missing, STOP and ask the editor to fix it. Do not work a
 6. **Additive-only when in doubt.** If a "fix" could be done either by adding new data or by deleting old, prefer adding. Only delete when the user explicitly authorized.
 7. **Data goes in the file, not in the script.** When a cleanup runs over a large list (the `scripts/<date>-*.json` exports this skill writes, or a candidate-ID/CSV list), the script **reads and parses that file at runtime** — it must NOT have the IDs/rows transcribed into it as a `const list = [ … ]` array. Baking the list in blows the token budget and times out on big sets, and risks the model corrupting IDs as it copies. The script holds only logic + helper imports; the list stays in the file. Full pattern: `geo-publish` → "Bulk / dataset publishing".
 8. **Voting data is untouchable.** Geo's entity-voting data — the **Score** value property (`85a4668a42fa4f488969c0a9de0c294b`, "net upvotes minus downvotes", system-maintained), **Rank Votes** relations (`19a4cfff45f24150abf2af0f43eb2eec`, one per voter, usually from the voter's personal space) and the vote ordinal/weighted value properties (`49ee1b8918204e75a1ae38a2dcaad4a5`, `103701ddcabe4a8e835b10345327b647`) — belongs to the voters and the system, not to the entity being cleaned. **No generated op may set, copy, unset, redirect, or delete any of it, in ANY operation.** Redirecting a Rank Votes backlink fabricates a vote; deleting one destroys a voter's data. The `src/` helpers exclude these at op-generation time (`EXCLUDED_VALUE_PROPERTY_IDS` / `EXCLUDED_RELATION_TYPE_IDS` in `src/constants.ts`); scripts that assemble ops by hand must apply the same exclusion and run a scrub pass over the final batch (see [`reference.md`](reference.md)). Accepted consequence: a merged-away duplicate keeps its votes and Score.
+9. **Anchored (identity) entities are excluded from deletion by default.** A space's identity — its **`page`/home entity**, its **Avatar** (profile photo) and **Cover** images — is anchored. A space wipe or bulk delete must **skip** these unless the editor explicitly overrides (Gate — Anchored-entity, below). Resolve them with `getAnchoredEntityIds(spaceId)` from `src/functions.ts` (returns `{page + avatar + cover}` entity IDs) and filter every delete/unset op against that set, logging `[SKIP] <id> (anchored)`. The dry-run summary MUST state `Anchored entities excluded: N`. Why this rule exists: a bulk personal-space delete once wiped the profile photo and space description because the script processed the page entity + identity images as ordinary rows (Aug-2026 incident).
+10. **Dry-run authorizations expire.** `publish` acts on the dry-run's snapshot; if the space changed in between, the op is stale. If more than **~30 minutes** elapsed between the dry-run and `publish` (or the session was interrupted/resumed), **do NOT publish the old script** — re-run discovery + the dry-run, show the fresh counts (highlight any delta), and ask for `publish` again. A 10-hour gap between `go` and `publish` was a contributing factor in the Aug-2026 wipe.
+11. **Never hand-write a raw-SDK delete loop.** All destructive ops go through the `src/` helpers and `publishOps` — never a bespoke `geo.entities.delete()` / `deleteEntity` loop that bypasses the exclusions above. `publishOps` refuses any batch removing data from >50 relations/values unless `CONFIRM_DESTRUCTIVE=1` is set. For a legitimate mass delete (space wipe, big merge), set that flag **only on the confirmed `publish` run** (`CONFIRM_DESTRUCTIVE=1 bun run scripts/<file>.ts`), **after** the editor's explicit `publish` and after anchored/voting exclusions are applied — never on the dry-run, never to route around a block. See [`reference.md`](reference.md).
 
 ## The operations
 
@@ -534,10 +537,13 @@ After publish, re-query the entity's Types edges and confirm exactly one remains
 
 Used when wiping a test space. **Never used on a DAO space or someone else's space.**
 
+### Gate — Anchored-entity (HARD, automatic)
+Before planning, resolve `getAnchoredEntityIds(spaceId)` and **exclude those entities from the delete set by default** — the space's `page`/home entity + its Avatar (profile photo) + Cover images. These are the space's identity; deleting them empties it even after the rest is repopulated (Aug-2026 incident: profile photo + description lost). The generated script filters every `deleteEntity`/`deleteRelation`/`updateEntity`-unset op against the anchored set and logs `[SKIP] <id> (anchored)`. To ALSO delete the identity (true full teardown), the editor must type a second explicit override — `delete anchored too` — after seeing the anchored list; otherwise anchored entities survive.
+
 ### Gate — Explicit confirmation
 The editor must type the space NAME exactly, not the ID. Skill computes the name via Pattern C on the space ID and asks:
 
-> About to delete **every entity** in space **"{space name}"** ({entity count} entities). This includes ALL entities authored to that space, including ones referenced by other spaces (their incoming relations from other spaces will go stale).
+> About to delete **every non-anchored entity** in space **"{space name}"** ({deletable count} of {entity count}; {A} anchored identity entities — page/avatar/cover — will be kept). This includes ones referenced by other spaces (their incoming relations will go stale).
 >
 > Type the space name **exactly** to confirm. Anything else cancels.
 
@@ -546,13 +552,14 @@ The editor must type the space NAME exactly, not the ID. Skill computes the name
 ## Delete-space plan
 Space: "{name}" ({id})
 Will delete: {N} entities, {R} relations.
+Anchored entities excluded: {A} (page + avatar + cover) — kept unless "delete anchored too" given.
 Voting data (Score values / Rank Votes edges) in the space: left untouched.
 Outgoing breakage: {X} relations from OTHER spaces will go stale (those need a follow-up "Find stale relations" pass).
 
 Reply **go** to write + dry-run. (Then type the space name again to **publish**.)
 ```
 
-Two confirmations: space-name-typed once before Plan, again before publish.
+Two confirmations: space-name-typed once before Plan, again before publish. The publish run sets `CONFIRM_DESTRUCTIVE=1` (this batch exceeds the >50-destructive-op circuit-breaker in `publishOps`) — **only** on the confirmed `publish`, never the dry-run (HARD RULE 11). If the `publish` arrives >30 min after the dry-run, re-run first (HARD RULE 10).
 
 ---
 
