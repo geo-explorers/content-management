@@ -8,7 +8,8 @@
       "Bash(node scripts/*)",
       "Bash(node --env-file=.env scripts/*)",
       "Bash(node --env-file=.env.geo-publish scripts/*)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(bun run --env-file=.env scripts/*)"
     ]
   }
 }
