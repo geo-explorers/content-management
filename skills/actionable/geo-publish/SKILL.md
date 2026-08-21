@@ -1,16 +1,16 @@
 ---
 name: geo-publish
-description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
+description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (ontology/correct-type check via ontology-advisor + semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.9.0
+  version: 0.10.0
 ---
 
 # Geo Knowledge Graph — Publishing
 
 Create, update, and delete entities and relations in Geo using `@geoprotocol/geo-sdk`. Portable (works in any local-execution agent: Claude Code, Codex CLI/Desktop, Claude cowork). **Browser-only assistants cannot publish** — they have no local runtime; send them to `geo-query` for reads.
 
-Every write passes four mandatory safeguards FIRST: **semantic-duplicate check**, **schema check**, **type-required check**, and **two-phase dry-run → explicit confirm**. These are not optional.
+Every write passes mandatory safeguards FIRST: an **ontology / correct-type check** (consult `ontology-advisor` for the *right* type + expected properties), **semantic-duplicate check**, **schema check**, **type-required check**, and **two-phase dry-run → explicit confirm**. These are not optional.
 
 ## Prerequisites
 
@@ -48,11 +48,13 @@ Only if that prints `missing`, ask the user to add one line themselves in their 
 8. **EVERY value's `type` must match the property's declared `dataTypeName` — check all of them against the mapping table, not just dates.** The discovery query already returns `dataTypeName` per property, so this is a zero-extra-queries table lookup (see [Data-type mapping](#data-type-mapping-datatypename--sdk-value-type)). ANY mismatch publishes but silently doesn't render (datetime-as-date is just the classic case). Mismatches → Gate 2.
 9. **Test ONE before any bulk publish.** Publish a single row first, open it on geobrowser.io, and confirm every field actually renders (not just "the API returned success"). Only then run the batch. Both failure modes above are *silent* — API/proposal say OK while the data is lost — so visual confirmation of one row is the only real check.
 10. **Every entity this publish CREATES must carry at least one type — nothing ships typeless.** Any type is acceptable; none is not ("I cannot publish Elon Musk and not type it Person; I cannot publish a claim without type Claim"). The check covers **every** created entity, not just the headline one: relation targets minted inline (a Source created to cite a claim), entities looped from CSV rows, block entities (those are typed by construction and pass automatically). A typeless create → **Gate 4**. Two carve-outs: (a) **updating** an entity that already exists typeless on Geo → WARN and propose adding a type in the same publish, don't block the repair; (b) a dataset with no Types column → resolve types **with the editor** before generating any ops — never invent them silently. Untyped entities are the #1 data-quality defect on Geo; the platform is expected to reject them eventually, so don't publish what tomorrow's Geo would bounce.
+11. **Consult `ontology-advisor` for the CORRECT type before proposing — not just *a* type (Gate 0 ≠ Gate 4).** Before the Discovery block, determine each created entity's correct type + expected properties by consulting **ontology-advisor** — read its bundled `ONTOLOGY.md` modelling reference, or invoke the skill when the modelling is genuinely ambiguous/novel. Getting *a* type satisfies Gate 4; getting the *right* type satisfies **Gate 0**. This is what stops "publish this x.com link" becoming a bare **`Post`** (no text/author/topics) instead of a **`Tweet`**. Don't rely on a perfect prompt — read the ontology and show the proposed type in the dry-run. → **Gate 0**. (For a pasted URL, **inject mode** already applies the correct type via the injector; Gate 0 confirms it.)
 
 ## Required output template (post BEFORE writing any script)
 
 ````
 ## Discovery
+**Type (per ontology-advisor)** — <content kind → correct type> (`<typeId>`); expected properties: <list>. <flag if the naive type would be wrong, e.g. x.com link → **Tweet** not **Post**>
 **Schema** — Type: <name> (`<id>`); Properties: <name> (`<id>`, dataType=…), …; Relation types: <name> (`<id>`), …
 
 **Duplicate candidates** — name-only, ALL types, ALL spaces:
@@ -65,6 +67,7 @@ Only if that prints `missing`, ask the user to add one line themselves in their 
 **Off-schema delta**: <properties/relations NOT on the type schema, or "none">
 
 ## Gates
+- **Gate 0 (ontology / correct-type)**: PASS | FIRE — <the type is the CORRECT one for this content per ontology-advisor (x.com → Tweet not Post; reddit → Post; news article → Article; person bio → Person), AND the type's expected properties are present (Tweet: text/Author/Topics; Article: Web URL/Publish datetime/Publisher). List any wrong-type or missing expected-property.>
 - **Gate 1 (semantic-duplicate)**: PASS | FIRE — <reason/hits>
 - **Gate 2 (schema-violation)**: PASS | FIRE — <off-schema list AND every planned value checked against the dataType mapping table; list any mismatch (e.g. datetime-as-date, Checkbox-as-text, Relation-as-value)>
 - **Gate 3 (relation-target)**: PASS | FIRE — <any value targeting a relation `id` instead of the relation `entityId`; see Relations section>
@@ -80,6 +83,11 @@ Reply **"go"** to authorize writing + dry-running the script.
 ````
 
 ## Gate dialogs
+
+**Gate 0 — ontology / correct-type fires:**
+> Per `ontology-advisor`, this content should be **{correct type}** (`{id}`), not **{naive type}** — {reason, e.g. "an x.com link is a **Tweet**, which carries the post text, Author and Topics; a bare **Post** drops all of them"}. Expected properties for a {correct type}: {list}; missing from the plan: {list}.
+> - **Use the correct type** → I'll model it as **{correct type}** with the expected properties. For a URL, prefer **inject mode** — the injector types + enriches it automatically (text/author/topics).
+> - **Keep {naive type}** → confirm you really want this shape; it will under-render (this is exactly the ~50-Tweets-as-Posts defect).
 
 **Gate 1 — semantic-duplicate fires:**
 > Found an existing entity that may already mean this: **{name}** (`{id}`), type **{type}**, space **{space}**.
@@ -107,7 +115,13 @@ Reply **"go"** to authorize writing + dry-running the script.
 >
 > *Warn-only variant (existing entity):* updating **{name}** (`{id}`), which is already on Geo **without a type** — recommend adding one in this publish. Proceeding either way.
 
-## Discovery — how to produce the four outputs
+## Discovery — how to produce the outputs
+
+**Type (consult `ontology-advisor`) — do this FIRST, before choosing the type.** For the content being published, determine the CORRECT type + its expected properties from **ontology-advisor** — read its bundled `ONTOLOGY.md` modelling reference, or invoke the `ontology-advisor` skill when the modelling is genuinely ambiguous/novel. Don't depend on a perfect prompt — let the ontology pick the type. The classic misses it catches:
+- an **x.com / twitter.com** link → **`Tweet`** (carries the post text, **Author**, **Topics**), **not** a bare **`Post`**;
+- a **reddit** link → **`Post`**; a **news article** → **`Article`** (Web URL, Publish datetime, Publisher); a **wikipedia/bio** → **`Person`**.
+
+Put the result in the Discovery block's **Type (per ontology-advisor)** line and check it in **Gate 0**; surface the chosen type + expected properties in the dry-run so the editor sees "this will be a Tweet with text/author/topics" before publishing. **For a pasted URL, use inject mode** (`lib/inject.ts`) — the injector applies the correct type + enrichment automatically, and Gate 0 just confirms it; the ontology consult is the safety net for hand-built entities and anything the injector doesn't cover.
 
 GraphQL against `https://api-testnet.geobrowser.io/graphql` (no auth). Delegate to `geo-query` if loaded.
 
