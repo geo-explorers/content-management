@@ -10,7 +10,6 @@ description: >
   Captures Claude Code work automatically; everything else is added via the top-up prompt.
   Does NOT touch the Geo graph — it only writes the editor's own report row to Notion.
 version: "0.1.0"
-authors: CptMoh
 tools: Claude Code
 compatibility: >
   Runs in the editor's own Claude Code (reads local session files at ~/.claude/projects/). Requires

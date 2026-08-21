@@ -6,7 +6,6 @@ description: >
   structural, and trending gaps at both entity and theme altitude. Triggers on
   "run discovery", "discover gaps", "what's missing in {space}", "discovery pass".
 version: "0.1.1"
-authors: CptMoh
 tools: Claude Code
 ---
 

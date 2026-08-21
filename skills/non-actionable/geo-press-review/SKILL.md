@@ -159,7 +159,7 @@ The review itself is safe by construction — read + compare + rank only.
 
 - **Web search is non-deterministic.** It can miss stories or surface low-quality sources. Treat the external half as "best-effort press scan," not an exhaustive feed. State this to the editor — a 🆕 ("Not on Geo yet") is a *candidate*, confirm before publishing.
 - **Matching is judgment, not exact.** Same event can have very different headlines. Match on entities + action, and when unsure, mark it 🆕 and let the editor decide rather than silently calling it covered.
-- **Sources on Geo are labeled strings, not entities.** Outlet is parsed from a `"Headline | Outlet"` label; ~⅓ have no parseable outlet. So "is this source already cited" is fuzzy. (Structured Source entities would fix this — open question for Preston.)
+- **Sources on Geo are labeled strings, not entities.** Outlet is parsed from a `"Headline | Outlet"` label; ~⅓ have no parseable outlet. So "is this source already cited" is fuzzy. (Structured Source entities would fix this — open question for the core team.)
 - **"This Space's topics"** is inferred from existing coverage (`topicCoverage`), since there's no canonical Space→Topics map yet.
 - **Publish date** is whatever Geo stores on `94e43fe8…`; if it's ingestion rather than event date, timelines are approximate.
 

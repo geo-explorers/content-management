@@ -135,7 +135,7 @@ Wait for the editor to reply "go" (or to change something). Only then flip `DRY_
 3. **Generate**: script imports `mergeEntities` from `content-management/src/entity_ops.js`, batches ops with `OpsBatch`, prints op counts, dry-runs.
 4. **Confirm + publish**: flip `DRY_RUN`, re-run, show transaction hashes per space.
 
-### Job — "Assign Topics to Claims" (Arturas's example)
+### Job — "Assign Topics to Claims" (worked example)
 
 1. **Discover** (`geo-query`): `list_entities({ type: "Claim", limit: 500 })` and `list_entities({ type: "Topic", limit: 500 })`.
 2. **Reason** (LLM): for each Claim, propose 0–N matching Topics from the list. Bucket matches by confidence (high / medium / low). Surface low-confidence to the editor for review.
