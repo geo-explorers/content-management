@@ -2,9 +2,9 @@
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
     "actionable/geo-clean": {
-      "version": "0.4.0",
-      "approved_commit": "8a3c4b516b3da377f7f76c7a505e45aa8e450116",
-      "content_sha256": "dd150f84e87fa8f9126e502336a8ddcc0546459457a62d253d734f974e4abcc7"
+      "version": "0.5.0",
+      "approved_commit": "88b62448baeb3de587b5997ee1083085ef678176",
+      "content_sha256": "75bfb4723f7219663ded1d5836b139c43c1c261bbb2176c0bc72f552596b688d"
     },
     "actionable/geo-discovery": {
       "version": "0.1.1",
@@ -18,7 +18,7 @@
     },
     "actionable/geo-publish": {
       "version": "0.9.0",
-      "approved_commit": "f2670181a915e53f4b26b39ed01f929a45f21add",
+      "approved_commit": "401e0b953b260d20053156ccff78d1b3b5a6f316",
       "content_sha256": "fb23074958f80feb726ae722b3b48f813ea7f80b45a33627b620ff8a096b24be"
     },
     "non-actionable/daily-report": {
