@@ -13,6 +13,7 @@ description: >
   decide entity types, or publish on its own — it emits vetted descriptions plus Source citations
   for geo-publish and the human gate.
 version: "0.2.0"
+authors: Armando (spec), CptMoh (build)
 tools: Claude Code
 compatibility: >
   Best on Claude Code (parallel research subagents + network access for verification). The
