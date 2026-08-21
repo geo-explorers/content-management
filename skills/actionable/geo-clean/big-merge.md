@@ -1,6 +1,6 @@
 # Manual big-merge procedure
 
-The Big-Merge gate in `SKILL.md` fires when a single member has **>100 incoming backlinks** or the merge plans **>200 ops**. At that scale the auto-`mergeEntities` helper has historically under-migrated rows (Armando AI/Tech, 2026-05-29: 216 deletes vs 107 creates because backlinks weren't paginated to completion), and the resulting cross-space governance proposals are large and hard to roll back. Do the merge in supervised stages instead.
+The Big-Merge gate in `SKILL.md` fires when a single member has **>100 incoming backlinks** or the merge plans **>200 ops**. At that scale the auto-`mergeEntities` helper has historically under-migrated rows (AI/Tech merge incident, 2026-05-29: 216 deletes vs 107 creates because backlinks weren't paginated to completion), and the resulting cross-space governance proposals are large and hard to roll back. Do the merge in supervised stages instead.
 
 > Only run this after the editor replied **`force big-merge`**. It is destructive and produces real governance proposals.
 

@@ -1,8 +1,8 @@
 ---
 name: geo-clean
-description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, anchored-entity (page/avatar/cover) protection, dry-run expiry, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
+description: Clean the Geo knowledge graph — find and merge duplicates, find entities without types, delete orphans, move/copy entities between spaces, fix data types, find blank properties, fix stale relations, delete space data. Runs safeguards (deterministic canonical selection, both-scored escalation, untouchable-space protection, voting-data exclusion, system-entity exclusion (governance proposals / space bookkeeping / rankings), ranked-entity review escalation, anchored-entity (page/avatar/cover) protection, dry-run expiry, orphan check, dry-run, explicit publish confirmation) before any destructive op. Triggers on "find duplicates", "merge", "deduplicate", "delete orphan", "delete entity", "move entity", "copy entity", "delete space data", "fix data type", "find blank properties", "fix stale relations", "clean", "cleanup".
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # Geo Knowledge Graph — Cleaning
@@ -35,10 +35,25 @@ If any prerequisite is missing, STOP and ask the editor to fix it. Do not work a
 5. **Always use deterministic IDs for relation entities** created during merges: `from.slice(0,16) + to.slice(0,16)`. Reruns must be idempotent.
 6. **Additive-only when in doubt.** If a "fix" could be done either by adding new data or by deleting old, prefer adding. Only delete when the user explicitly authorized.
 7. **Data goes in the file, not in the script.** When a cleanup runs over a large list (the `scripts/<date>-*.json` exports this skill writes, or a candidate-ID/CSV list), the script **reads and parses that file at runtime** — it must NOT have the IDs/rows transcribed into it as a `const list = [ … ]` array. Baking the list in blows the token budget and times out on big sets, and risks the model corrupting IDs as it copies. The script holds only logic + helper imports; the list stays in the file. Full pattern: `geo-publish` → "Bulk / dataset publishing".
-8. **Voting data is untouchable.** Geo's entity-voting data — the **Score** value property (`85a4668a42fa4f488969c0a9de0c294b`, "net upvotes minus downvotes", system-maintained), **Rank Votes** relations (`19a4cfff45f24150abf2af0f43eb2eec`, one per voter, usually from the voter's personal space) and the vote ordinal/weighted value properties (`49ee1b8918204e75a1ae38a2dcaad4a5`, `103701ddcabe4a8e835b10345327b647`) — belongs to the voters and the system, not to the entity being cleaned. **No generated op may set, copy, unset, redirect, or delete any of it, in ANY operation.** Redirecting a Rank Votes backlink fabricates a vote; deleting one destroys a voter's data. The `src/` helpers exclude these at op-generation time (`EXCLUDED_VALUE_PROPERTY_IDS` / `EXCLUDED_RELATION_TYPE_IDS` in `src/constants.ts`); scripts that assemble ops by hand must apply the same exclusion and run a scrub pass over the final batch (see [`reference.md`](reference.md)). Accepted consequence: a merged-away duplicate keeps its votes and Score.
+8. **Voting/ranking data is untouchable.** Geo's ranking data — the **Score** value property (`85a4668a42fa4f488969c0a9de0c294b`, "net upvotes minus downvotes", system-maintained), **Ranking Vote** relations (`19a4cfff45f24150abf2af0f43eb2eec` — live name "Ranking Vote", kept as `RANK_VOTES_RELATION_TYPE_ID` in `src/constants.ts`; cast by **Ranking** entities, type `5c74731dfabb4dc8b5c53346521c639a`, usually from the voter's personal space) and the vote ordinal/weighted value properties (`49ee1b8918204e75a1ae38a2dcaad4a5`, `103701ddcabe4a8e835b10345327b647`) — belongs to the voters and the system, not to the entity being cleaned. **No generated op may set, copy, unset, redirect, or delete any of it, in ANY operation.** Redirecting a Ranking Vote backlink fabricates a vote; deleting one destroys a voter's data. The `src/` helpers exclude these at op-generation time (`EXCLUDED_VALUE_PROPERTY_IDS` / `EXCLUDED_RELATION_TYPE_IDS` in `src/constants.ts`); scripts that assemble ops by hand must apply the same exclusion and run a scrub pass over the final batch (see [`reference.md`](reference.md)). Accepted consequence: a merged-away duplicate keeps its votes and Score. An entity RECEIVING Ranking Votes is *ranked* — see "Ranked entities" below for what that means for cleanup decisions.
 9. **Anchored (identity) entities are excluded from deletion by default.** A space's identity — its **`page`/home entity**, its **Avatar** (profile photo) and **Cover** images — is anchored. A space wipe or bulk delete must **skip** these unless the editor explicitly overrides (Gate — Anchored-entity, below). Resolve them with `getAnchoredEntityIds(spaceId)` from `src/functions.ts` (returns `{page + avatar + cover}` entity IDs) and filter every delete/unset op against that set, logging `[SKIP] <id> (anchored)`. The dry-run summary MUST state `Anchored entities excluded: N`. Why this rule exists: a bulk personal-space delete once wiped the profile photo and space description because the script processed the page entity + identity images as ordinary rows (Aug-2026 incident).
 10. **Dry-run authorizations expire.** `publish` acts on the dry-run's snapshot; if the space changed in between, the op is stale. If more than **~30 minutes** elapsed between the dry-run and `publish` (or the session was interrupted/resumed), **do NOT publish the old script** — re-run discovery + the dry-run, show the fresh counts (highlight any delta), and ask for `publish` again. A 10-hour gap between `go` and `publish` was a contributing factor in the Aug-2026 wipe.
 11. **Never hand-write a raw-SDK delete loop.** All destructive ops go through the `src/` helpers and `publishOps` — never a bespoke `geo.entities.delete()` / `deleteEntity` loop that bypasses the exclusions above. `publishOps` refuses any batch removing data from >50 relations/values unless `CONFIRM_DESTRUCTIVE=1` is set. For a legitimate mass delete (space wipe, big merge), set that flag **only on the confirmed `publish` run** (`CONFIRM_DESTRUCTIVE=1 bun run scripts/<file>.ts`), **after** the editor's explicit `publish` and after anchored/voting exclusions are applied — never on the dry-run, never to route around a block. See [`reference.md`](reference.md).
+12. **System entities are invisible to cleanup.** Three classes of protocol-minted entities must never appear in a candidate list, never be counted as "junk", and never be targeted by any op:
+    - **Governance proposal entities** — named `Proposal <uuid>`, one per governance proposal (current infra stamps them with a "System entity for proposal …" description). They are governance bookkeeping, not broken-publish leakage, and the protocol keeps minting them — deleting them is at best churn, at worst breaks governance views.
+    - **Space bookkeeping entities** — named `Space <uuid>` (including the space's own id as an entity), carrying `Payout` / `Allocated` edges. Payout & allocation accounting.
+    - **Ranking entities** — type `Ranking` (`5c74731dfabb4dc8b5c53346521c639a`); they hold users' Ranking Votes and usually live in personal spaces.
+    Discovery reports them as one aggregate line (`System entities excluded: N — proposals {p}, space bookkeeping {b}, rankings {r}`), logs `[SKIP] <id> (system entity)` if one reaches an op pipeline, and moves on. Detection recipes in [`reference.md`](reference.md).
+
+## Ranked entities — surface them in every discovery output
+
+Geo's ranking feature: a user's **Ranking** entity (e.g. "Books everyone should read", type `5c74731d…`, usually in their personal space) casts **Ranking Vote** relations (`19a4cfff…`) at the entities being ranked; ranking *blocks* on pages ("Submitted to Ranking Block", `09c219c103d14d2aa5c78edbf2d0182a`) render them, and the system-maintained **Score** value aggregates votes. An entity is **ranked** when it has ≥1 inbound Ranking Vote (verified example: Animal Farm `6278a4a649eb485f86c0bb1c036b5e14`, 30 inbound Ranking Votes from 30 users' Rankings).
+
+Ranked = a user chose to put this entity on a list. That is a community-value signal cleanup must respect:
+
+- **Every discovery output includes ranking status** — a `Ranked` column with the inbound Ranking Vote count (`relationsConnection(filter: { toEntityId: { is: X }, typeId: { is: "19a4cfff…" } }, first: 0) { totalCount }`) and the Score value where present. Every Discovery block also prints the counters `System entities excluded: N` and `Ranked candidates flagged: M`.
+- **A ranked entity is never an easy delete.** Ranking Votes do not *block* deletion the way references do, but deleting a ranked entity strands real users' votes — so any delete candidate with ≥1 Ranking Vote is escalated to editor review with its vote count shown, never batched into a "delete all" bucket.
+- **Merges already respect ranking** via the Score cascade rule and HARD RULE 8 (votes never migrate; a merged-away twin keeps its votes). Surface each member's vote count in the member table so the editor sees where the community's votes sit before approving.
 
 ## The operations
 
@@ -89,9 +104,9 @@ Method: (1) **pre-cluster cheaply for recall** — bucket by shared salient toke
 Total entities scanned: {N}
 
 ### Pass 1 — exact name ({G1} groups)
-| Group | Members | Spaces | Backlinks (each) |
-|---|---|---|---|
-| "ethereum" | 4 | Crypto, Crypto datasets, AI, PERSONAL | 142, 8, 2, 0 |
+| Group | Members | Spaces | Backlinks (each) | Ranked votes (each) |
+|---|---|---|---|---|
+| "ethereum" | 4 | Crypto, Crypto datasets, AI, PERSONAL | 142, 8, 2, 0 | 5, 0, 0, 0 |
 | ... |
 
 ### Pass 2 — semantic near-dupes ({G2} candidate groups, ADVISORY — confirm each)
@@ -171,7 +186,7 @@ Fires if **two or more eligible members carry a Score value**. Scored topics are
 
 STOP and tell the editor:
 
-> Group **"{name}"** has {n} scored members — not merging (needs human review, escalate to Armando):
+> Group **"{name}"** has {n} scored members — not merging (needs human review, escalate to the space's lead editor):
 > | Member | ID | Score | Spaces |
 > |---|---|---|---|
 > | … | … | +12 | Crypto, Root |
@@ -194,7 +209,7 @@ Consolidation legitimately removes DAO-resident twins — but never silently. Tw
 
 Fires if **any single member has > 100 incoming backlinks** OR **the total planned ops > 200**.
 
-Big merges have historically lost rows (Armando AI/Tech case, 2026-05-29: 216 deletes vs 107 creates because backlinks weren't paginated to completion). Even with the pagination fix in place, large merges produce huge cross-space governance proposals and are hard to roll back.
+Big merges have historically lost rows (AI/Tech merge incident, 2026-05-29: 216 deletes vs 107 creates because backlinks weren't paginated to completion). Even with the pagination fix in place, large merges produce huge cross-space governance proposals and are hard to roll back.
 
 STOP and tell the editor:
 
@@ -333,14 +348,15 @@ Delete an entity that no longer belongs (typo, test entity, abandoned record). *
 
 ### Discovery
 For each candidate ID:
-1. Pattern C (its types, values, outgoing relations).
-2. Pattern D incoming — count backlinks. Paginate fully.
-3. Split incoming edges: **references** (block deletion) vs **Rank Votes edges** (votes — do not block, are never deleted/migrated, and remain after deletion by design).
+1. **System-entity check first** (HARD RULE 12): governance Proposal entities, Space bookkeeping entities, Ranking entities → refuse the candidate outright, log `[SKIP] <id> (system entity)`.
+2. Pattern C (its types, values, outgoing relations).
+3. Pattern D incoming — count backlinks. Paginate fully.
+4. Split incoming edges: **references** (block deletion) vs **Ranking Vote edges** (`19a4cfff…` — do not block, are never deleted/migrated, and remain after deletion by design). **≥1 Ranking Vote ⇒ the entity is RANKED**: it drops out of any bulk/easy-delete bucket and needs an explicit per-entity editor confirmation with the vote count shown (deleting it strands the voters' votes).
 
 ### Gate — Backlink check (HARD)
 If the candidate has ANY incoming non-vote relations, STOP. Do not generate a delete op. Tell the editor:
 
-> Entity **{name}** (`{id}`) has **{N}** incoming relations (+ {V} vote edges, non-blocking, never touched):
+> Entity **{name}** (`{id}`) has **{N}** incoming relations (+ {V} Ranking Vote edges, non-blocking, never touched):
 > | From | Type |
 > |---|---|
 > | ... | ... |
@@ -350,13 +366,23 @@ If the candidate has ANY incoming non-vote relations, STOP. Do not generate a de
 > - **Merge** this entity into another (use the merge operation instead of delete).
 > - **Force delete** (acknowledged: referrers will be orphaned) — type `force delete {id}` exactly to confirm.
 
+### Gate — Ranked entity (review, not bulk)
+Fires when a delete candidate has **≥1 inbound Ranking Vote** (and passed the backlink gate — votes alone don't block). STOP and tell the editor:
+
+> Entity **{name}** (`{id}`) is **ranked** — {V} Ranking Vote(s) from users' Rankings{score, if a Score value exists}. Deleting it strands those votes. Confirm this specific delete with `delete ranked {id}`, or **skip**.
+
+Never fold ranked candidates into a "delete all" approval.
+
 ### Plan template
 ```
 ## Delete plan
-[DELETE] {name} ({id}) — 0 blocking backlinks (2 vote edges left untouched), in space {space}
+System entities excluded: {S}   Ranked candidates flagged: {M}
+[DELETE] {name} ({id}) — 0 blocking backlinks, 0 ranking votes, in space {space}
+[DELETE] {name} ({id}) — 0 blocking backlinks; RANKED (2 votes) — editor confirmed `delete ranked` ✓
 [SKIP]   {name} ({id}) — has 4 backlinks (gate fired; see above)
+[SKIP]   Proposal 00064d73-… ({id}) — system entity (HARD RULE 12)
 
-Will produce: deleteEntity={n}, deleteRelation={m} (outgoing relations cleaned up; Score values and vote edges excluded).
+Will produce: deleteEntity={n}, deleteRelation={m} (outgoing relations cleaned up; Score values and Ranking Vote edges excluded).
 
 Reply **go** to write + dry-run.
 ```
@@ -382,26 +408,31 @@ Three "obvious" approaches all fail (details in [`reference.md`](reference.md) g
 ```
 Page with `after`/cursor (or `offset`) until exhausted; keep only rows where `typeIds` is `[]`. This is read-only and slow on big spaces — log progress per page and write the full list to `scripts/<date>-no-type-export.json`.
 
-Two flavours of untyped show up; label them in the output:
-- **Husks** — names like `Proposal <uuid>`. Almost always broken-publish leakage; default action **delete** (via delete-orphan op).
+Bucket the untyped rows; label each in the output:
+- **System entities** (HARD RULE 12) — `Proposal <uuid>` governance entities, `Space <uuid>` bookkeeping entities (Payout/Allocated edges), Ranking entities. **EXCLUDED from the candidate list** — reported as one aggregate count only, never listed row-by-row, never offered for deletion. (Pre-0.5.0 versions of this skill called proposal entities "husks" with default action delete — that guidance is retired; they are protocol data.)
+- **Relation entities** — property-bags of live relations (an edge's `entityId`). Structural, untyped by design — excluded from the candidate list.
+- **Stubs / unnamed** — named-but-empty or nameless leftovers. Candidates for review/delete once live-verified (0 global backlinks, no ranking votes).
 - **Real entities** that just lost their type (e.g. "Kaito AI"). Default action **assign type**.
 
-Reference baseline (crypto-datasets space, paginate-and-check): **193 untyped / 1,827 (~11%)**, mostly husks plus a few real ones.
+Reference baseline (crypto-datasets space, paginate-and-check): **193 untyped / 1,827 (~11%)**, mostly system proposal entities plus a few real ones.
 
 ### Output template
 ```
 ## Entities without types — space {space name}
 Scanned (paginated): {N} entities across {pages} pages
-Untyped: {U} ({pct}%)  — husks: {h}, real: {r}
+Untyped: {U} ({pct}%)  — real: {r}, stubs/unnamed: {s}
+System entities excluded: {S} — proposals {p}, space bookkeeping {b}, rankings {rk}
+Relation entities excluded (structural): {re}
+Ranked candidates flagged: {M}
 Full list: scripts/<date>-no-type-export.json
 
-| Name | ID | Space | Husk? | createdAt |
-|---|---|---|---|---|
-| Proposal 00064d73-… | 00064d73… | crypto-datasets | husk | … |
-| Kaito AI | … | crypto-datasets | real | … |
+| Name | ID | Space | Class | Ranked (votes) | createdAt |
+|---|---|---|---|---|---|
+| Kaito AI | … | crypto-datasets | real | 0 | … |
+| Old draft topic | … | crypto-datasets | stub | 3 ⚠ review | … |
 
 Decide per-entity: **assign type** (specify type id) / **delete** (use delete-orphan op) / **leave**.
-(Or: "delete all husks" / "assign {type id} to all real ones".)
+(Ranked rows — votes ≥1 — always land in review, never in a bulk delete.)
 ```
 
 Read-only — no script written. Hand off to merge / delete / publish as the editor decides.
@@ -488,7 +519,7 @@ Stale: {S} (target no longer exists).
 Reply **go** to write + dry-run a cleanup that deletes the stale edges.
 ```
 
-Cleanup ops use `Graph.deleteRelation({ id })` with the edge id. Vote edges are exempt even if their target vanished (HARD RULE 8) — list them separately.
+Cleanup ops use `Graph.deleteRelation({ id })` with the edge id. Ranking Vote edges are exempt even if their target vanished (HARD RULE 8) — list them separately.
 
 ---
 
@@ -601,7 +632,9 @@ Deep detail lives in [`reference.md`](reference.md) (bundled with the skill): **
 - Pick a Main by eyeball — canonical selection is the deterministic cascade (or an explicit editor override), nothing else.
 - Merge two scored entities — both-scored groups are escalated, never fused.
 - Select a personal-space or dataset-space copy as canonical, or emit ops into those spaces (their copies survive; the editor's OWN personal space on explicit request is the one exception).
-- Touch voting data (Score / Rank Votes / vote values) — in any operation, ever.
+- Touch voting/ranking data (Score / Ranking Votes / vote values) — in any operation, ever.
+- List or target **system entities** (governance Proposal entities, `Space <uuid>` bookkeeping entities, Ranking entities) as cleanup candidates — they are excluded from every candidate list (HARD RULE 12).
+- Treat a **ranked** entity (≥1 inbound Ranking Vote) as bulk-deletable junk — ranked candidates always require per-entity editor review.
 - Remove a topic from the Root (Geo) space via a merge. No override exists for this.
 - Force-delete entities with backlinks unless the editor typed `force delete {id}` exactly.
 - Touch DAO spaces unless the wallet is an editor of that DAO and the editor explicitly named the DAO space; ops for other spaces ship as fix packages, never forced.

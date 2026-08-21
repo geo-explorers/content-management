@@ -189,9 +189,26 @@ Run it live (no snapshot) BEFORE a merge as a pre-flight: it lists exactly what 
 8. **No working server-side "untyped" filter.** `types` isn't a field (it's `typeIds`); `typeIds: { isNull: true }` and `entitiesConnection.totalCount` both 504; the `relationsByTypeIdConnection: { none }` filter returns false positives. Paginate the space and check `typeIds.length === 0` client-side.
 9. **Without `disableAutoSelect: true`, `mergeEntities` re-picks the Main itself** (Featured > Curated > blocks > backlinks > props) for same-space groups — silently overriding the plan the editor approved. Cascade-driven scripts must always pass it (plus `out` to read back what was used).
 10. **Inline `relations { nodes }` / `backlinks { nodes }` cap at ~100 rows.** The helpers re-fetch capped entries via paginated queries before caching (prevents false-positive orphan deletion of heavily-linked targets); hand-written discovery queries must do the same — treat exactly-100 row counts as "probably truncated".
-11. **Vote edges are incoming relations too.** When counting backlinks for the orphan gate or Main selection sanity, split out `typeId = 19a4cfff…` (Rank Votes) — they are non-blocking, never migrated, and remain after deletion by design.
+11. **Ranking Vote edges are incoming relations too.** When counting backlinks for the orphan gate or Main selection sanity, split out `typeId = 19a4cfff…` (Ranking Vote) — they are non-blocking, never migrated, and remain after deletion by design. BUT ≥1 such edge marks the candidate as **ranked** (see "Ranking model" below): surface the count in every discovery output and route the candidate to per-entity review instead of any bulk-delete bucket.
 12. **`gql` retries hard.** Up to 50 attempts, exponential backoff capped at 16 s, and it retries *every* transient failure (the testnet API 504s/stalls under load). Deterministic GraphQL errors (bad query/filter shape) fail fast — a long retry loop in the log means network trouble, not a bad query.
 13. **`publishOps` returns the proposalId for DAO spaces** (txHash only for personal spaces). Build governance links as `https://www.geobrowser.io/space/{spaceId}/governance?proposalId={id-without-0x}` and include them in the publish report.
+
+## Ranking model & system-entity detection (0.5.0)
+
+Verified live 2026-08-21 on production examples:
+
+**Ranking model.** A **Ranking** entity (type `5c74731dfabb4dc8b5c53346521c639a`, e.g. "Books everyone should read" `9c911de13fec482fbab1834ce438084b`, usually in the ranker's personal space) casts **Ranking Vote** relations (`19a4cfff45f24150abf2af0f43eb2eec` = `RANK_VOTES_RELATION_TYPE_ID`) at the entities being ranked, and attaches to a page's ranking block via **Submitted to Ranking Block** (`09c219c103d14d2aa5c78edbf2d0182a`; global rankings are Pages holding such blocks, e.g. "Rankings" `c996733bee9f445bb4a77893914f2e0c`). The system-maintained **Score** value (`85a4668a…`) aggregates votes. *Ranked entity* = ≥1 inbound Ranking Vote — verified: Animal Farm `6278a4a649eb485f86c0bb1c036b5e14` has 30 inbound Ranking Votes from 30 users' Rankings.
+
+Ranked check (cheap, one call per candidate — batch with aliases):
+```graphql
+{ relationsConnection(filter: { toEntityId: { is: "<id>" }, typeId: { is: "19a4cfff45f24150abf2af0f43eb2eec" } }, first: 0) { totalCount } }
+```
+
+**System-entity detection** (HARD RULE 12 — excluded from every candidate list):
+- *Governance proposal entities*: name matches `/^Proposal [0-9a-f-]{8,}/i`, or description starts `"System entity for proposal"`. One per governance proposal; the protocol keeps minting them (post-2026-07 infra stamps the system description).
+- *Space bookkeeping entities*: name matches `/^Space [0-9a-f-]{8,}/i`, or the entity id equals a space id, or its inbound/outbound edges are `Payout` / `Allocated` types. Payout & allocation accounting.
+- *Ranking entities*: `typeIds` contains `5c74731dfabb4dc8b5c53346521c639a`.
+Report the excluded counts (`System entities excluded: N — proposals {p}, space bookkeeping {b}, rankings {r}`) so editors see the volume without wading through protocol rows. If any op pipeline receives one anyway, drop it with `[SKIP] <id> (system entity)`.
 
 ## When something fails mid-publish
 
