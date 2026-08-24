@@ -17,9 +17,9 @@
       "content_sha256": "023b001f49241841bf0a79ca36458cf2a4c9989deb97b28d900cc69ec4a36dc3"
     },
     "actionable/geo-publish": {
-      "version": "0.9.0",
-      "approved_commit": "401e0b953b260d20053156ccff78d1b3b5a6f316",
-      "content_sha256": "fb23074958f80feb726ae722b3b48f813ea7f80b45a33627b620ff8a096b24be"
+      "version": "0.10.0",
+      "approved_commit": "009001b0aafcc789e87ce31ccb189d3f104921db",
+      "content_sha256": "5c0c6b49fb50fb9b39df714c97b11c2178f5c1fc642c0c880db564d05b7c33fb"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",
@@ -37,9 +37,9 @@
       "content_sha256": "3c21d5df84e962d95d90a46f5fd486141dfff908d5777624b6a5cfdd02cb3f88"
     },
     "non-actionable/geo-query": {
-      "version": "0.2.6",
+      "version": "0.2.7",
       "approved_commit": "12fc0fb79136f648d320db77cbf49a62d5840ae7",
-      "content_sha256": "0a465636ad00b62d0d4178d261dede3e902d4c9fb5622af7aa14cbccd42a0c15"
+      "content_sha256": "3e6449a4acc85ffd10cd0ff8d3149785c00f145bcdee3a09e778cbba2da93f9b"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",

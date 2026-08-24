@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.6"
+  version: "0.2.7"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -53,7 +53,7 @@ There are two list queries with the same top-level args (`typeId`, `spaceId`, `t
 | Pagination   | `first` + `offset` **(both ≤ 1000)**              | cursor `after`/`before` (`first`/`offset` ≤ 1000 here too) |
 | Use when     | small, bounded lookups; default for <1000 results | totalCount needed, or unbounded result sets |
 
-**CRITICAL — pagination caps:** `first` and `offset` are BOTH hard-capped at 1000 (400 `Pagination argument "offset"/"first" cannot exceed 1000`) — on flat lists (`entities`, `relations`, `values`) **and on `*Connection` queries alike**. Past row 1000 the only way forward is **cursor** pagination (`after`) on a `*Connection`; switching to a Connection but keeping `offset` hits the same wall. Max page size everywhere: `first: 1000`. Count-only? `first: 0` + `totalCount` works and is the cheapest query there is.
+**CRITICAL — pagination caps:** `first` and `offset` are BOTH hard-capped at 1000 (400 `Pagination argument "offset"/"first" cannot exceed 1000`) — on flat lists (`entities`, `relations`, `values`) **and on `*Connection` queries alike**. Past row 1000 the only way forward is **cursor** pagination (`after`) on a `*Connection`; switching to a Connection but keeping `offset` hits the same wall. `first: 1000` is the hard **ceiling, not a default** — a large root page that *also* nests per-node `relations` is the shape that OOM-kills the API (see [Performance → memory blow-up](#-memory-blow-up--never-pair-a-big-root-page-with-unfiltered-nested-relations)); when you nest relations/values per node, keep the **root page ≤ 100** and **filter nested relations by `typeId`**. Count-only? `first: 0` + `totalCount` works and is the cheapest query there is.
 
 **CRITICAL — response shape:** `entities` returns a **flat array**. Do NOT wrap fields in `{ nodes { ... } }`.
 
@@ -205,6 +205,23 @@ Don't hand-roll it — use `paginate()` from the canonical client (below): `awai
 |---|---|
 | ❌ N+1: page all stories, fetch each story's relations, filter client-side | **~131s** of pure API time (25 stories ≈ 3s, ×1088) — plus LLM overhead per call → the observed 5–10 min |
 | ✅ One filtered query (below) | **469ms**, complete (238 stories) |
+
+### ⚠ Memory blow-up — never pair a big root page with unfiltered nested relations
+
+N+1 is slow; the over-correction is *dangerous*. Inlining nested fields to kill N+1 (good) becomes an **API-killer** when a large root page *also* pulls every relation per node:
+
+```graphql
+# ❌ OOM shape — MULTIPLICATIVE: ~1000 nodes × ~1000 relations each, hydrated in one response
+{ entitiesConnection(typeId:"…", first: 1000) { nodes {
+    id name relations(first: 1000) { nodes { type{ name } toEntity{ name } } } } } }
+```
+
+One request of this shape hydrates enough to blow the API pod's memory ceiling (real incident: 28 such requests → 5 pod OOM-kills; it also takes ~33 s, past the 30 s client timeout, so it never even succeeds — it just burns retries and a pod restart). Two **independent** knobs fix it:
+
+- **Root page ≤ 100** whenever you nest per-node relations — not `first: 1000`. More cursor pages, each cheap and inside the timeout.
+- **Filter the nested relations by `typeId`** — `relations(filter: { typeId: { is: "…" } }, first: N)` hydrates ~1 relation per node instead of ~1000. This is the real fix, and it also reaches topics with >1000 relations an unfiltered page can't.
+
+The flat **`relationsConnection` bulk scan** (below) stays safe — it's a *flat* 1,000-row relation scan with bounded nested data, not `nodes × relations`. Page size alone isn't the danger; **root-page × nested-relations** is.
 
 ### "Entities related to X" — the three fast patterns
 
@@ -535,6 +552,7 @@ No Node/Bun? `curl -s --compressed <endpoint> -H 'Content-Type: application/json
 12. **`entity(id:)` never nulls** — nonexistent IDs return an empty stub; test existence via `spaceIds`/`types`, never by null-check.
 13. **Repeated entries in `types` ≠ duplicate types.** Multi-space entities carry one Types edge per space — group by relation `spaceId`; only same-space repeats are real duplicates (see "Multi-space entities").
 14. **"Published" = entity `createdAt` (added to Geo), NOT the `Publish datetime` property (source dateline).** For "how many published in the last N hours" questions, filter entity `createdAt`; the `Publish datetime` property is the outlet's original dateline and runs hours earlier — mixing them up answered "0" when the true count was 13. See "'Published' is two different timestamps."
+15. **Never pair a big root page with unfiltered nested relations.** `entitiesConnection(first: 1000){ nodes { relations(first: 1000) } }` is multiplicative and OOM-kills the API (real incident: 5 pod restarts). When nesting per-node relations, keep the **root page ≤ 100** and **filter nested relations by `typeId`**. `first: 1000` is a hard cap, not a default. See "Memory blow-up".
 
 ## More
 
