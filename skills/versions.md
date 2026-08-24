@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-query — 0.2.7
+- 2026-08-24 · **Memory blow-up anti-pattern — don't teach the OOM query shape** (geo core team / Patrick: a `postgres_to_geo` sweep opened `entitiesConnection(first:1000)` with nested `relations(first:1000)` per node — multiplicative hydration that OOM-killed the testnet API pods, ~28 requests → 5 restarts; also >30 s so it timed out client-side and never succeeded). The skill's "max page size everywhere: `first: 1000`" line read as a default. Reframed it as a hard **ceiling, not a default**, and added a Performance "Memory blow-up" callout: when nesting per-node relations keep the **root page ≤ 100** AND **filter nested relations by `typeId`** (~1 hydrated per node, not ~1000, and it reaches >1000-relation topics). Clarified the flat `relationsConnection` bulk scan stays safe (flat, not `nodes × relations`). Gotcha 15. Our own generators were already safe (press-review coverage map uses root `first:100`; `lib/gql.mjs` nests `relations(first:100)` on single entities) — this hardens the *guidance* so agents don't write the bad shape.
+
 ### geo-query — 0.2.6
 - 2026-08-12 · **"Published" timestamp disambiguation** (Arturas' report: "how many news stories published in the last 9 hours" answered **0**, true answer **13** — the agent filtered on the wrong field). A News story has two times: the **`Publish datetime`** property (`94e43fe8…`) = source-outlet dateline, and entity **`createdAt`** = when it was added to Geo. Editors' "published recently" means added-to-Geo → filter `createdAt`, not the property (the ingestion pipeline bulk-adds stories hours after their dateline). Added a "'Published' is two different timestamps" section (table + rule + per-space `createdAt` count query + migration caveat that pre-migration `createdAt` is flattened), the `Publish datetime` property ID to Well-known IDs, and gotcha 14.
 
