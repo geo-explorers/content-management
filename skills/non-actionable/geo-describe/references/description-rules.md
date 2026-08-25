@@ -1,7 +1,7 @@
 # Geo description rules
 
 The standard a `geo-describe` output must meet (Stage 4 compose + Stage 5 rules check).
-Source of truth: Geo `ONTOLOGY.md` content standards + Armando's spec. Validate FORM here;
+Source of truth: Geo `ONTOLOGY.md` content standards + the original skill spec. Validate FORM here;
 the facts are validated separately in Stage 3.
 
 ## Rules
