@@ -1,6 +1,11 @@
 {
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
+    "actionable/geo-claim-grouping": {
+      "version": "0.6.0",
+      "approved_commit": "30f684639f39fae46748999ed00d88b21bc187a4",
+      "content_sha256": "f4da13ef460653c0762136902c06a3efab4254ec598486ab06adcb820407ce79"
+    },
     "actionable/geo-clean": {
       "version": "0.4.0",
       "approved_commit": "b31896c37c22d671d27f268741cf891869a8cfed",
