@@ -11,6 +11,11 @@
       "approved_commit": "12fc0fb79136f648d320db77cbf49a62d5840ae7",
       "content_sha256": "8c19551b8d15a2c7694144ac2b4a8a381b4fe8bc8c330d253511ad6e18bbc727"
     },
+    "actionable/geo-mirror": {
+      "version": "0.8.1",
+      "approved_commit": "",
+      "content_sha256": "b1993dcf78cc72b28158f71eaffd4ff72c7580b548c96e6fb6fbafbb3c22ae97"
+    },
     "actionable/geo-orchestrate": {
       "version": "0.2.0",
       "approved_commit": "8329034c51b504972c9cdf60ca12f3abae5c5b4c",
@@ -38,7 +43,7 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.8",
-      "approved_commit": "2ea7c71f1da92b3ecc17a6c38083924c2d7011f4",
+      "approved_commit": "44d676d0a1bb05096cff581bc0fa52bfb00b1097",
       "content_sha256": "29a47b7695cff84b052cd8a7be740ad81a96cce9a09bda1bbc4061dddc0e3bdf"
     },
     "non-actionable/image-banner-recompose": {
