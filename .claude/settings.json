@@ -8,8 +8,11 @@
       "Bash(node scripts/*)",
       "Bash(node --env-file=.env scripts/*)",
       "Bash(node --env-file=.env.geo-publish scripts/*)",
+      "Bash(node --env-file=.env skills/actionable/*/scripts/*)",
+      "Bash(node --env-file=.env.geo-publish skills/actionable/*/scripts/*)",
       "Bash(curl *)",
-      "Bash(bun run --env-file=.env scripts/*)"
+      "Bash(bun run --env-file=.env scripts/*)",
+      "Bash(bun run --env-file=.env skills/actionable/*/scripts/*)"
     ]
   }
 }
