@@ -3,7 +3,7 @@ name: geo-query
 description: Query the Geo knowledge graph via GraphQL. Use when looking up entities, searching by type, exploring relations, discovering schemas, or inspecting entity properties. Triggers on "look up", "find entity", "query geo", "search the graph", "what type is", "show me relations", "get entity".
 metadata:
   author: geobrowser
-  version: "0.2.8"
+  version: "0.2.9"
 ---
 
 # Geo Knowledge Graph — Querying
@@ -163,6 +163,14 @@ Verified live:
 ```
 
 Verified live (Bitcoin `2f8238b2…`): 6 Topic edges = three spaces with one each (healthy) + one space with **three** (true duplicate — name that space, 2 edges to remove). The naive "Topic appears 6×, duplicates!" reading is wrong in both directions.
+
+**Reading a multi-space entity — SCOPE `values`/`relations` to ONE space, don't merge all of them.** `entity.values` and `entity.relations` (like `types`) aggregate **every space the entity lives in** — so an unscoped read of a multi-space entity returns each space's copy merged together, inflating the property/relation list and mixing spaces' assertions (verified: "Foundation Models" in 2 spaces → unscoped **2 values, 8 relations**; scoped to one space → **1 value, 5 relations**). Both `values` and `relations` take a `spaceId` filter — always pass it when you want a single space's view:
+```graphql
+{ entity(id: "ENTITY_ID") {
+    values(filter: { spaceId: { is: "SPACE_ID" } }) { nodes { property { name } text } }
+    relations(filter: { spaceId: { is: "SPACE_ID" } }) { nodes { type { name } toEntity { name } } } } }
+```
+**Which SPACE_ID?** Use the one the user named (a canonical id — see [Canonical spaces](#canonical-spaces-name--id--scope-with-these-never-fuzzy-resolve-a-canonical-space)). If the user did **not** specify a space, default to the **Root** space (`a19c345ab9866679b001d7d2138d88a1`) — the canonical home — rather than dumping every space's copy. Only read unscoped when the goal is explicitly the cross-space picture (e.g. the duplicate-hunt above).
 
 ### Search entities by type (optionally by space)
 
@@ -581,6 +589,7 @@ No Node/Bun? `curl -s --compressed <endpoint> -H 'Content-Type: application/json
 14. **"Published" = entity `createdAt` (added to Geo), NOT the `Publish datetime` property (source dateline).** For "how many published in the last N hours" questions, filter entity `createdAt`; the `Publish datetime` property is the outlet's original dateline and runs hours earlier — mixing them up answered "0" when the true count was 13. See "'Published' is two different timestamps."
 15. **Never pair a big root page with unfiltered nested relations.** `entitiesConnection(first: 1000){ nodes { relations(first: 1000) } }` is multiplicative and OOM-kills the API (real incident: 5 pod restarts). When nesting per-node relations, keep the **root page ≤ 100** and **filter nested relations by `typeId`**. `first: 1000` is a hard cap, not a default. See "Memory blow-up".
 16. **Scope canonical spaces by the hardcoded ID** ([Canonical spaces](#canonical-spaces-name--id--scope-with-these-never-fuzzy-resolve-a-canonical-space) table) — **never** fuzzy-resolve a canonical space name live; `space(name:)`/`search()` has silently matched the wrong space (`World affairs → AI`), scoping the whole query wrong.
+17. **Reading a multi-space entity? Scope `values`/`relations` by `spaceId`.** Unscoped, they merge every space's copy (inflated, mixed). Pass `values(filter:{spaceId:{is:"…"}})` / `relations(filter:{spaceId:{is:"…"}})` for the space the user named; default to **Root** (`a19c345a…`) if none given. Only read unscoped for a deliberate cross-space view. See "Reading a multi-space entity".
 
 ## More
 
