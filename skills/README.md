@@ -26,6 +26,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **geo-clean** | Find/merge duplicates, delete orphans, fix data types, fix stale relations, etc. Safeguards before any destructive op. | Repo + wallet key |
 | **geo-orchestrate** | Editor entry point. Turns "I want to X" into a plan → generates a script → dry-run → confirm → publish. Routes to query + publish. | Repo + wallet key |
 | **geo-discovery** | Run a gap-discovery pass over a space's daily stream → ranked coverage/depth/freshness/structural/trending gaps as Gap finding entities. Read-only until the human-reviewed publish stage. | Repo (Python; publish stage needs wallet key) |
+| **geo-claim-grouping** | Populate the claim-to-claim relation properties (`Related claims` / `Duplicate claims` / `Similar claims`) between Claims via the Geo team's three-pass process (Related grouping first, then Duplicates, then Similars): bundled candidate discovery → rubric adjudication (merges → geo-clean, supports/opposes → argument flags) → dry-run → held-for-review proposal. Additive-only (createRelation is its only op). Podcasts-space claims are excluded at every layer (HARD RULE 12). | Repo + wallet key |
 
 `geo-publish` is portable — one skill for Claude Code, Codex (CLI + Desktop), and Claude cowork (any local-execution agent). Browser-only assistants can't publish.
 
