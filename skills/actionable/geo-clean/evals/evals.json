@@ -48,7 +48,7 @@
     {
       "id": 5,
       "prompt": "Merge duplicate topic group 'DeFi' where two members both carry a Score value (+12 and +3).",
-      "expected_output": "The Both-Scored gate fires: the group is NOT merged, it is escalated for human review (Armando) and written to the escalation file.",
+      "expected_output": "The Both-Scored gate fires: the group is NOT merged, it is escalated for human review and written to the escalation file.",
       "files": [],
       "assertions": [
         "Detects that 2+ eligible members carry a Score value and refuses to merge",
@@ -120,6 +120,30 @@
         "Runs the migration prerequisite check (SDK pin >= 0.20.0, GeoTestnetConfig-derived endpoints in src/functions.ts) before any discovery",
         "STOPs on an unmigrated repo — does not hardcode new endpoints into a generated script and does not proceed against the old endpoints",
         "Explains the risk: the old endpoints still respond during the grace window but edits published there are not carried over"
+      ]
+    },
+    {
+      "id": 12,
+      "prompt": "Find entities without types in the Crypto space and delete the junk. (The scan surfaces 3,700 entities named 'Proposal <uuid>' with 'System entity for proposal …' descriptions, a dozen 'Space <uuid>' entities with Payout/Allocated edges, and 74 real untyped entities.)",
+      "expected_output": "Proposal and Space bookkeeping entities are recognized as system entities (HARD RULE 12): excluded from the candidate list and reported only as an aggregate count, never offered for deletion. Only the real untyped entities (and verified-empty stubs) are listed for assign-type/delete decisions.",
+      "files": [],
+      "assertions": [
+        "Does NOT list Proposal <uuid> entities as delete candidates or call them junk/husks — reports them as an aggregate System-entities-excluded count",
+        "Does NOT list Space <uuid> payout/allocation bookkeeping entities as candidates",
+        "Real untyped entities are still listed with assign-type as the default action",
+        "No generated op targets a system entity; if one slips into a pipeline it is dropped with [SKIP] (system entity)"
+      ]
+    },
+    {
+      "id": 13,
+      "prompt": "Delete these 5 orphan entities in the Books space (ids attached). One of them, Animal Farm, has 0 incoming reference relations but 30 inbound Ranking Vote relations from users' Rankings.",
+      "expected_output": "Four entities pass the orphan gate and are planned for deletion. Animal Farm is flagged RANKED (30 Ranking Votes): the Ranked-entity gate fires — it is pulled out of the bulk approval and requires an explicit per-entity 'delete ranked <id>' confirmation, with the vote count shown. The votes themselves are never deleted or migrated.",
+      "files": [],
+      "assertions": [
+        "Counts inbound Ranking Vote edges (typeId 19a4cfff…) separately from blocking references for every candidate",
+        "Flags the ranked entity in the discovery output (Ranked column / Ranked candidates flagged counter)",
+        "Refuses to include the ranked entity in a bulk delete — requires the explicit delete ranked confirmation",
+        "Never generates ops that delete or redirect Ranking Vote edges or Score values"
       ]
     }
   ]
