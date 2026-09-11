@@ -3,7 +3,7 @@ name: geo-publish
 description: Publish entities and relations to the Geo knowledge graph via the GRC-20 SDK. Runs mandatory safeguards (ontology/correct-type check via ontology-advisor + semantic-duplicate check + schema check + type-required check + two-phase dry-run/confirm) before any write. Use when creating, updating, or deleting entities and relations. Triggers on "publish", "create entity", "add person", "add to geo", "add to my space", "submit proposal", "create relation", "update entity", "delete entity".
 metadata:
   author: geobrowser
-  version: 0.10.0
+  version: 0.11.0
 ---
 
 # Geo Knowledge Graph — Publishing
@@ -18,11 +18,22 @@ Every write passes mandatory safeguards FIRST: an **ontology / correct-type chec
 2. **SDK available**: either the `content-management` repo cloned with `bun install` run (`node_modules/@geoprotocol/geo-sdk` exists), or the skill's own `node_modules`. **Post-migration (v20 contracts) this must be `@geoprotocol/geo-sdk` v0.20+** — 0.19.x and earlier publish to the retired contracts and their edits silently go nowhere after the grace window.
 3. **Wallet key** in **`.env` at the project root** — `GEO_PRIVATE_KEY=0x...` (this is exactly what the setup guide creates, alongside `DEMO_SPACE_ID=`). Scripts read `GEO_PRIVATE_KEY`, fall back to the legacy `PK_SW`, and also accept a separate `.env.geo-publish` if present. Export the key from <https://www.geobrowser.io/export-wallet>.
 
-**Never put the key in the transcript.** Do NOT `cat`/`grep` the value, do NOT `export` it in-session, do NOT ask the user to paste it. To check it's configured without reading it — this accepts **all** valid setups (`.env` with `GEO_PRIVATE_KEY`, `.env` with legacy `PK_SW`, or `.env.geo-publish`):
+**Never put the key in the transcript.** Do NOT read/print the value, do NOT `export` it in-session, do NOT ask the user to paste it.
+
+**Check for the FILE, never its contents** — reading `.env` (`cat`/`grep`) is routinely refused by the permission classifier as secret-access, and a refusal looks identical to "no key", which is what produces false "you have no private key" alarms:
 ```bash
-cat .env .env.geo-publish 2>/dev/null | grep -qE '^(GEO_PRIVATE_KEY|PK_SW)=' && echo ok || echo "missing — add GEO_PRIVATE_KEY=0x... to .env"
+ls -a .env .env.geo-publish 2>/dev/null | grep -q . && echo "env file present" || echo "no .env here — cwd is $(pwd)"
 ```
-Only if that prints `missing`, ask the user to add one line themselves in their editor — `GEO_PRIVATE_KEY=0x...` in `.env` — and reply "done". **Do not block on a missing key when `.env` already has `GEO_PRIVATE_KEY`** (that was a real bug: the old check looked for `PK_SW` only and wrongly reported no key).
+(The `| grep -q .` matters: `ls` exits non-zero when *any* argument is missing, so `ls a b || echo missing` prints "missing" even when `a` exists — the same false-negative shape as the old `grep -qs` bug.)
+
+**Interpreting the result — this is a soft check, not a gate:**
+- `env file present` → **treat the key as configured. Proceed. Say nothing about it.**
+- Nothing listed → you are probably in the wrong directory (the output prints `cwd`). Check the repo root before concluding anything.
+- Command blocked/refused → **that is NOT evidence of a missing key. Proceed.**
+
+**HARD: never ask the user about the private key more than once per session, and never at the publish gate.** If the user has said the key is set — at any point, in any wording — that is authoritative and final; do not re-verify, do not re-ask, do not mention it again. The authoritative check is the publish itself: if the key were genuinely absent, the script fails immediately with an explicit `GEO_PRIVATE_KEY not found…` error naming the cwd. A false "missing key" prompt costs the editor real time and trust; a genuinely missing key costs one clear error message. **Bias hard toward proceeding.**
+
+Only if a publish has *actually failed* with that error: ask the user to add one line themselves in their editor — `GEO_PRIVATE_KEY=0x...` in `.env` at the project root — and reply "done".
 
 4. **Network egress (sandboxed environments only).** Reads and the dry-run only need `api-testnet.geobrowser.io`. **Publishing needs three more hosts** and is commonly blocked when an allowlist was set up for reads only (or pre-migration):
    - `api-testnet.geobrowser.io` — IPFS upload of the edit (happens *before* the transaction; a reads-only or old `testnet-api` allowlist misses it)
@@ -37,11 +48,12 @@ Only if that prints `missing`, ask the user to add one line themselves in their 
 2. The duplicate search is **name-only, across ALL types and ALL spaces**. Never filter by the type you're about to create — "Bitcoin" the Project is a duplicate concern of "Bitcoin" the Token.
 3. "Looks straightforward" is NOT a reason to skip the template. Always post it.
 4. **Two-phase execution:** `go` authorizes the dry-run only. Publishing needs a *second* explicit `publish`.
-   - After `go`: write the script with `DRY_RUN = true`, run the dry-run yourself, show the op count + a sample.
+   - After `go`: write the script with `DRY_RUN = true`, run the dry-run yourself, and report it in the mandatory **[Dry-run report](#dry-run-report--mandatory-format)** table format — never a prose summary or a bare op count.
    - Then ask: *"Output looks right? Type **publish** to publish to Geo, or **stop** to discard."*
    - On `publish`: flip `DRY_RUN = false`, re-run, surface the tx hash + verify URL.
    - On `stop`: leave the script on disk, change nothing on Geo.
    - Never auto-publish on `go`.
+   - **Never re-open environment/setup questions at the `go` or `publish` gate** — not the private key, not `.env`, not the SDK. Those belong to Prerequisites, are checked once, and a blocked/unreadable check is not evidence of a problem. On `publish`, run it: the script's own error is the authoritative answer. (Real failure mode: the agent reached the gate and announced "you don't have a private key set up" on a machine where it *was* set up, because the `.env` check had been refused by the permission classifier.)
 5. **Never delete without explicit consent.** A delete or unset requires the user to type `publish` after seeing exactly what will be removed (entity name, backlink count, orphan count).
 6. **Publishing from a dataset: the script READS THE DATA FILE AT RUNTIME — never transcribe rows into the script as constants.** See [Bulk / dataset publishing](#bulk--dataset-publishing--data-goes-in-the-file-not-the-script). Baking rows into the script blows the token budget and times out on large datasets, and risks the model fabricating values (especially URLs) as it copies.
 7. **Properties on a relation go on the relation ENTITY id, NEVER the relation id.** A relation has two different IDs. Knowledge (values/name/types) written to the relation's own `id` is silently lost — the write "succeeds" and shows in the proposal, but renders nowhere. See [Relations — entity id vs relation id](#relations--entity-id-vs-relation-id-critical). This is not optional; getting it wrong mis-published ~1000 rows in production.
@@ -147,8 +159,57 @@ Property IDs from `values.nodes[].property.id`; **the property's declared type f
 
 1. **Write** `scripts/<YYYY-MM-DD>-<slug>.ts` with `DRY_RUN = true` (template below).
 2. **Run** it yourself: `node --env-file=.env.geo-publish scripts/<file>.ts` (or `--env-file=.env` for repo/PK_SW users; or `bun run` with `--env-file`). Prints ops, touches nothing.
-3. **Surface** op count + first-op sample + path, then the publish/stop prompt. The dry-run output MUST list every created entity as `Creating: <name> [<type>, …]` — type coverage stays visible at the human gate (see the Gate-4 helper below).
+3. **Report** using the **Dry-run report** format below — not a prose summary. The script's own output MUST also list every created entity as `Creating: <name> [<type>, …]` so type coverage is visible (see the Gate-4 helper below).
 4. On `publish`: set `DRY_RUN = false`, re-run, report tx hash + `https://www.geobrowser.io/space/<spaceId>/<entityId>`.
+
+### Dry-run report — MANDATORY format
+
+The dry-run is the **human gate**. An editor must be able to spot a mistake in ~30 seconds by scanning it. Prose summaries hide errors and get rubber-stamped, so report in **tables**, always in this order. Keep every section even when empty (write "none") — a missing section reads as "nothing to check", which is exactly the failure this format prevents.
+
+````
+## Dry-run — {N} entities → {space name} ({personal · instant | DAO · proposal + vote})
+
+**1. What gets written**
+| # | Name | Type | Op | New/Existing |
+|---|---|---|---|---|
+| 1 | {name} | {type} | create / update / delete | new |
+
+**2. Values** — every value being written, with the data-type check visible
+| Entity | Property | Value (truncate ~60 chars) | Schema type | Writing as | OK? |
+|---|---|---|---|---|---|
+| {name} | Birth date | 1926-11-03 | Date | date | ✅ |
+
+**3. Relations**
+| From | Relation | → To | Target | toSpace |
+|---|---|---|---|---|
+| {name} | Roles | President | exists `f06e1cee…` | `d6960829…` |
+
+**4. Gates**
+| Gate | Result | Detail |
+|---|---|---|
+| 0 ontology/type | ✅ PASS | x.com link → Tweet (not Post) |
+| 1 duplicate | ✅ PASS | 0 hits for "{name}", all types/spaces |
+| 2 schema/data-type | ✅ PASS | 5/5 values match declared types |
+| 3 relation-target | ✅ PASS | no values on relation ids |
+| 4 type-required | ✅ PASS | 1/1 created entities typed |
+
+**5. Totals**
+| createEntity | createRelation | updateEntity | deleteRelation | total ops |
+|---|---|---|---|---|
+| 1 | 3 | 0 | 0 | 4 |
+
+**6. ⚠ Needs your eyes** — anything you could NOT verify, guessed, or dropped
+- {e.g. "Article name derived from the URL slug — outlet blocks bots, real headline unverified"}
+- {e.g. "Website property skipped — no verified URL found; not guessing one"}
+- {e.g. "Publish datetime missing on entity #9 — source gave only 'May 2025'"}
+- (or: "none — every value came from a source I read")
+
+Nothing has been written. Type **publish** to publish, or **stop** to discard.
+````
+
+**Section 6 is the point of the whole report.** Every silent-failure class we've hit — a slug-derived headline, a fabricated URL, a dropped field, a waived duplicate, a cross-space write — is invisible in an op count and obvious in one line of plain English. **Never leave it empty to look clean**: if you inferred, guessed, truncated, skipped, or couldn't verify something, it goes there. An editor approving a publish is trusting this section.
+
+**Scale by size, not by skipping:** for a bulk publish, sections 1–3 show the **first 3 rows + the totals**, plus **every** row that is unusual (missing a field, a new relation target, a duplicate hit) — never a silent sample that hides the outliers. Say explicitly how many rows are not shown.
 
 Self-contained script template (portable — direct SDK, no repo helpers required):
 

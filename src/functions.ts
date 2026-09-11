@@ -28,7 +28,9 @@ let walletClientPromise: Promise<GeoWalletClient> | undefined;
 export function getWalletClient(): Promise<GeoWalletClient> {
   if (!walletClientPromise) {
     const privateKey = (process.env.GEO_PRIVATE_KEY ?? process.env.PK_SW) as `0x${string}` | undefined;
-    if (!privateKey) throw new Error("PK_SW not set in .env");
+    if (!privateKey) throw new Error(
+      `GEO_PRIVATE_KEY not found in the environment. Checked GEO_PRIVATE_KEY and the legacy PK_SW. ` +
+      `Make sure .env is in the folder you ran from (cwd: ${process.cwd()}) and that you passed --env-file=.env.`);
     walletClientPromise = createGeoWalletClient({
       signer: privateKeyToAccount(privateKey),
       network: NETWORK,
