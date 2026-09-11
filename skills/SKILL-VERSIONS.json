@@ -17,9 +17,9 @@
       "content_sha256": "8c19551b8d15a2c7694144ac2b4a8a381b4fe8bc8c330d253511ad6e18bbc727"
     },
     "actionable/geo-mirror": {
-      "version": "0.8.1",
+      "version": "0.9.0",
       "approved_commit": "9f1fab32630b8cf676e66666faad53f8c6360a18",
-      "content_sha256": "b1993dcf78cc72b28158f71eaffd4ff72c7580b548c96e6fb6fbafbb3c22ae97"
+      "content_sha256": "43979a18535bdedf32511aa4d216c282e7e111d77c302756892f7896f0b42266"
     },
     "actionable/geo-orchestrate": {
       "version": "0.2.0",
@@ -48,7 +48,7 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.9",
-      "approved_commit": "44d676d0a1bb05096cff581bc0fa52bfb00b1097",
+      "approved_commit": "f5b443f1940ec546fd1a5034e954ba1cc12da2c1",
       "content_sha256": "c2cbe822a9a4d877073a29554d4866747e2aaf5fd137508a399628538b76572c"
     },
     "non-actionable/image-banner-recompose": {
