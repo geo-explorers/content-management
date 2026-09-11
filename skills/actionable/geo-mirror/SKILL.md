@@ -2,7 +2,7 @@
 name: geo-mirror
 description: Mirror ANY Geo entity type from ANY space into Notion as linked databases, and (Part 2) sync reviewed Notion edits back to Geo. Type-generic — News stories, podcast Episodes, Events, People, etc. — one Notion database per entity type (primary + each related type), keyed by Geo ID so re-runs update in place. Read-only on Geo in Part 1. Triggers on "mirror to notion", "geo to notion", "export space to notion", "sync geo into notion", "mirror podcast into notion", "mirror episodes/events into notion".
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   author: geobrowser
 ---
 
@@ -24,11 +24,39 @@ Two directions, gated separately:
 
 Always name **space + scope + Notion page**. The agent resolves the canonical space ID, the entity `--type`, and any `--related` id (podcast/topic) via geo-query. A prompt with no scope is refused (never mirror a whole space).
 
-Four **universal scripts** editors reuse as-is — no per-run code:
+Five **universal scripts** editors reuse as-is — no per-run code:
 - `scripts/extract-space.mjs` — Geo → normalized JSON (read-only, no key).
 - `scripts/mirror-to-notion.mjs` — JSON → three linked Notion DBs (needs a Notion token).
 - `scripts/diff-notion-vs-geo.mjs` — Notion edits vs current Geo → change plan (read-only, Notion token).
 - `scripts/sync-to-geo.mjs` — change plan → Geo `updateEntity` ops via `publishOps` (needs the wallet key; DRY_RUN default).
+- `scripts/bulk-set-property.mjs` — fill ONE Notion property across many rows fast (see "Bulk-filling a Notion property" below).
+
+## Bulk-filling a Notion property — never do it row-by-row
+
+**If a task means "set property X on hundreds of Notion rows", do NOT loop `update-page` in the agent.** The Notion MCP's `update-page` takes **one page per call**, so each row costs a full agent round trip (~5–7s). Measured on a real task: **482 rows ≈ 50 minutes**. The same writes as paced REST calls run at Notion's allowed ~3 req/s → **~3 minutes**. (`create-pages` batches 100 at a time; `update-page` does not — that asymmetry is the whole trap.)
+
+Use the script instead. The agent's job is to **decide** the values and emit a JSON plan; the script does the writing:
+
+```bash
+# 1. agent writes a plan file:  [{"name":"<row>","parent":"<value>"}, …]
+#    ("parent":"ROOT" / null / "" means leave the row alone)
+# 2. dry-run — reports what would change, writes nothing:
+node --env-file=.env scripts/bulk-set-property.mjs \
+  --db <DATABASE_ID_OR_URL> --plan plan.json --property "New broader topics"
+# 3. publish:
+node --env-file=.env scripts/bulk-set-property.mjs \
+  --db <DATABASE_ID_OR_URL> --plan plan.json --property "New broader topics" --publish
+```
+
+Handles: relation / rich_text / select / url properties · matches rows by `--match` column (default `Name`) · resolves relation values to page IDs in `--target-db` (default: same DB, i.e. a self-referencing hierarchy) · paces at `--rate` req/s with retry on 429/5xx.
+
+**It only writes rows that actually change** — so a re-run after tweaking a few values costs seconds, not another full pass. Verified live: 3/3 written at 1.9 rows/s, immediate re-run reported `TO WRITE: 0`.
+
+It reports, rather than guesses, on: rows in the plan with no matching Notion row, relation values that don't exist as rows, and **duplicate `Name`s** (it uses the first and warns — dedupe those first or the hierarchy attaches to the wrong row).
+
+> **Synced relation pairs: write ONE side only.** If the two properties are a synced pair (e.g. `New broader topics` ⇄ `New subtopics`), setting the child's parent auto-fills the parent's children list. Writing both sides doubles the cost for zero gain.
+
+> **Sharing requirement.** These scripts authenticate as the **integration** (`NOTION_TOKEN`), not as you. A database you can see in the Notion UI (or via MCP, which uses your own login) will still 404 for the script until that page/database is explicitly connected to the integration (page → ⋯ → Connections). The 404 message names the integration, so it's easy to spot.
 
 ## What gets mirrored — one database per entity type
 
