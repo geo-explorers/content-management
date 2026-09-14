@@ -84,6 +84,7 @@ A tidy answer means you are set up. If the assistant improvises instead, name th
 | [geo-describe](skills/non-actionable/geo-describe) | Verified, original entity descriptions at scale (emits drafts) | read-only | no |
 | [image-banner-recompose](skills/non-actionable/image-banner-recompose) | Recompose any image into a Geo banner | utility | no |
 | [daily-report](skills/non-actionable/daily-report) | Internal editor routine (Notion daily update) | internal | no |
+| [geo-claim-grouping-notion](skills/non-actionable/geo-claim-grouping-notion) | Claim-grouping proposals written into a Notion Claims mirror as review columns (no Geo writes) | internal | no |
 | [geo-publish](skills/actionable/geo-publish) | Create/update entities and relations, safeguarded, dry-run gated | actionable | yes |
 | [geo-orchestrate](skills/actionable/geo-orchestrate) | Natural-language intent to query plan + publish plan + script | actionable | yes |
 | [geo-clean](skills/actionable/geo-clean) | Merge duplicates, delete orphans, move entities, fix types | actionable | yes |
