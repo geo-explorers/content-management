@@ -1,6 +1,6 @@
 ---
 name: geo-claim-grouping-notion
-description: Write claim-grouping results into a Notion Claims mirror as review columns instead of Geo proposals. Runs geo-claim-grouping's discovery and adjudication unmodified — scoped to the claims that are in the mirror — then fills five self-relation columns on the Claims database (Proposed related / duplicate / similar claims, Proposed supporting / opposing arguments) plus Proposed grouping notes with a hyperlinked line per counterpart. Read-only on Geo; it never publishes. Use when an editor wants similar, duplicate, related, supporting or opposing claims proposed in Notion for review, when a Claims mirror needs grouping columns, or as the step after geo-mirror. Triggers on "claim grouping to Notion", "write claim groups into Notion", "propose similar / duplicate / related claims in the Claims database", "grouping review columns", "notion claim grouping". Not for publishing groups to Geo (that is geo-claim-grouping) or for building the mirror (geo-mirror).
+description: Write claim-grouping results into a Notion Claims mirror as review columns instead of Geo proposals. Runs geo-claim-grouping's discovery and adjudication unmodified — scoped to the claims that are in the mirror — then fills five self-relation columns on the Claims database (Proposed exact duplicates, Proposed semantic duplicates, Proposed related claims, Proposed supporting / opposing arguments) plus Proposed grouping notes with a hyperlinked line per counterpart. Read-only on Geo; it never publishes. Use when an editor wants exact duplicates, semantic duplicates, related, supporting or opposing claims proposed in Notion for review, when a Claims mirror needs grouping columns, or as the step after geo-mirror. Triggers on "claim grouping to Notion", "write claim groups into Notion", "propose exact or semantic duplicates and related claims in the Claims database", "grouping review columns", "notion claim grouping". Not for publishing to Geo (geo-claim-grouping) or building the mirror (geo-mirror).
 metadata:
   version: "0.1.0"
   author: mantas
@@ -28,8 +28,8 @@ in `references/column-contract.md`; read it before changing the sink.
 | Column | Filled from | Becomes on Geo |
 |---|---|---|
 | `Proposed related claims` | step-1 decisions: every verdict except NOT-SIMILAR (both rows) | Related claims `504e5776…` |
-| `Proposed duplicate claims` | bracket DUPLICATE (both rows) + exact-name clusters as a star: canonical ↔ each copy | Duplicate claims `982866bf…` |
-| `Proposed similar claims` | bracket SIMILAR (both rows) | Similar claims `e81750db…` |
+| `Proposed exact duplicates` | bracket DUPLICATE (both rows) + exact-name clusters as a star: canonical ↔ each copy | Duplicate claims `982866bf…` |
+| `Proposed semantic duplicates` | bracket SIMILAR (both rows) | Similar claims `e81750db…` |
 | `Proposed supporting arguments` | bracket SUPPORTS — on the **supported** claim's row, listing the supporter | Supporting arguments `1dc6a843…` |
 | `Proposed opposing arguments` | bracket OPPOSES — mutual → both rows; one-sided → on the **rebutted** claim's row | Opposing arguments `4e6ec5d1…` |
 | `Proposed grouping notes` | one line per counterpart: `[Tag · confidence] <name → Geo URL> — reason`, plus `already on Geo` and `editor call` lines | — |
@@ -51,7 +51,7 @@ rich_text column works — geo-mirror's `Geo Claim — <space>` tables and the e
 - **Not for publishing to Geo.** Approved pairs go to Geo through geo-claim-grouping's own ops
   path (its Stage C/D) — hand off, never improvise a publish here.
 - **Not for building or refreshing the mirror** (geo-mirror or the editor's refresh scripts) and
-  **not for merging duplicates** (geo-clean owns merges; a `Proposed duplicate claims` entry is a
+  **not for merging duplicates** (geo-clean owns merges; a `Proposed exact duplicates` entry is a
   link proposal, not a merge).
 
 ## Prerequisites
@@ -91,7 +91,7 @@ Same contract as geo-mirror:
 4. **Never propose what is already on Geo in that direction.** `existing-edges.json` is required;
    `--allow-no-geo-check` exists only for offline fixtures and prints a loud warning.
 5. **Geo direction semantics, copied from the parent's ops template.** Supporter on the supported
-   row; rebutter on the rebutted row; mutual opposition on both; duplicates and similars on both;
+   row; rebutter on the rebutted row; mutual opposition on both; exact and semantic duplicates on both;
    exact-name clusters as a star to the canonical (lowest id), never a full mesh.
 6. **Decisions come from files, never transcribed.** The sink reads `decisions.json` /
    `brackets.json` / `clusters.json` at runtime — the parent's HARD RULE 5 applies unchanged.

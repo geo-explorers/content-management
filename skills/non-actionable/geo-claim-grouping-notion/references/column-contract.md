@@ -23,8 +23,8 @@ an existing one (a name clash with another type is a hard stop).
 | Column | Fed by | Becomes on Geo (property id) |
 |---|---|---|
 | `Proposed related claims` | step-1 `decisions.json` — every verdict except `NOT-SIMILAR` / `EXCLUDED-SPACE`, `approved` not false, not `dedupSuppressed` | Related claims `504e5776788844f6a77dba3ee811d8f0` |
-| `Proposed duplicate claims` | step-2 bracket `DUPLICATE` + exact-name clusters (star topology) | Duplicate claims `982866bf8ae94afe8cce8b805713e4af` |
-| `Proposed similar claims` | step-2 bracket `SIMILAR` | Similar claims `e81750db3f09440cab9dd01808a43ccb` |
+| `Proposed exact duplicates` | step-2 bracket `DUPLICATE` + exact-name clusters (star topology) | Duplicate claims `982866bf8ae94afe8cce8b805713e4af` |
+| `Proposed semantic duplicates` | step-2 bracket `SIMILAR` | Similar claims `e81750db3f09440cab9dd01808a43ccb` |
 | `Proposed supporting arguments` | step-2 bracket `SUPPORTS` | Supporting arguments `1dc6a843458848198e7a6e672268f811` |
 | `Proposed opposing arguments` | step-2 bracket `OPPOSES` | Opposing arguments `4e6ec5d14292498a84e5f607ca1a08ce` |
 | `Proposed grouping notes` | every line above, plus skips and editor calls | — (review only) |
@@ -39,8 +39,8 @@ one-to-one.
 
 | Bracket | Rows written | Tag in notes |
 |---|---|---|
-| `DUPLICATE`, `SIMILAR` | both rows list each other | `Duplicate`, `Similar` |
-| exact-name cluster | canonical row lists every copy; each copy lists the canonical (never a full mesh). Canonical = the `canonical` field if it is a roster member, else the lowest id | `Duplicate · exact name` |
+| `DUPLICATE`, `SIMILAR` | both rows list each other | `Exact duplicate`, `Semantic duplicate` |
+| exact-name cluster | canonical row lists every copy; each copy lists the canonical (never a full mesh). Canonical = the `canonical` field if it is a roster member, else the lowest id | `Exact duplicate · same name` |
 | `SUPPORTS` | the **supported** claim's row lists the supporter (`supported: "b"` → b's row lists a). One edge only, as in the ops template | `Supported by` |
 | `OPPOSES`, `mutual: true` | both rows list each other | `Opposes` |
 | `OPPOSES`, one-sided | the **rebutted** claim's row lists the rebutter (`rebutted: "a"` → a's row lists b) | `Opposed by` |
@@ -57,7 +57,7 @@ One line per counterpart, three rich_text objects so the name stays a hyperlink:
 [<Tag> · <confidence>] <counterpart name → its Geo URL> — <reason>\n
 ```
 
-Tag ordering in the column: exact-name duplicate, Duplicate, Similar, Supported by, Opposes,
+Tag ordering in the column: same-name exact duplicate, Exact duplicate, Semantic duplicate, Supported by, Opposes,
 Opposed by, Related, then editor calls, then already-on-Geo lines; ties by counterpart name.
 Notion caps a rich_text value at 100 objects, so at most 33 lines are written followed by one
 `… +N more (see the relation columns)` object. Each object is clipped to 1,900 characters.

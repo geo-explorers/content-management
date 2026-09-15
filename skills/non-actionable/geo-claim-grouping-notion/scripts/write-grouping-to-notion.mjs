@@ -6,8 +6,8 @@
 // candidates.scoped.json for exact-name clusters] and computes, per Claims row, the desired
 // members of five self-relation columns + one notes column:
 //   Proposed related claims        ← step-1 verdicts (every non-NOT-SIMILAR, approved)   → Geo "Related claims"
-//   Proposed duplicate claims      ← bracket DUPLICATE + exact-name clusters (star)      → Geo "Duplicate claims"
-//   Proposed similar claims        ← bracket SIMILAR                                     → Geo "Similar claims"
+//   Proposed exact duplicates      ← bracket DUPLICATE + exact-name clusters (star)      → Geo "Duplicate claims"
+//   Proposed semantic duplicates   ← bracket SIMILAR                                     → Geo "Similar claims"
 //   Proposed supporting arguments  ← bracket SUPPORTS, on the SUPPORTED row               → Geo "Supporting arguments"
 //   Proposed opposing arguments    ← bracket OPPOSES (mutual → both rows; else rebutted)  → Geo "Opposing arguments"
 //   Proposed grouping notes        ← one line per counterpart: [Tag · conf] <name→Geo URL> — reason
@@ -48,8 +48,8 @@ const USAGE = `usage: node --env-file=.env skills/non-actionable/geo-claim-group
 // ── contract ────────────────────────────────────────────────────────────────
 const COLS = {
   related: 'Proposed related claims',
-  duplicate: 'Proposed duplicate claims',
-  similar: 'Proposed similar claims',
+  duplicate: 'Proposed exact duplicates',
+  similar: 'Proposed semantic duplicates',
   supporting: 'Proposed supporting arguments',
   opposing: 'Proposed opposing arguments',
 };
@@ -58,9 +58,9 @@ const GEO_PROPS = {                                   // ids from geo-claim-grou
   related: '504e5776788844f6a77dba3ee811d8f0', duplicate: '982866bf8ae94afe8cce8b805713e4af', similar: 'e81750db3f09440cab9dd01808a43ccb',
   supporting: '1dc6a843458848198e7a6e672268f811', opposing: '4e6ec5d14292498a84e5f607ca1a08ce',
 };
-const LABEL = { related: 'Related', duplicate: 'Duplicate', similar: 'Similar', supporting: 'Supporting', opposing: 'Opposing' };
+const LABEL = { related: 'Related', duplicate: 'Exact duplicate', similar: 'Semantic duplicate', supporting: 'Supporting', opposing: 'Opposing' };
 const BRACKET_PROP = { DUPLICATE: 'duplicate', SIMILAR: 'similar', SUPPORTS: 'supporting', OPPOSES: 'opposing' };
-const TAG_RANK = { 'Duplicate · exact name': 0, Duplicate: 1, Similar: 2, 'Supported by': 3, Opposes: 4, 'Opposed by': 5, Related: 6 };
+const TAG_RANK = { 'Exact duplicate · same name': 0, 'Exact duplicate': 1, 'Semantic duplicate': 2, 'Supported by': 3, Opposes: 4, 'Opposed by': 5, Related: 6 };
 const MAX_TEXT = 1900;        // Notion allows 2000 chars per text object; keep the same headroom as geo-mirror's clip()
 const MAX_OBJECTS = 100;      // Notion caps a rich_text property value at 100 objects
 const OBJECTS_PER_LINE = 3;   // prefix · hyperlinked name · suffix
@@ -189,7 +189,7 @@ for (const c of clusters) {
   const canon = c.canonical && members.includes(norm(c.canonical)) ? norm(c.canonical) : members[0];   // lowest id — all members are same-space
   const reason = `identical normalized name: "${c.name || rosterRows[canon]?.name || ''}"`;
   clustersUsed++; pairsIn.duplicate += members.length - 1;
-  for (const copy of members) if (copy !== canon) { propose('duplicate', canon, copy, 'Duplicate · exact name', 'high', reason); propose('duplicate', copy, canon, 'Duplicate · exact name', 'high', reason); }
+  for (const copy of members) if (copy !== canon) { propose('duplicate', canon, copy, 'Exact duplicate · same name', 'high', reason); propose('duplicate', copy, canon, 'Exact duplicate · same name', 'high', reason); }
 }
 for (const id of desired.keys()) if (!inRoster(id)) needsEyes.pairIdsNotInRoster.push(id);
 if (existing) {
