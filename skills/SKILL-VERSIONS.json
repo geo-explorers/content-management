@@ -28,7 +28,7 @@
     },
     "actionable/geo-publish": {
       "version": "0.11.0",
-      "approved_commit": "a2f9a153565adb926cd4d280226f5a723b7e2601",
+      "approved_commit": "009001b0aafcc789e87ce31ccb189d3f104921db",
       "content_sha256": "2411ac99c1460e3bd8be53fcde77056cbf2a3c2febf57f883c439d3ac50476bb"
     },
     "non-actionable/daily-report": {
