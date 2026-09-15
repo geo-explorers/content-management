@@ -28,7 +28,7 @@
     },
     "actionable/geo-publish": {
       "version": "0.11.0",
-      "approved_commit": "009001b0aafcc789e87ce31ccb189d3f104921db",
+      "approved_commit": "a2f9a153565adb926cd4d280226f5a723b7e2601",
       "content_sha256": "2411ac99c1460e3bd8be53fcde77056cbf2a3c2febf57f883c439d3ac50476bb"
     },
     "non-actionable/daily-report": {
@@ -38,8 +38,8 @@
     },
     "non-actionable/geo-claim-grouping-notion": {
       "version": "0.1.0",
-      "approved_commit": "f79b9462bf854f83336cada47b92253bfb99094f",
-      "content_sha256": "9a1c80a1dfd42f82a8d1f55a594e85b5a1ade27176d6869b97748c5857ee71ab"
+      "approved_commit": "ad69e597ec20583c3dd629f5a109a47cd53074b9",
+      "content_sha256": "8d4622cdbc4bdea6f4497f71a1752e23359324f70b5a551abcc5603ddb4fbbe2"
     },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
