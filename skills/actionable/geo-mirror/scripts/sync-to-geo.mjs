@@ -15,8 +15,12 @@ const planFile = args[0];
 const DRY_RUN = !args.includes('--publish');
 if (!planFile || planFile.startsWith('--')) { console.error('usage: node --env-file=.env sync-to-geo.mjs <plan.json> [--publish]'); process.exit(1); }
 
-const { space, plan } = JSON.parse(readFileSync(planFile, 'utf8'));
+const { space, plan, previewOnly } = JSON.parse(readFileSync(planFile, 'utf8'));
 if (!plan?.length) { console.log('Plan is empty — nothing to sync.'); process.exit(0); }
+if (previewOnly && !DRY_RUN) {
+  console.error('This plan was built with --preview-all (unapproved proposals). Approve rows and build a real plan before publishing.');
+  process.exit(2);
+}
 
 // GRC-20 value type for a Geo dataTypeName (v1 handles text-ish fields + URLs)
 function valueType(dataType) {

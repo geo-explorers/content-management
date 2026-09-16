@@ -118,7 +118,7 @@ Raise an issue when you find **anything wrong or suspicious** — bad data in a 
 
 1. **Stay in the Agents flow teamspace.** Never create or edit pages outside it.
 2. **Geo is read-only** unless the human explicitly asked you to publish. Mirroring, auditing and reporting **never** write to Geo.
-3. **Any write to Geo goes through the `geo-publish` skill** — never a hand-written SDK script. It runs the mandatory gates (ontology/type, duplicate, schema, relation-target, type-required) and the two-phase `go` → `publish` confirmation. See `skills/actionable/geo-publish/SKILL.md`.
+3. **Any write to Geo goes through the `geo-publish` skill** — never a hand-written SDK script. It runs the mandatory gates (ontology/type, duplicate, schema, relation-target, type-required) and the two-phase `go` → `publish` confirmation. See `skills/actionable/geo-publish/SKILL.md`. **Exception:** changes made in a mirrored Notion table (any table with a `Geo ID` column) are published with **geo-mirror Part 2**: `plan-notion-changes.mjs`, then `sync-to-geo.mjs`. That path has its own approval (`Publish status`), live-value checks and dry run. See `skills/actionable/geo-mirror/SKILL.md` → Part 2.
 4. **Never invent a status, field or category.** Use the exact option values listed above. If none fits, raise a QA issue rather than adding one.
 5. **Never delete rows to "clean up".** Say what you would remove and ask. Mirrors add and update; they do not delete.
 6. **Never touch editorial columns.** `Proposed …` and `… new` columns are human/agent review work. Mirror runs update `Geo …` columns only.

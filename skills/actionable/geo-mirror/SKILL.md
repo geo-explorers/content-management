@@ -2,7 +2,7 @@
 name: geo-mirror
 description: Mirror ANY Geo entity type from ANY space into Notion as linked databases, and (Part 2) sync reviewed Notion edits back to Geo. Type-generic — News stories, podcast Episodes, Events, People, etc. — one Notion database per entity type (primary + each related type), keyed by Geo ID so re-runs update in place. Read-only on Geo in Part 1. Triggers on "mirror to notion", "geo to notion", "export space to notion", "sync geo into notion", "mirror podcast into notion", "mirror episodes/events into notion".
 metadata:
-  version: "0.9.0"
+  version: "0.11.0"
   author: geobrowser
 ---
 
@@ -24,12 +24,62 @@ Two directions, gated separately:
 
 Always name **space + scope + Notion page**. The agent resolves the canonical space ID, the entity `--type`, and any `--related` id (podcast/topic) via geo-query. A prompt with no scope is refused (never mirror a whole space).
 
-Five **universal scripts** editors reuse as-is — no per-run code:
+Several **universal scripts** editors reuse as-is — no per-run code:
 - `scripts/extract-space.mjs` — Geo → normalized JSON (read-only, no key).
 - `scripts/mirror-to-notion.mjs` — JSON → three linked Notion DBs (needs a Notion token).
-- `scripts/diff-notion-vs-geo.mjs` — Notion edits vs current Geo → change plan (read-only, Notion token).
+- `scripts/plan-notion-changes.mjs` — Part 2 planner for **any** table with a `Geo ID` column: approved proposals or edited mirrored columns → a publish plan (read-only on Geo). `notion-geo-tables.mjs` holds its shared helpers; `diff-notion-vs-geo.mjs` is kept as an alias.
 - `scripts/sync-to-geo.mjs` — change plan → Geo `updateEntity` ops via `publishOps` (needs the wallet key; DRY_RUN default).
 - `scripts/bulk-set-property.mjs` — fill ONE Notion property across many rows fast (see "Bulk-filling a Notion property" below).
+- `scripts/mirror-claims-topics.mjs` — Debate-claims tab + Topics tab → two linked DBs with agent "Proposed …" columns (see "Claims + Topics mirror" below).
+
+## Claims + Topics mirror (curated tabs → agent review tables)
+
+For claim/topic review work (not news stories). **Two scope modes:**
+
+- **Space mode (default — the preferred workflow):** omit the tab flags. Claims = every **Claim** in the space whose Tags relation (set in *this* space) is **Debate or Featured**; Topics = every **Topic** in the space + any topic those claims link to from elsewhere. No `Geo On Topics tab` column.
+  `node --env-file=.env scripts/mirror-claims-topics.mjs --space <SPACE_ID> --parent <NOTION_PAGE_ID> [--skip-hierarchy] [--publish]`
+  Re-runs are incremental: new rows are created, existing rows are PATCHed only when a Geo value differs (unchanged rows and all non-Geo columns are left alone), and rows that fell out of scope are reported, never deleted. `--skip-hierarchy` leaves `Geo Broader topics` untouched for DBs that store the two Geo directions separately (US Politics - new).
+- **Tab mode:** `--claims-tab` + `--topics-tab` (+ `--added-since` or `--all-tab`) — only what a space's curated tabs show. Used for the first AI / World affairs runs; superseded by space mode.
+
+Two inline DBs under the parent:
+
+- **`AI claims`** — claims on the claims tab tagged **Debate or Featured**. Columns: `Geo Name` (title), `Geo ID`, `Geo URL`, `Geo Tags` (**multi-select, no Tags DB**), `Geo Is factual`, `Geo Score`, `Geo Topics` ⇄ topics, plus `Geo Supporting arguments`, `Geo Opposing arguments`, `Geo Related people`, `Geo Related projects`, `Geo Sources` — text columns with one **linked name per line** (each opens the entity on Geo). These aren't relation columns because most targets (argument claims, articles, people) aren't rows in the mirror; Notion caps a text property at 100 segments, so >48 links end in "… +N more".
+- **`AI topics`** — every Topics-tab topic **plus every topic the mirrored claims link to**. Columns: `Geo Name`, `Geo ID`, `Geo URL`, `Geo Description`, `Geo Tags`, `Geo Score`, `Geo In space`, `Geo On Topics tab`, `Geo Claims`, `Geo Broader topics` ⇄ `Geo Subtopics`.
+- **Agent columns** (created empty, **never written by re-runs**): claims `Proposed rename`, `Proposed Topics` (⇄ topics `Proposed Claims`), `Proposed Tags`; topics `Proposed rename`, `Proposed description`, `Proposed Broader Topics` ⇄ `Proposed Subtopics`.
+
+Naming convention: every column mirrored from Geo = `Geo ` + the Geo property name. Agent columns = `Proposed …`.
+
+```bash
+# dry run (default) — extract + plan, no Notion writes
+node --env-file=.env scripts/mirror-claims-topics.mjs --space <SPACE_ID> \
+  --claims-tab <DEBATE_CLAIMS_PAGE_ID> --topics-tab <TOPICS_PAGE_ID> \
+  --parent <NOTION_PAGE_ID> --added-since YYYY-MM-DD --out extract.json
+# after the editor confirms
+… same args … --publish
+```
+
+- **Date scope = when the claim was added to the tab** (the Collection-item relation's `createdAt`), not entity `createdAt`/`updatedAt`. Claim `createdAt` is flattened on migrated entities, and `updatedAt` is bumped by background edits (scores etc.) — "updated in last 3 days" matched 210/242 claims. `--added-since` is required (or `--all-tab`).
+- The tab ids are the `tabId=` in the geobrowser URL. DB titles are `<space name> claims` / `<space name> topics` (override with `--db-prefix`).
+- **Tabs can mix block kinds.** *Collection* blocks list items by hand (Collection item relations). *Query* blocks (e.g. World affairs Topics tab) store a `Filter` JSON — `{"spaceId":{"in":[…]},"filter":{"<relationTypeId>":{"is"|"in":…}}}` — which the script evaluates with the relations scoped to the filter's spaces (unscoped also matches tags set in *other* spaces: WA "Main topics" 7 unscoped vs 4 on the tab). Query-block items have no "added" date, so `--added-since` doesn't drop them.
+- DB lookup is by title among the parent's children; re-runs add missing columns and update rows by `Geo ID`.
+- **Space-mode sweep gotchas:** filter topics with the native `typeId` arg, not a Types-relation filter (500s on large spaces); page size 200 returns INTERNAL_SERVER_ERROR on World affairs topics, so the sweep uses 100 and halves on error. Entities tagged Debate/Featured but with **no Claim type** are skipped (2 in AI) — flag them for a type fix in Geo.
+- **Names are per space.** `Geo Name` is the `Name` value set **in the mirrored space**, not `entity.name` (Geo's denormalized display name, often from another space — WA "Strait of Hormuz blockade" vs entity.name "…blockage"). When the space has no Name of its own, `Geo Name` falls back to `entity.name` and `Geo Name source` = `Other space (fallback)`; never publish a fallback as this space's value.
+- **Verifying relations:** Notion's page API returns at most **25 items per relation property** — a read-back count below the extract is expected for topics with >25 claims; compare against `min(n, 25)` per row.
+
+## Accepted sources mirror
+
+"Source" is **not a Geo type** — it's any entity (Publisher, Project, Person, Think tank…) that a space tags **"Source accepted by the space"** (`044f2dc2ce504281a69afda8b5285853`), with the tag asserted **in that space**. `scripts/mirror-sources.mjs` mirrors every such entity across AI, World affairs, Relationships and US Politics (override with `--spaces "Name=id,…"`) into ONE inline DB `Accepted sources`, one row per entity:
+
+- `Geo Name`, `Geo ID`, `Geo Types` (multi-select), `Geo Accepted in` (multi-select of spaces)
+- per space: `Geo URL — <space>`, `Geo Tags — <space>` (multi-select; acceptance and tags differ by space)
+- `Geo Description`, `Geo Website`, `Geo Wikipedia`, `Geo X`, `Geo LinkedIn`, `Geo Year founded`, `Geo RSS Feed URL`, `Geo Editorial board URL`; `Geo Credibility score` / `Geo Relevance score` (select); `Geo Owners` / `Geo Founders` (linked names)
+- agent columns: `Proposed rename`, `Proposed description`, `Proposed Types`, `Proposed Tags`
+
+```bash
+node --env-file=.env scripts/mirror-sources.mjs --parent <NOTION_PAGE_ID> --out sources.json   # dry run
+… --publish
+```
+Internal trust work from the old Sources page (Reasons to Trust / Not to Trust, review status, publisher profiles) is Notion-only editorial data — not mirrored; migrate it separately.
 
 ## Bulk-filling a Notion property — never do it row-by-row
 
@@ -124,28 +174,62 @@ node --env-file=.env scripts/mirror-to-notion.mjs mirror.json --parent <NOTION_P
 ```
 Creates/locates the three DBs, upserts every row by Geo ID, links Stories→Claims→Sources. Prints the three database IDs — hand those to the editor (they're the anchors Part 2 will diff against).
 
-## Part 2 — sync Notion edits back to Geo
+## Part 2 — publish Notion changes back to Geo
 
-After an editor edits the mirrored content in Notion, push the changes back. **Editable fields synced back (v1):** Story **Name / Summary / Description**, Claim **Name**, Source **Name / Web URL**. NOT synced yet: adding/removing claims or relations, Publisher, page-**body** edits, new entities — those are structural (a later increment). Editors edit the **columns**; the story body is read-only mirror.
+**Works on any mirrored table.** A Notion database with a **`Geo ID`** column holds content mirrored from Geo. Its name, and the page it's on, don't matter: it could be a `mirror-to-notion.mjs` table, a "- new" page, or a table an editor or agent made. `scripts/plan-notion-changes.mjs` finds every such table on a page and plans the changes, and `scripts/sync-to-geo.mjs` publishes them. (`diff-notion-vs-geo.mjs` still works; it now just runs the same planner.)
 
-**GEO gate (Part 2 writes to Geo).** Same contract as geo-publish: the wallet key (`GEO_PRIVATE_KEY` in `.env`, never printed) is required, and every write is **two-phase** — a read-only diff the editor reviews, then a dry-run, then an explicit publish. Writing to a **DAO space** (e.g. World affairs) creates a **proposal + vote**, not an instant edit — tell the editor. `publishOps` refuses to touch a space the wallet doesn't own / isn't an editor of.
+**How columns map to Geo properties (by name, no fixed list):**
+- **Title column** → Name.
+- **`Geo <X>`** → property X (the mirrored value).
+- **`Proposed rename`** → Name; **`Proposed <X>`** → X (a proposal).
+- **Unprefixed `<X>`** (only in tables with no `Geo …` columns, the older style) → X, but only if the table's entities already carry X or X is a system property (Name, Description). An editor's "Notes" column is never published just because Geo has a property with that name.
+- **Our own bookkeeping** (`Geo ID`, `Geo URL`, `Geo Name source`, `Publish status`, `Review status`) is never published.
+- **Property IDs** come from Geo: the property the table's entities already use under that name, otherwise a unique name match, with the SDK's system property as the tiebreaker. Ambiguous names are skipped, not guessed.
 
-**Step 1 — diff (read-only, Notion token only):**
+**Two table styles, decided per table:**
+
+| Style | How to spot it | What gets published | Approval |
+|---|---|---|---|
+| **Proposal table** | has `Proposed …` columns (e.g. the "- new" pages) | filled `Proposed …` values. The `Geo …` columns are the mirrored baseline and every refresh rewrites them, so they are never published directly | **Required:** row's `Publish status` = Approved. Run `--setup` once |
+| **Direct table** | no `Proposed …` columns (e.g. `mirror-to-notion.mjs` tables) | mirrored columns whose value differs from Geo. An empty cell never blanks a Geo value | Only if the table has a `Publish status` column |
+
+**GEO gate (Part 2 writes to Geo).** Same contract as geo-publish:
+- **Key:** `GEO_PRIVATE_KEY` in `.env`, never printed.
+- **Two phases:** a read-only plan the editor reviews, then a dry run, then an explicit publish.
+- **DAO spaces** (e.g. World affairs): the publish creates a **proposal and vote**, not an instant edit. Tell the editor.
+- **Access:** `publishOps` refuses a space the wallet doesn't own or edit.
+
 ```bash
-node --env-file=.env scripts/diff-notion-vs-geo.mjs --parent <NOTION_PAGE_ID> --space <SPACE_ID> --out plan.json
+# once per page with proposal tables: add "Publish status" (Approved / Hold / Sent to Geo / Live on Geo)
+node --env-file=.env scripts/plan-notion-changes.mjs --page <PAGE> --setup
+# optional: every filled value, approval ignored (read-only; sync-to-geo refuses to publish it)
+node --env-file=.env scripts/plan-notion-changes.mjs --page <PAGE> --preview-all --out preview.json
+# the plan — show the editor its table and "Skipped" list (use --limit N for small batches)
+node --env-file=.env scripts/plan-notion-changes.mjs --page <PAGE> --out plan.json
+node --env-file=.env scripts/sync-to-geo.mjs plan.json             # dry run
+node --env-file=.env scripts/sync-to-geo.mjs plan.json --publish   # only after the editor says "publish"
+node --env-file=.env scripts/plan-notion-changes.mjs --mark-sent plan.json
 ```
-It prints each changed entity and every field edit (`old → new`). **Show the editor this diff as the confirmation surface.** Empty diff = Notion matches Geo, nothing to do. It never blanks a Geo field from an empty Notion cell.
+Options: `--db <id>` (a database instead of, or besides, a page; repeatable), `--recursive` (also search sub-pages), `--space <id>` (default: the most common space in each table's `Geo URL`s), `--include-qa-flagged`.
 
-**Step 2 — dry-run the sync (builds ops, writes nothing):**
-```bash
-node --env-file=.env scripts/sync-to-geo.mjs plan.json
-```
+**Checked against the live value in the table's space, before anything is planned:**
+- **Not in the space** → skipped. The row belongs to another space.
+- **QA-flagged** (any `QA flag…` column set) → skipped unless `--include-qa-flagged`.
+- **Fallback name** (`Geo Name source` = "Other space (fallback)") → Name skipped; it isn't this space's name.
+- **Stale proposal** (live value ≠ the row's `Geo <X>`) → skipped. Geo changed after the mirror, so refresh first.
+- **Already live** (live value = the Notion value) → nothing to publish; the row is marked `Live on Geo`.
+- **Already sent** → not planned again while the vote is pending.
+- **Non-text property** (number, date, relation…) → reported. Use geo-publish.
 
-**Step 3 — publish (only after the editor confirms the diff):**
-```bash
-node --env-file=.env scripts/sync-to-geo.mjs plan.json --publish
-```
-Builds one `updateEntity` op per changed entity and publishes via `publishOps` (proposal+vote for DAO spaces, direct for the editor's personal space). Reports the tx/proposal per space.
+**Not handled; use geo-publish:** relation, tag and hierarchy proposals (e.g. `Proposed Topics`, `Proposed Broader Topics`), new entities and intentional clears. The planner counts them so they aren't forgotten.
+
+**Verified end to end on a scratch page, without publishing:**
+- **Tables found:** a custom-named proposal table; an old-style direct table in a sub-page (with `--recursive`); a table without `Geo ID` was ignored.
+- **Proposal table:** 1 planned, 1 marked Live on Geo; the stale, fallback and QA-flagged rows were skipped.
+- **Direct table:** 1 planned, and its editor `Notes` column was not published.
+- **Publish path:** the dry run built 2 ops; after `--mark-sent`, a new plan had 0 changes ("waiting for the vote").
+- **Old command:** `diff-notion-vs-geo.mjs` gave the same result.
+- **AI - new (read-only preview):** 422 renames; skipped 11 QA-flagged rows, 4 fallback names and 2 rows from another space.
 
 ## Gotchas
 
@@ -154,7 +238,7 @@ Builds one `updateEntity` op per changed entity and publishes via `publishOps` (
 - **`--since` with no date range** keeps only stories that HAVE a Publish datetime; a story missing that value is dropped from a ranged run (flag it to the editor if counts look low).
 - **Notion rate limits** (~3 req/s): large spaces (hundreds of stories) take a few minutes — the script paces itself; let it finish.
 - **Sibling "… datasets" spaces double every relation — dedupe on the target, never scope by space.** A story mirrored into its sibling dataset space (World affairs ↔ `World affairs datasets`) returns each relation edge **twice**, once per space, with *different* relation ids but the same target. Unfixed, the Notion page body repeats every section heading and claim. The fix in `extract-space.mjs` is `uniqTargets()` on the target id. Do **not** "fix" this by adding `spaceId: { is: … }` to the relation filters — that is **lossy**: some targets (e.g. a claim's `Sources`) live *only* in the dataset space, so scoping silently drops them. Verified: scoping dropped all sources on the Niger story's claims and one story-level source.
-- **Part 2 writes to the space you NAMED, never `spaceIds[0]`.** An entity that lives in both a space and its sibling `… datasets` space has values in both; `spaceIds[0]` is often the dataset copy. `diff-notion-vs-geo.mjs` compares against the `--space` copy (falling back to a sibling only when the value exists nowhere else) and targets the **named space** for write-back — so a sync edits the copy the editor is looking at, not the dataset copy (which would silently leave the space page stale). A regression here means edits vanish into the dataset space.
+- **Part 2 writes to the space you NAMED, never `spaceIds[0]`.** An entity that lives in both a space and its sibling `… datasets` space has values in both; `spaceIds[0]` is often the dataset copy. the Part 2 planner compares against that space's copy (falling back to a sibling only when the value exists nowhere else) and targets the **named space** for write-back — so a sync edits the copy the editor is looking at, not the dataset copy (which would silently leave the space page stale). A regression here means edits vanish into the dataset space.
 - **Verify a Part-2 sync via the per-space VALUE, not `entity.name`.** `entity.name` is denormalized and can resolve from a *sibling* space, so it won't change when you edit the named space's copy — checking it makes a successful sync look like it failed. Confirm with the per-space value: `entity(id){ values(filter:{ property:{is:"a126ca53…"} }){ nodes{ spaceId text } } }` and read the row whose `spaceId` is the space you wrote to.
 - **DAO spaces: a synced edit is a PROPOSAL, not live** until it's voted through — the per-space value won't change until then. Don't judge by the space page immediately after publishing.
 - **Whichever side you edited last wins the next diff.** Notion is the diff's source of truth. If you edit a field directly in Geo, re-run the Part-1 mirror *before* editing in Notion — otherwise the stale Notion cell will propose reverting your Geo edit.

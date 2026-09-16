@@ -28,7 +28,7 @@ Two rules that come from those files and are easy to get wrong:
 
 ## Hard rules
 
-1. **Never write to Geo by hand.** Any publish/create/update/delete MUST go through **geo-publish** — never write or run a raw SDK/publish script yourself. geo-publish runs the mandatory safeguards (semantic-duplicate check, schema check, type-required check, dry-run → explicit confirm). A raw script skips all of them.
+1. **Never write to Geo by hand.** Any publish/create/update/delete MUST go through **geo-publish** — never write or run a raw SDK/publish script yourself. geo-publish runs the mandatory safeguards (semantic-duplicate check, schema check, type-required check, dry-run → explicit confirm). A raw script skips all of them. **One exception:** changes an editor or agent made in a mirrored Notion table (any table with a `Geo ID` column) are published with **geo-mirror Part 2** (`plan-notion-changes.mjs` → `sync-to-geo.mjs`), which has its own approval, live-value checks and dry run. Creating entities and changing relations still go through geo-publish.
 
 2. **If the matching skill's `SKILL.md` is missing or stale, self-heal it first — then use the restored skill.** Fetch the genuine file from the official repo over HTTPS and verify it before proceeding (see [Keeping skills current](#keeping-skills-current--self-heal-from-the-official-repo)). Only if the fetch is impossible (no network / host not allowlisted) do you **STOP — do not improvise** — and tell the user, verbatim:
    > "The **geo-publish** skill isn't available and I couldn't fetch it. Run `bash skill-dev/sync-skills.sh` from this folder, restart the app (or start a new chat), then try again."
