@@ -4,6 +4,8 @@ Skills and tooling for working with the [Geo knowledge graph](https://geobrowser
 
 **If you are an AI agent reading this: this README is your setup runbook.** Follow it top to bottom. It tells you exactly what you can do yourself and what only your human can do.
 
+> **Any agent, any vendor.** Claude, Codex/GPT, Gemini, or anything else — the rules in this repo apply to all of them. `CLAUDE.md` happens to be the file Claude Code loads automatically; **its contents are not Claude-specific**. If you are a different agent, read [`CLAUDE.md`](CLAUDE.md) as well — it carries the skill-routing table and the hard rules (never write to Geo by hand, never improvise a delete, never touch the private key). Nothing in this repo assumes a particular model or harness.
+
 ---
 
 ## The security contract (agents: read first)
@@ -92,6 +94,23 @@ A tidy answer means you are set up. If the assistant improvises instead, name th
 Which skills are vetted right now lives on the [Agents Hub space](https://www.geobrowser.io/space/ddfd01098a71083119eb130a01a6d4c5): skills tagged **confirmed** there are the ones the skills team vouches for. Each Hub skill page carries its usage guide.
 
 Every write to Geo is a proposal that goes through space governance: skills dry-run first, show you the plan, and publish only on your explicit go.
+
+---
+
+## Agents
+
+A **skill** is a capability (any agent can load and follow one). An **agent** is a configured worker that uses skills. Definitions and the operating contract live in [`agents/`](agents):
+
+| File | Read it when |
+|---|---|
+| [`agents/AGENT-WORKFLOW.md`](agents/AGENT-WORKFLOW.md) | **Always, before doing any work in the Agents flow Notion teamspace.** The operating contract: the mandatory task lifecycle (log the task → `In progress` → do the work → write the result **and a link to where it lives** → `Done`), the Work tracker and QA issue tracker schemas with their exact option values, the hard rules, and the known traps. |
+| [`agents/README.md`](agents/README.md) | Before **creating or installing** an agent — file format, install paths, and the index of agents that already exist. Check whether one already covers the job before writing a new one. |
+
+Two rules that are easy to miss and cost real time:
+- **Log the task before you start**, with `Projects` set to **Agent flows** — every tracker view filters on it, so a task without it is created but invisible to the team.
+- **Problems go in the QA issue tracker** with severity, urgency and evidence — never buried in a task note.
+
+The agent definitions themselves (e.g. `agents/geo-research.md`) use Claude Code's `name` / `description` / `tools` frontmatter, but the **body is plain instructions** — any agent runtime can follow it. Port the frontmatter to your own format if you're not on Claude Code.
 
 ---
 
@@ -195,9 +214,13 @@ Set `DRY_RUN = true` at the top of the file to preview without publishing.
 ## Project Structure
 
 ```
+CLAUDE.md                   # Skill routing + hard rules — applies to ANY agent, not just Claude
 skills/
   actionable/               # Skills that write to Geo (need GEO_PRIVATE_KEY)
   non-actionable/           # Read-only skills (no key)
+agents/
+  AGENT-WORKFLOW.md         # Operating contract: task lifecycle, trackers, hard rules, traps
+  README.md                 # Agent format, install paths, index of existing agents
 01_entity_operations.ts     # Entry point — uncomment an operation and run
 02_find_duplicates.ts       # Find duplicate Type/Property entities across spaces
 03_merge_duplicates.ts      # Auto-merge detected duplicates
