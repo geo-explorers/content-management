@@ -82,7 +82,8 @@ OPTIONS:
   --pool <csv>      extra spaces (slugs crypto|wa|ai|health or 32hex ids) whose Claim corpora + signals
                     join the candidate pool — enables CROSS-SPACE matches
   --scope-file <p>  JSON { "ids": ["<32hex>", ...] } — only pairs touching these claims are exported
-                    (page/tab campaigns); each scope claim also gets a semantic search() recall pass
+                    (page/tab campaigns); each scope claim also gets a semantic search() recall
+                    pass, restricted to --space plus any --pool spaces
   --no-semantic     skip the per-scope-claim semantic search() pass (~6s per claim)
   --cap <n>         max pairs exported for adjudication, top-by-score (default ${DEFAULT_CAP})
   --out <dir>       campaign dir (default scripts/<YYYY-MM-DD>-similar-claims-<slug>)
@@ -491,6 +492,12 @@ async function runSpace(spaceId: string, args: Args, seedId?: string) {
   // normative/debate claims share few salient tokens, so the text gate under-recalls them.
   const forcedPairs = new Set<string>();
   let semanticExcludedDrops = 0;
+  let semanticOutOfScopeDrops = 0;
+  // Semantic hits are restricted to the spaces this run actually works: the target space
+  // plus anything explicitly passed to --pool. search() itself takes no space argument, so
+  // without this filter S3c reaches the whole graph and silently reintroduces the
+  // cross-space matching that --pool exists to opt into (S1/S2 already honour that bound).
+  const semanticSpaces = new Set<string>([spaceId, ...poolIds]);
   if (args.semantic && anchorSet) {
     log(`S3c: semantic recall for ${anchorSet.size} scope claim(s) (~6s each)...`);
     let hits = 0, added = 0, done = 0;
@@ -503,6 +510,8 @@ async function runSpace(spaceId: string, args: Args, seedId?: string) {
           if (h.id === aid) continue;
           // HARD RULE 12: excluded-space residents never enter the pool
           if ((h.spaceIds ?? []).some((s: string) => EXCLUDED_SPACE_IDS[s])) { semanticExcludedDrops++; continue; }
+          // in-scope residency: target space, or a space explicitly named in --pool
+          if (!(h.spaceIds ?? []).some((s: string) => semanticSpaces.has(s))) { semanticOutOfScopeDrops++; continue; }
           hits++;
           if (!byId.has(h.id)) {
             const nc: Claim = { id: h.id, name: h.name ?? "", description: h.description ?? "", createdAt: h.createdAt ?? "0", spaces: h.spaceIds ?? [] };
@@ -514,7 +523,7 @@ async function runSpace(spaceId: string, args: Args, seedId?: string) {
       done++;
       if (done % 20 === 0) log(`   semantic: ${done}/${anchorSet.size} scope claims searched`);
     }
-    log(`S3c: ${forcedPairs.size} forced pair(s) from ${hits} hits (${added} out-of-pool claims added; ${semanticExcludedDrops} hit(s) dropped on excluded-space residency)`);
+    log(`S3c: ${forcedPairs.size} forced pair(s) from ${hits} in-scope hits (${added} out-of-pool claims added; ${semanticExcludedDrops} dropped on excluded-space residency; ${semanticOutOfScopeDrops} dropped as out-of-scope, scope = ${semanticSpaces.size} space(s))`);
   }
 
   // S4 — pre-cluster + score
@@ -573,6 +582,7 @@ async function runSpace(spaceId: string, args: Args, seedId?: string) {
     },
     pairsConsidered: all.length, pairsExported: exported.length, semanticForcedPairs: forcedPairs.size,
     excludedSpaceDrops: { semantic: semanticExcludedDrops, export: exportExcludedDrops },
+    semanticScopeSpaces: [...semanticSpaces], semanticOutOfScopeDrops,
     exactNameClusters: exactNameClusters.length, exactNameDuplicateClaims: exactNameClusters.reduce((s, g) => s + g.size, 0),
     existingSimilarEdges: existing.length, danglingSimilarEdges: existing.filter((r) => r.danglingTarget).length,
     runtimeMs: Date.now() - t0,
