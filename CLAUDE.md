@@ -13,6 +13,19 @@
 
 If a request is ambiguous, ask which skill — don't guess and improvise.
 
+## Agents — read `agents/` before creating or running one
+
+If the task involves **creating, editing, or invoking an agent** — or doing any work inside the **Agents flow** Notion teamspace (Agents flow center, Geo content work, the "- new" mirrors, Project tracking) — read these first:
+
+| File | Read it when |
+|---|---|
+| **[`agents/AGENT-WORKFLOW.md`](agents/AGENT-WORKFLOW.md)** | **Always, before any work in the Agents flow teamspace.** The operating contract: where to work, the mandatory task lifecycle (log the task → `In progress` → do the work → write the result **+ a link to where it lives** → `Done`), the Work tracker and QA issue tracker schemas with their exact option values, the hard rules, and the known traps. |
+| **[`agents/README.md`](agents/README.md)** | Before **creating or installing** an agent — the file format, where agents get installed, and the index of existing agents. Check whether an agent already covers the job before writing a new one. |
+
+Two rules that come from those files and are easy to get wrong:
+- **Log the task BEFORE starting work**, in the Work tracker, with `Projects` set to **Agent flows** — every view filters on it, so a task without it is invisible to the team.
+- **Problems go in the QA issue tracker**, with severity + urgency + evidence — never buried in a task note.
+
 ## Hard rules
 
 1. **Never write to Geo by hand.** Any publish/create/update/delete MUST go through **geo-publish** — never write or run a raw SDK/publish script yourself. geo-publish runs the mandatory safeguards (semantic-duplicate check, schema check, type-required check, dry-run → explicit confirm). A raw script skips all of them.

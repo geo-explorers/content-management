@@ -1,5 +1,7 @@
 # Geo Agents
 
+> **Start here: [`AGENT-WORKFLOW.md`](AGENT-WORKFLOW.md)** — the operating contract for any agent working in the **Agents flow** Notion teamspace: where to work, the mandatory task lifecycle (log → In progress → do → result + link → Done), the Work tracker and QA issue tracker schemas, the hard rules, and the known traps. Read it before doing anything in that teamspace.
+
 Claude Code subagent definitions for Geo. Each agent is one markdown file with `name` / `description` / `tools` frontmatter — the format Claude Code loads from a `.claude/agents/` directory.
 
 This folder is the **canonical copy** (like `skills/` is for skills). To use an agent, install it where Claude Code looks:
