@@ -101,14 +101,15 @@ facts worth carrying in your head:
   single data source. The day one gets a second, these scripts change behaviour with no
   error. Do not "fix" this casually: moving forward means auditing `archived` → `in_trash`
   and the `after` → `position` change together. See `references/api-versions-and-limits.md`.
-- **`roster-from-notion.mjs` type-checks nothing.** It will read *any* database with a
-  title and a `Geo ID` column, accept whatever ids it finds, and print a clean success
-  summary. It once accepted 70 `Topic` ids as a claims roster. **Assert the entity type
-  against Geo yourself before grouping work** — it costs a second and is the only thing
-  that catches a wrong-type mirror.
-- **`scope-candidates.mjs --top` defaults to 80 and silently samples.** It prints
-  `CAPPED` and everything downstream still looks complete. Pass a `--top` above the pair
-  count, or knowingly accept a partial adjudication.
+- **`roster-from-notion.mjs` now asserts entity type** (fixed 2026-09-17). It re-resolves
+  every id against Geo and refuses the run unless all are `Claim`. Before that it accepted
+  70 `Topic` ids as a claims roster and printed a clean success summary. `--type` rosters a
+  different type; `--skip-type-check` bypasses it offline. If you see the check skipped in
+  `roster.json`, treat the roster as unverified.
+- **`scope-candidates.mjs --top` defaults to 80 and samples.** It prints `CAPPED` and
+  proceeds. The sink now surfaces a capped scope in **Needs your eyes** (fixed 2026-09-17),
+  so it can no longer read as a complete pass — but the default still samples. Set `--top`
+  above the kept-pair count when you want the whole batch adjudicated.
 
 ## 6. Reporting Notion work
 

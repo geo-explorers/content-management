@@ -28,24 +28,31 @@ diffs title, rich_text and url columns only — relations, dates, numbers and ch
 
 ## Known defects — carry these, they do not announce themselves
 
-### `roster-from-notion.mjs` type-checks nothing
+### `roster-from-notion.mjs` — type assertion (fixed 2026-09-17)
 
 It is deliberately schema-agnostic: any database with a title column and a `Geo ID`
-rich_text column is accepted. That means a **wrong-type mirror is silently accepted**. On
+rich_text column is accepted. That once made a **wrong-type mirror silently valid** — on
 2026-09-16 it read a Topics database, accepted all 70 `Topic` ids as a claims roster, and
-printed a clean success summary with a valid-looking `roster.json`. Only an independent
-type check against Geo caught it.
+printed a clean success summary with a valid-looking `roster.json`.
 
-**Always assert the entity type before grouping work.** Re-resolve every roster id in Geo
-and confirm it is a `Claim`. Expect `N/N`; anything less means stop. This costs about a
-second and is the only check that exists.
+It now re-resolves every kept id against Geo (read-only GraphQL, no wallet, no env) and
+**refuses the run with exit 2** unless all of them carry the expected type. The result is
+recorded in `roster.json` under `typeCheck`, and the console prints `N/N are type … ✓`.
 
-### `scope-candidates.mjs --top` silently samples
+- `--type <32hex>` rosters a different entity type (default `Claim`).
+- `--skip-type-check` bypasses it for offline use — `typeCheck.checked` is then `false`,
+  and a roster in that state has not been verified.
+
+### `scope-candidates.mjs --top` samples at 80
 
 Default is 80. With more kept pairs than that it prints `CAPPED — n kept pairs wait for
-the next batch` and everything downstream still looks complete. A 137-pair campaign
-adjudicated at the default yields 80 adjudications and a report that reads as finished.
-Pass `--top` above the pair count, or accept a partial pass knowingly and say so.
+the next batch` and proceeds, so the adjudication is a sample rather than a pass.
+
+`candidates.scoped.json` has always recorded this (`capped`, `scoped.keptBeforeCap`), but
+nothing surfaced it. **The sink now reads it and reports a capped scope in its "Needs your
+eyes" section** (fixed 2026-09-17), so a partial adjudication can no longer print
+`nothing` there. The default still samples — set `--top` above the kept-pair count when
+the whole batch should be adjudicated.
 
 ### `mirror-to-notion.mjs` creates one database per linked type
 
@@ -55,13 +62,20 @@ six. Pass `--link ""` for a single table, or name only the relation you want. De
 before running: extra tables are children of the destination page and must be cleaned up
 by hand.
 
-### `extract-space.mjs` cannot scope to an id list
+### `extract-space.mjs --ids-file` (added 2026-09-17)
 
-Every scope it offers (`--since`, `--related`, `--limit`) is applied **after** it has
-swept the entire type, and `--limit N` returns an arbitrary N when the entities carry no
-date property. On a 21,613-claim space that sweep is the memory-blow-up shape geo-mirror
-itself warns about. There is no `--ids-file` or tab scope. Until one exists, scope large
-spaces by resolving a curated tab to an id list and extracting those ids directly.
+`--since`, `--related` and `--limit` are all applied **after** the entire type has been
+paged, so on a large space every one of them still pays for the full read — and `--limit N`
+returns an arbitrary N when the entities carry no date property.
+
+`--ids-file <path>` skips the sweep entirely and fetches exactly the entities named, in
+batches. It accepts JSON (`{"ids":[…]}` or `[…]`) or a whitespace/comma separated list, and
+satisfies the no-unscoped-mirror gate on its own. Ids that do not resolve, are not resident
+in `--space`, or are not `--type` are reported and skipped rather than mirrored, and the
+extract records its own scope under `scope.ids`.
+
+This is how to mirror a curated tab out of a large space: resolve the tab to an id list,
+then extract those ids.
 
 ### `write-grouping-to-notion.mjs` owns its six columns exclusively
 
