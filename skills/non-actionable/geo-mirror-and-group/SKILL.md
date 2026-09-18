@@ -1,6 +1,6 @@
 ---
 name: geo-mirror-and-group
-description: Run the whole Geo → Notion → claim-grouping pipeline from one request instead of eight. Mirrors a scoped set of claims into a Notion page, builds the roster, runs discovery, scopes it, waits for adjudication, then produces the sink dry-run. Decides semantic recall and batch size from the corpus rather than from defaults. Use when someone asks to "mirror and group", "mirror <space> claims and run claim grouping", "do the full pipeline", "set up a grouping review in Notion", or when a mirror already exists and only the grouping half is wanted. Read-only on Geo — it never writes to the graph and never publishes the grouping columns. Not a replacement for geo-mirror, geo-claim-grouping or geo-claim-grouping-notion; it drives them and keeps their gates.
+description: Run the whole Geo → Notion → claim-grouping pipeline from one request instead of eight. Mirrors a scoped set of claims into a Notion page, builds the roster, runs discovery, scopes it, waits for adjudication, then produces the sink dry-run. Decides semantic recall and batch size from the corpus rather than from defaults. Use when someone asks to "mirror and group", "mirror the claims in this space and group them", "do the full pipeline", "set up a grouping review in Notion", or when a mirror already exists and only the grouping half is wanted. Read-only on Geo — it never writes to the graph and never publishes the grouping columns. Not a replacement for geo-mirror, geo-claim-grouping or geo-claim-grouping-notion; it drives them and keeps their gates.
 metadata:
   version: "1.0.0"
   author: mantas
@@ -64,7 +64,7 @@ the adjudication is never a sample that reads as a pass.
 ## Running it
 
 ```bash
-cd /c/Users/Cyber/content-management
+cd <your content-management clone>
 R="node --env-file=.env skills/non-actionable/geo-mirror-and-group/scripts/run-pipeline.mjs"
 C=<a campaign dir in your scratchpad>
 
@@ -125,7 +125,7 @@ Then hand the editor the exact `--publish` command and stop.
 ## What this does not do
 
 - Adjudicate. Discovery proposes; judgement is the model's, against
-  `skills/actionable/geo-claim-grouping/references/adjudication-rubric.md`.
+  [`../../actionable/geo-claim-grouping/references/adjudication-rubric.md`](../../actionable/geo-claim-grouping/references/adjudication-rubric.md).
 - Merge duplicates. A `Proposed exact duplicates` entry is a link. Merging is `geo-clean`,
   behind its orphan check and human confirmation.
 - Publish anything, to Geo or to Notion.

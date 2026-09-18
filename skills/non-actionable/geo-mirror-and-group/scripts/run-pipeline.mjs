@@ -174,7 +174,7 @@ function prepare() {
   save();
   console.log(`\n✔ prepare complete — ${kept} pair(s) await adjudication.`);
   console.log(`  Read  : ${join(campaign, 'candidates.scoped.json')}`);
-  console.log('  Judge : EVERY pair, under skills/actionable/geo-claim-grouping/references/adjudication-rubric.md');
+  console.log('  Judge : EVERY pair, under geo-claim-grouping references/adjudication-rubric.md');
   console.log(`  Write : decisions.json and brackets.json into ${campaign}`);
   console.log('  Then  : re-run this script with --stage finish');
 }

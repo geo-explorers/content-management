@@ -1,6 +1,6 @@
 # The toolkit's Notion scripts — inventory and known defects
 
-All six live in `C:\Users\Cyber\content-management`, authenticate as the **integration**
+All six live in this repo under `skills/`, authenticate as the **integration**
 (`NOTION_TOKEN` in `.env`), and pin `Notion-Version: 2022-06-28`. Run them from the repo
 root — imports resolve relative to it. Load env only through Node's flag
 (`node --env-file=.env …`); never pass a token on the command line.
