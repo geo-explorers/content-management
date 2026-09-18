@@ -36,6 +36,11 @@
       "approved_commit": "5c1c5c22c2946ae1dbdd698e496f9951f2a0100f",
       "content_sha256": "0f13aecd820756cca87d1eebd5677357fb5a00a6ce9cdf6caa0baa6fd83d47a4"
     },
+    "non-actionable/geo-claim-grouping-notion": {
+      "version": "0.1.0",
+      "approved_commit": "ad69e597ec20583c3dd629f5a109a47cd53074b9",
+      "content_sha256": "8d4622cdbc4bdea6f4497f71a1752e23359324f70b5a551abcc5603ddb4fbbe2"
+    },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
       "approved_commit": "fe0a1419f6ae4273988d69558014930d6a5628e5",

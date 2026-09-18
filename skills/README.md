@@ -17,6 +17,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **ontology-advisor** | Advise on modelling — should this be a type/property/relation? duplicate/drift checks, missing descriptions, export types to CSV. Grounded in ONTOLOGY.md + the live graph. Suggests text, never writes. | Repo (Python + GraphQL) |
 | **geo-press-review** | Compare external press (Google News/web) vs what's on Geo → ranked "publish next" list (already on Geo / needs update / not on Geo yet). Recommends only. | Repo (coverage script + web search) |
 | **qa-report-workflow** | Triage a **UI/UX bug** an editor hit while using the app (real? / not an issue / known / fixed), rewrite it, and emit copy-paste Linear + Notion + Slack reports. Doesn't scan or touch Geo. | Anywhere (text in/out) |
+| **geo-claim-grouping-notion** | Run geo-claim-grouping's discovery + adjudication for the claims in a Notion Claims mirror and write the results into review columns on that database (`Proposed exact duplicates`, `Proposed semantic duplicates`, `Proposed related claims`, `Proposed supporting / opposing arguments`, `Proposed grouping notes`) instead of Geo proposals. Diff-first, dry-run gated, read-back verified. Never writes Geo. | Repo (Node + Notion token; discovery needs `node_modules`) |
 
 ### actionable/ — changes Geo, editors only
 

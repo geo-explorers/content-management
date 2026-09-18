@@ -10,6 +10,7 @@
 | **look up / search / inspect / query** the graph; "what type is…"; "show relations"; review or fact-check a submission | **geo-query** |
 | find/merge **duplicates**, delete orphans, fix data types, move/copy entities, clean the graph | **geo-clean** |
 | compare external press vs Geo — "what should we publish next" | **geo-press-review** |
+| write **claim-grouping results** (exact / semantic duplicates, related, supporting / opposing) into a **Notion Claims mirror** as review columns instead of Geo proposals; "claim grouping to Notion" | **geo-claim-grouping-notion** |
 
 If a request is ambiguous, ask which skill — don't guess and improvise.
 
