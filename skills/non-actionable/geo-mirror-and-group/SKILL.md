@@ -50,6 +50,13 @@ more of the recall than semantic did.
 
 `--semantic auto` (the default) follows the probe. `on` / `off` override it.
 
+**Override it ON for a small roster in a large space.** The probe measures the *space*;
+recall depends on the *roster*. Structural admission needs both sides of a pair inside the
+mirror, so a 30-claim roster drawn from a 22,000-claim space pairs almost entirely outward
+— measured: **0** both-in-roster pairs with recall off, **26** with it on, same 30 claims.
+As a rule of thumb, force it on when the roster is under a few hundred rows or under a few
+percent of the space, however news-driven the space looks.
+
 **Batch size.** `scope-candidates.mjs --top` defaults to 80 and samples silently past
 that. `prepare` counts the both-in-roster pairs first and passes `--top` sized to them, so
 the adjudication is never a sample that reads as a pass.

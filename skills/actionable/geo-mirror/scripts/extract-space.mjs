@@ -170,7 +170,11 @@ if (limit) primary = primary.slice(0, limit);
 // relation (Topics, Related people/entities, Hosts, Guests, Podcast…) is still
 // mirrored in the page BODY (name + link), just not as a separate database.
 // Override with --link "Notable claims,Sources,Hosts,Guests" to add more.
-const LINK = (opt('--link') || 'Notable claims,Sources').split(',').map((s) => s.trim()).filter(Boolean);
+// `--link ""` must mean "no linked tables", not "use the default". A falsy check here
+// silently turned an explicit empty value back into the default and produced extra
+// databases the caller had asked not to have.
+const linkArg = opt('--link');
+const LINK = (linkArg === undefined ? 'Notable claims,Sources' : linkArg).split(',').map((s) => s.trim()).filter(Boolean);
 const LINKSET = new Set(LINK);
 const relatedIds = [...new Set(primary.flatMap((e) => Object.entries(e.relations)
   .filter(([t]) => LINKSET.has(t)).flatMap(([, list]) => list.map((x) => x.geoId))))];
