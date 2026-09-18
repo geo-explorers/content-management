@@ -67,9 +67,9 @@
       "content_sha256": "ea9e37588885018e2246020f7b885c792ff1b8bb73730fdda8edd01deb1ce6a5"
     },
     "non-actionable/notion-operations": {
-      "version": "1.0.0",
-      "approved_commit": "add3a0cb7c494a3b2c35f7f204c37d8aa25de832",
-      "content_sha256": "bb5df99a01b84607feb23995ea83f1c65c4b56f82f7e32b24c01e1e39349c6c0"
+      "version": "1.0.1",
+      "approved_commit": "6e9f5f955c31f4555b083174636c2cfea1ba6948",
+      "content_sha256": "8482332082fd810de09dc5b7ab7328286877b223cf6f1dfe4548382ef0d80aec"
     },
     "non-actionable/ontology-advisor": {
       "version": "0.1.0",
