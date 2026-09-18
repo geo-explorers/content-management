@@ -105,6 +105,7 @@ A **skill** is a capability (any agent can load and follow one). An **agent** is
 | File | Read it when |
 |---|---|
 | [`agents/AGENT-WORKFLOW.md`](agents/AGENT-WORKFLOW.md) | **Always, before doing any work in the Agents flow Notion teamspace.** The operating contract: the mandatory task lifecycle (log the task → `In progress` → do the work → write the result **and a link to where it lives** → `Done`), the Work tracker and QA issue tracker schemas with their exact option values, the hard rules, and the known traps. |
+| [`agents/MD-FILES.md`](agents/MD-FILES.md) | To find the right document: every Markdown file in this repo, its contents, who reads it and when it loads. |
 | [`agents/README.md`](agents/README.md) | Before **creating or installing** an agent — file format, install paths, and the index of agents that already exist. Check whether one already covers the job before writing a new one. |
 
 Two rules that are easy to miss and cost real time:
@@ -220,6 +221,7 @@ skills/
   actionable/               # Skills that write to Geo (need GEO_PRIVATE_KEY)
   non-actionable/           # Read-only skills (no key)
 agents/
+  MD-FILES.md               # Manifest of every .md file in this repo
   AGENT-WORKFLOW.md         # Operating contract: task lifecycle, trackers, hard rules, traps
   README.md                 # Agent format, install paths, index of existing agents
 01_entity_operations.ts     # Entry point — uncomment an operation and run
