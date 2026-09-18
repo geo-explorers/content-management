@@ -1,17 +1,22 @@
 name: Verify skill integrity
 
 # Fails the build if any shipped skill changed without being re-approved
-# (bump version + changelog + `python3 skill-dev/skill_versions.py generate`).
+# (bump version + changelog + `python3 skill-dev/skill_versions.py generate`),
+# or if agents/MD-FILES.md no longer matches the repo's Markdown files.
 on:
   pull_request:
     paths:
       - "skills/**"
       - "skill-dev/skill_versions.py"
+      - "agents/**"
+      - "skill-dev/check_md_manifest.py"
   push:
     branches: [main]
     paths:
       - "skills/**"
       - "skill-dev/skill_versions.py"
+      - "agents/**"
+      - "skill-dev/check_md_manifest.py"
 
 jobs:
   verify:
@@ -25,3 +30,5 @@ jobs:
           python-version: "3.x"
       - name: Verify skills match their approved versions
         run: python3 skill-dev/skill_versions.py verify
+      - name: Verify agents/MD-FILES.md matches the repo
+        run: python3 skill-dev/check_md_manifest.py

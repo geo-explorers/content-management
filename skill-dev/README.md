@@ -32,6 +32,17 @@ python3 skill-dev/skill-quality-check/scripts/check_skill.py skills/non-actionab
 
 The full rule set is in `skill-quality-check/references/skill-quality-standard.md` — treat it as the standard for skill development in this repo.
 
+## `check_md_manifest.py` — Markdown manifest verification
+
+Checks `agents/MD-FILES.md` against the repo: every tracked `.md` is listed, no listed file has been deleted, and each `SKILL.md` version matches the one recorded. Runs in CI on changes under `skills/` or `agents/`.
+
+```bash
+python3 skill-dev/check_md_manifest.py          # exit 0 = matches, 1 = drift
+python3 skill-dev/check_md_manifest.py --list   # counts
+```
+
+A stale manifest is worse than none, because people check it instead of the files. Add a new `.md` to the right section in the same commit that creates it.
+
 ## `skill_versions.py` — approved-version verification
 
 Proves an editor is running the exact skill version the team approved (not tampered, not stale) — important because `actionable/` skills can publish/delete on Geo.

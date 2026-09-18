@@ -31,7 +31,7 @@ Every Markdown file in this repository: what it contains, who reads it, and when
 
 ## 3. Skills — `skills/`
 
-Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `description`). The description decides when a skill is triggered. Versions below were current on **18 September 2026**; `skills/versions.md` holds the changelog and `skills/SKILL-VERSIONS.json` the approved hashes.
+Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `description`). The description decides when a skill is triggered. Versions below were current on **18 September 2026** (re-checked after the 18 Sep merge); `skills/versions.md` holds the changelog and `skills/SKILL-VERSIONS.json` the approved hashes.
 
 | Skill | Version | Contents | Key needed |
 |---|---|---|---|
@@ -41,10 +41,13 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `skills/non-actionable/geo-describe/SKILL.md` | 0.2.0 | Verified, original entity descriptions at scale, with copyright and accuracy gates | no |
 | `skills/non-actionable/image-banner-recompose/SKILL.md` | 0.2.0 | Recompose any image into a 2364×640 Geo banner | no |
 | `skills/non-actionable/daily-report/SKILL.md` | 0.1.0 | The editor's end-of-day Notion update routine | no |
+| `skills/non-actionable/notion-operations/SKILL.md` | 1.0.1 | How to read and write Notion correctly from this toolkit: which identity to use, API limits and the traps | no |
+| `skills/non-actionable/geo-claim-grouping-notion/SKILL.md` | 0.2.0 | Write claim-grouping results into a Notion Claims mirror as review columns instead of publishing to Geo | no |
+| `skills/non-actionable/geo-mirror-and-group/SKILL.md` | 1.0.0 | Run the whole Geo → Notion → claim-grouping pipeline from one request | no |
 | `skills/actionable/geo-publish/SKILL.md` | 0.11.0 | Create, update and delete entities and relations. Mandatory gates (ontology/type, duplicate, schema, relation-target, type-required) and the two-phase dry-run report → publish | **yes** |
 | `skills/actionable/geo-clean/SKILL.md` | 0.5.0 | Merge duplicates, delete orphans, move entities, fix data types, with anchored-entity protection | **yes** |
-| `skills/actionable/geo-mirror/SKILL.md` | 0.11.0 | Geo ⇄ Notion. Part 1 mirrors any entity type into Notion; Part 2 publishes changes back from any table with a `Geo ID` column | **yes** (Part 2) |
-| `skills/actionable/geo-claim-grouping/SKILL.md` | 0.6.0 | Group claims: adjudicate Similar/Duplicate relations and publish the decisions | **yes** |
+| `skills/actionable/geo-mirror/SKILL.md` | 0.12.0 | Geo ⇄ Notion. Part 1 mirrors any entity type into Notion; Part 2 publishes changes back from any table with a `Geo ID` column | **yes** (Part 2) |
+| `skills/actionable/geo-claim-grouping/SKILL.md` | 0.7.0 | Group claims: adjudicate Similar/Duplicate relations and publish the decisions | **yes** |
 | `skills/actionable/geo-orchestrate/SKILL.md` | 0.2.0 | Turn natural-language intent into a query plan, publish plan and script | **yes** |
 | `skills/actionable/geo-discovery/SKILL.md` | 0.1.1 | Gap-discovery passes over a space, published as Gap finding entities | **yes** |
 
@@ -68,6 +71,10 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `skills/non-actionable/image-banner-recompose/references/strategies.md` | Recomposition strategies |
 | `skills/non-actionable/image-banner-recompose/references/qa_check.md` | QA pipeline for the output |
 | `skills/non-actionable/image-banner-recompose/references/api_endpoints.md` | API endpoints used |
+| `skills/non-actionable/notion-operations/references/api-versions-and-limits.md` | Notion API versions, rate limits and page-size caps |
+| `skills/non-actionable/notion-operations/references/notion-traps.md` | Notion behaviours that bite: capped relation reads, case-insensitive options, linked views |
+| `skills/non-actionable/notion-operations/references/toolkit-scripts.md` | The repo's Notion scripts and when to use each |
+| `skills/non-actionable/geo-claim-grouping-notion/references/column-contract.md` | Which Notion columns the grouping results are written into |
 | `skills/non-actionable/ontology-advisor/README.md` | How to run the ontology-advisor scripts |
 
 ## 4. Ontology and standards — the judgment layer
@@ -106,8 +113,9 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 
 ## Keeping this current
 
+- **CI enforces this file.** `python3 skill-dev/check_md_manifest.py` fails if a tracked `.md` is missing here, if a listed file no longer exists, or if a `SKILL.md` version differs from the one recorded above. It runs on every PR touching `skills/` or `agents/`, so run it before you push.
 - **Adding an MD file:** add a row here in the same pass, and a row in the Notion catalog only if agents outside this repo need to find it.
 - **Changing a skill:** bump `version` in its `SKILL.md`, add a line to `skills/versions.md`, regenerate `skills/SKILL-VERSIONS.json`, and update the version in section 3.
 - **Before trusting an install:** compare the installed `SKILL.md` version with this file. A mismatch means the install is stale — run `bash skill-dev/sync-skills.sh` and restart the host. Two agents running different versions of the same skill will overwrite each other's work.
 
-*Counts on 18 September 2026: **56** tracked `.md` files — 2 entry points, 5 agent contracts, 12 skills, 17 skill reference files, 3 ontology/standard documents, 4 maintainer documents, 3 project documents, 9 run artifacts and 1 scratch note. Every tracked file appears in exactly one section above.*
+*Counts on 18 September 2026: **63** tracked `.md` files — 2 entry points, 5 agent contracts, 15 skills, 21 skill reference files, 3 ontology/standard documents, 4 maintainer documents, 3 project documents, 9 run artifacts and 1 scratch note. Every tracked file appears in exactly one section above.*
