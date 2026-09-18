@@ -2,7 +2,7 @@
 name: geo-mirror
 description: Mirror ANY Geo entity type from ANY space into Notion as linked databases, and (Part 2) sync reviewed Notion edits back to Geo. Type-generic — News stories, podcast Episodes, Events, People, etc. — one Notion database per entity type (primary + each related type), keyed by Geo ID so re-runs update in place. Read-only on Geo in Part 1. Triggers on "mirror to notion", "geo to notion", "export space to notion", "sync geo into notion", "mirror podcast into notion", "mirror episodes/events into notion".
 metadata:
-  version: "0.11.0"
+  version: "0.12.0"
   author: geobrowser
 ---
 
@@ -142,7 +142,7 @@ Do this once; re-runs keep your views and only update the row data.
    curl -s -o /dev/null -w '%{http_code}' https://api.notion.com/v1/users/me -H "Authorization: Bearer $NOTION_TOKEN" -H 'Notion-Version: 2022-06-28'   # 200 = connected
    ```
    Also confirm the integration is **shared into the parent page** (Notion → page → ⋯ → Connections → add the integration) — without it, database creation 404s. State "Notion connected ✓" to the editor.
-3. **Scope confirmed — REQUIRED, never mirror a whole space.** Get the editor's explicit **space ID** (use the hardcoded canonical IDs — see geo-query, never fuzzy-resolve a space name) AND the **Notion parent page ID**, plus **at least one narrowing dimension**: a **date range** (`--since` / `--until`, on Publish datetime), a **`--topic <id>`**, or a **`--limit N`**. **If the editor gives only a space, STOP and ask them to narrow it** — which tab/feed (News, Events, Governance…), which topic, or which date range. Geo spaces hold thousands of entities and grow daily; an unbounded mirror would flood Notion. The extractor enforces this too — it **refuses to run with no scope** (exit 2) unless an explicit `--all` is passed (rarely what anyone wants; confirm loudly before using it). Echo the resolved scope back before running.
+3. **Scope confirmed — REQUIRED, never mirror a whole space.** Get the editor's explicit **space ID** (use the hardcoded canonical IDs — see geo-query, never fuzzy-resolve a space name) AND the **Notion parent page ID**, plus **at least one narrowing dimension**: a **date range** (`--since` / `--until`, on Publish datetime), a **`--topic <id>`**, a **`--limit N`**, or an explicit **`--ids-file <path>`**. **If the editor gives only a space, STOP and ask them to narrow it** — which tab/feed (News, Events, Governance…), which topic, or which date range. Geo spaces hold thousands of entities and grow daily; an unbounded mirror would flood Notion. The extractor enforces this too — it **refuses to run with no scope** (exit 2) unless an explicit `--all` is passed (rarely what anyone wants; confirm loudly before using it). Echo the resolved scope back before running.
 
 > **Tabs / types:** a space tab (News, Events, People, Podcasts…) is just a filter on an **entity type**. Pass that type via `--type <id>` (default = News story). The mirror is type-generic, so Episodes, Events, People, etc. all work — resolve the type id (and any `--related` filter, e.g. a specific podcast or topic) from the tab with geo-query, then mirror. A tab that mixes types → mirror each type in a separate run.
 
@@ -158,6 +158,8 @@ Part 1 never writes to Geo — no publish gates needed. It only READS via the sc
 node scripts/extract-space.mjs 4582fbbee28a16589154f7e36f1ee3c5 --since 2026-08-19 --out mirror.json
 # podcast Episodes of a specific show (--type + --related the podcast entity):
 node scripts/extract-space.mjs b5a31f8182b042437ede0f84ee02f104 --type 972d201ad78045689e01543f67b26bee --related <PODCAST_ID> --limit 3 --out mirror.json
+# an exact id list — a curated tab, a review set. The ONLY scope that skips the whole-type sweep:
+node scripts/extract-space.mjs <SPACE_ID> --type <TYPE_ID> --ids-file ids.json --out mirror.json
 # scope options: --since/--until (date range, auto-detects the type's date prop) | --related <ENTITY_ID> | --limit N
 # NO scope → refuses (exit 2) rather than dump a whole type/space.
 ```
