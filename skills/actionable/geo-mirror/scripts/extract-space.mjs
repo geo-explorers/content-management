@@ -12,12 +12,13 @@
 //   --since YYYY-MM-DD [--until YYYY-MM-DD]   date range on the type's date property
 //   --related <ENTITY_ID>                     only entities with a relation to this (topic, podcast, …)
 //   --limit N                                 newest N
+//   --ids-file <path>                         exact entity ids (JSON {"ids":[…]} / […] or a plain list)
 //   --all                                     explicit whole-type override (rarely wanted)
 //   --date-prop "<name>"                      override the date property (auto: Publish datetime / Air date)
 // Examples:
 //   node extract-space.mjs 89bd89bf28ff8a0963faf92a8c905e20 --since 2026-08-19          # News (default type)
 //   node extract-space.mjs b5a31f8182b042437ede0f84ee02f104 --type 972d201ad78045689e01543f67b26bee --related <podcastId> --limit 3   # podcast episodes
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 
 const API = 'https://api-testnet.geobrowser.io/graphql';
 const NEWS_STORY = 'e550fe517e904b2c8fffdf13408f5634';
@@ -36,14 +37,15 @@ const until = opt('--until');
 const related = opt('--related');
 const dateProp = opt('--date-prop');
 const limit = parseInt(opt('--limit', '0')) || 0;
+const idsFile = opt('--ids-file');
 const allFlag = args.includes('--all');
 const outFile = opt('--out');
 
 // SAFETY GATE — refuse an unbounded whole-type mirror.
-if (!since && !until && !related && !limit && !allFlag) {
+if (!since && !until && !related && !limit && !allFlag && !idsFile) {
   console.error(
     `REFUSING to mirror an entire type/space — Geo is large and grows daily.\n` +
-    `Narrow with at least one of: --since YYYY-MM-DD [--until …] | --related <ENTITY_ID> | --limit N.\n` +
+    `Narrow with at least one of: --since YYYY-MM-DD [--until …] | --related <ENTITY_ID> | --limit N | --ids-file <path>.\n` +
     `Or pass --all to deliberately mirror the whole type (rarely wanted).`);
   process.exit(2);
 }
@@ -75,26 +77,64 @@ const typeNameResolved = meta.type?.name ?? '(type)';
 
 // ── sweep primary entities (scoped by type+space; bounded nested relations) ──
 process.stderr.write(`Space: ${spaceName} (${spaceId}) · type ${typeId}\n`);
+const ENTITY_FIELDS = `id name
+        values(first: 30) { nodes { property { id name dataTypeName } text datetime float integer boolean } }
+        relations(first: 200) { nodes { type { id name } toEntity { id name types { name } } } }`;
+const IDS_BATCH = 25;            // aliased entity(id:) per request — relations(first:200) makes these heavy
+
 const raw = [];
-let after = null;
-for (;;) {
-  const data = await gql(`query($after: Cursor) {
+let idsScope = null;   // records how an --ids-file run was scoped, for the extract JSON
+if (idsFile) {
+  // ── scoped extract from a fixed id list ────────────────────────────────────
+  // Skips the whole-type sweep entirely. Every other scope flag (--since/--related/
+  // --limit) is applied AFTER paging the entire type, so on a large space they still
+  // pay for the full read. --ids-file reads exactly the entities named, and nothing
+  // else. Ids outside the target space or type are reported and skipped, never mirrored.
+  const txt = readFileSync(idsFile, 'utf8').trim();
+  let wanted;
+  try { const j = JSON.parse(txt); wanted = Array.isArray(j) ? j : (j.ids || []); }
+  catch { wanted = txt.split(/[\s,]+/); }
+  wanted = [...new Set(wanted.map((x) => String(x).trim().replace(/-/g, '').toLowerCase()).filter((x) => /^[0-9a-f]{32}$/.test(x)))];
+  if (!wanted.length) { console.error(`--ids-file ${idsFile}: no 32-hex entity ids found (expects JSON {"ids":[…]} or […], or a whitespace/comma separated list)`); process.exit(2); }
+  process.stderr.write(`ids-file: ${wanted.length} unique id(s)\n`);
+  const missing = [], offType = [], offSpace = [];
+  for (let i = 0; i < wanted.length; i += IDS_BATCH) {
+    const chunk = wanted.slice(i, i + IDS_BATCH);
+    const data = await gql('{' + chunk.map((id, k) => `e${k}: entity(id:"${id}"){ typeIds spaceIds ${ENTITY_FIELDS} }`).join(' ') + '}');
+    chunk.forEach((id, k) => {
+      const e = data[`e${k}`];
+      // entity(id:) never returns null on this API — an unknown id comes back empty
+      if (!e || !((e.typeIds ?? []).length || (e.spaceIds ?? []).length)) { missing.push(id); return; }
+      if (!(e.spaceIds ?? []).includes(spaceId)) { offSpace.push(id); return; }
+      if (!(e.typeIds ?? []).includes(typeId)) { offType.push(id); return; }
+      raw.push(e);
+    });
+    process.stderr.write(`\rfetched ${raw.length}/${wanted.length} entities`);
+  }
+  process.stderr.write('\n');
+  const warn = (list, why) => { if (list.length) process.stderr.write(`⚠ ${list.length} id(s) ${why}: ${list.slice(0, 5).join(', ')}${list.length > 5 ? ' …' : ''}\n`); };
+  warn(missing, 'did not resolve (deleted, or never existed)');
+  warn(offSpace, `are not resident in space ${spaceId}`);
+  warn(offType, `are not type ${typeId}`);
+  idsScope = { requested: wanted.length, resolved: raw.length, missing: missing.length, offSpace: offSpace.length, offType: offType.length };
+  if (!raw.length) { console.error('--ids-file matched no entities of the requested type in this space'); process.exit(2); }
+} else {
+  let after = null;
+  for (;;) {
+    const data = await gql(`query($after: Cursor) {
     entitiesConnection(typeId: "${typeId}", spaceId: "${spaceId}", first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes {
-        id name
-        values(first: 30) { nodes { property { id name dataTypeName } text datetime float integer boolean } }
-        relations(first: 200) { nodes { type { id name } toEntity { id name types { name } } } }
-      }
+      nodes { ${ENTITY_FIELDS} }
     }
   }`, { after });
-  const c = data.entitiesConnection;
-  for (const n of c.nodes) raw.push(n);
-  process.stderr.write(`\rfetched ${raw.length} entities`);
-  if (!c.pageInfo.hasNextPage) break;
-  after = c.pageInfo.endCursor;
+    const c = data.entitiesConnection;
+    for (const n of c.nodes) raw.push(n);
+    process.stderr.write(`\rfetched ${raw.length} entities`);
+    if (!c.pageInfo.hasNextPage) break;
+    after = c.pageInfo.endCursor;
+  }
+  process.stderr.write('\n');
 }
-process.stderr.write('\n');
 
 // ── auto-detect the date property for this type (for --since/--until) ────────
 let effectiveDateProp = dateProp;
@@ -130,7 +170,11 @@ if (limit) primary = primary.slice(0, limit);
 // relation (Topics, Related people/entities, Hosts, Guests, Podcast…) is still
 // mirrored in the page BODY (name + link), just not as a separate database.
 // Override with --link "Notable claims,Sources,Hosts,Guests" to add more.
-const LINK = (opt('--link') || 'Notable claims,Sources').split(',').map((s) => s.trim()).filter(Boolean);
+// `--link ""` must mean "no linked tables", not "use the default". A falsy check here
+// silently turned an explicit empty value back into the default and produced extra
+// databases the caller had asked not to have.
+const linkArg = opt('--link');
+const LINK = (linkArg === undefined ? 'Notable claims,Sources' : linkArg).split(',').map((s) => s.trim()).filter(Boolean);
 const LINKSET = new Set(LINK);
 const relatedIds = [...new Set(primary.flatMap((e) => Object.entries(e.relations)
   .filter(([t]) => LINKSET.has(t)).flatMap(([, list]) => list.map((x) => x.geoId))))];
@@ -190,7 +234,7 @@ for (const e of primary) { delete e.coverImageId; delete e.dateValue; }
 const result = {
   space: { id: spaceId, name: spaceName },
   type: { id: typeId, name: typeNameResolved },
-  scope: { since: since ?? null, until: until ?? null, related: related ?? null, limit: limit || null, dateProp: effectiveDateProp ?? null },
+  scope: { since: since ?? null, until: until ?? null, related: related ?? null, limit: limit || null, dateProp: effectiveDateProp ?? null, idsFile: idsFile ?? null, ids: idsScope },
   extractedAt: new Date().toISOString(),
   counts: { entities: primary.length, related: Object.keys(related_out).length },
   entities: primary, related: related_out,

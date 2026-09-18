@@ -2,7 +2,7 @@
 name: geo-claim-grouping
 description: Group Claim entities in Geo via the team's two-step process — step 1 links every adjudicated pair with Related claims (the initial grouping), step 2 assigns established groups to their corresponding brackets (Duplicate claims, Similar claims, Supporting/Opposing arguments) under the strict bracket definitions. Runs the bundled read-only discovery script to generate scored candidate claim pairs for a space, a page/tab of claims, or one seed claim — optionally pooling other spaces for cross-space matches — adjudicates every pair, dry-runs an ops script reading an editor-approved decisions file, and publishes held-for-review proposals only on an explicit publish. Triggers on "claim grouping", "group claims", "claim brackets", "related claims", "duplicate claims", "similar claims", "group related claims", "link similar claims", "assign similar claims", "claims like this one", "claim similarity pass", "claim relations pass", "which claims are similar to".
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # Geo Knowledge Graph — Claim Grouping (Related / Duplicate / Similar / Arguments)
@@ -72,7 +72,7 @@ bun run skills/actionable/geo-claim-grouping/scripts/discover_candidates.ts --se
 
 Pulls the target space's Claim corpus + signal edges (citation Sources, Notable-claims story membership, Topics, existing Related/Similar edges), pre-clusters candidate pairs (text-first + structural recall), scores them, and writes `candidates.json` + `summary.json` + a log to `scripts/<date>-claim-grouping-<slug>/`. Everything adjudication needs is inline in `candidates.json` — no re-querying. Query shapes, scoring constants, and API quirks: [`references/queries-and-signals.md`](references/queries-and-signals.md).
 
-**Cross-space matching (`--pool`)**: pool spaces' corpora + signals join the candidate pool; similar claims may live in other spaces and cross-space edges are valid — verdicts never depend on space. **Page/tab scope (`--scope-file`)**: a JSON `{ "ids": [...] }` of claim ids — only pairs touching the scope are exported, and each scope claim gets a semantic `search()` recall pass (claim-filtered, cross-space) on top of the pre-cluster. To resolve a geobrowser page/tab URL to a scope file: `entity(id: <tabId>)` → its `Blocks` relations (`beaba5cba67741a8b35377030613fc70`) → each block's `Collection item` relations (`a99f9ce12ffa4dac8c61f6310d46064a`) for collection blocks, or the block's `Filter` value for query blocks.
+**Cross-space matching (`--pool`)**: pool spaces' corpora + signals join the candidate pool; similar claims may live in other spaces and cross-space edges are valid — verdicts never depend on space. **Page/tab scope (`--scope-file`)**: a JSON `{ "ids": [...] }` of claim ids — only pairs touching the scope are exported, and each scope claim gets a semantic `search()` recall pass (claim-filtered, and resident in `--space` or a `--pool` space — never the wider graph) on top of the pre-cluster. To resolve a geobrowser page/tab URL to a scope file: `entity(id: <tabId>)` → its `Blocks` relations (`beaba5cba67741a8b35377030613fc70`) → each block's `Collection item` relations (`a99f9ce12ffa4dac8c61f6310d46064a`) for collection blocks, or the block's `Filter` value for query blocks.
 
 ### Stage B — Adjudication (in-conversation, rubric-bound)
 

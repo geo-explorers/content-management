@@ -2,7 +2,7 @@
 name: geo-claim-grouping-notion
 description: Write claim-grouping results into a Notion Claims mirror as review columns instead of Geo proposals. Runs geo-claim-grouping's discovery and adjudication unmodified — scoped to the claims that are in the mirror — then fills five self-relation columns on the Claims database (Proposed exact duplicates, Proposed semantic duplicates, Proposed related claims, Proposed supporting / opposing arguments) plus Proposed grouping notes with a hyperlinked line per counterpart. Read-only on Geo; it never publishes. Use when an editor wants exact duplicates, semantic duplicates, related, supporting or opposing claims proposed in Notion for review, when a Claims mirror needs grouping columns, or as the step after geo-mirror. Triggers on "claim grouping to Notion", "write claim groups into Notion", "propose exact or semantic duplicates and related claims in the Claims database", "grouping review columns", "notion claim grouping". Not for publishing to Geo (geo-claim-grouping) or building the mirror (geo-mirror).
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   author: mantas
 ---
 
@@ -43,6 +43,11 @@ The skill is **schema-agnostic**: any Claims database with a title column and a 
 rich_text column works — geo-mirror's `Geo Claim — <space>` tables and the editor's hand-built
 `<Space> claims` mirrors alike. Every other column (`Geo …`, `* new`, `Proposed Topics`,
 `Proposed rename`, `QA flag`, …) is never read for writing and never sent in a request.
+
+**Schema-agnostic is not type-agnostic.** `roster-from-notion.mjs` re-resolves every id it keeps
+against Geo and refuses the run (exit 2) unless all of them are `Claim`. Without that check a
+Topics mirror once produced a clean 70-id "claims" roster that every later step trusted. Pass
+`--type <32hex>` to roster a different type deliberately, or `--skip-type-check` when offline.
 
 ## When to use / when not
 
@@ -112,7 +117,9 @@ committed. Placeholders: `<DB>` = Claims database id or URL, `<C>` = campaign di
 ```bash
 node --env-file=.env skills/non-actionable/geo-claim-grouping-notion/scripts/roster-from-notion.mjs --db <DB> --out <C>/roster.json
 ```
-It prints rows read, ids kept, the space, duplicate Geo IDs (excluded) and rows without an id.
+It prints rows read, ids kept, the space, the **type check** (`N/N are type …`), duplicate Geo IDs
+(excluded) and rows without an id. The type check is a read-only Geo call — no wallet, no env — and
+its result is recorded in `roster.json` under `typeCheck`.
 
 **2 · Discovery — geo-claim-grouping's script, unmodified, scoped** (read-only on Geo):
 ```bash
@@ -121,14 +128,24 @@ node --env-file=.env skills/actionable/geo-claim-grouping/scripts/discover_candi
 ```
 `--scope-file` keeps every pair that touches **any** roster claim, so the counterpart can be any
 claim in the space — hence the high cap and step 3. If `summary.json` says `capped: true`, re-run
-with `--resume --cap <pairsConsidered>`. Semantic recall (drop `--no-semantic`, add `--resume`) costs
-~6 s per roster claim (~20 min for 200) and mostly finds off-roster hits; run it as a second pass
-when recall on debate claims matters.
+with `--resume --cap <pairsConsidered>`.
+
+Semantic recall (drop `--no-semantic`, add `--resume`) costs ~6–8.5 s per roster claim (~40 min for
+250) and is bounded to `--space` plus any `--pool` spaces. **On a debate-style space it is not
+optional.** Where a space has no News stories and about one source per claim, both structural
+admission branches are dead, and text overlap cannot admit a semantic duplicate by construction —
+a 272-claim run went from **9 candidate pairs to 271**, surfacing 11 real semantic duplicates every
+one of which sat below the Jaccard floor. On news-driven spaces the structural path already carries
+most of the recall and the second pass matters less.
 
 **3 · Scope to the roster** (pure file transform):
 ```bash
 node skills/non-actionable/geo-claim-grouping-notion/scripts/scope-candidates.mjs --candidates <C>/candidates.json --roster <C>/roster.json --top 80
 ```
+**`--top` defaults to 80 and samples.** With more kept pairs than the cap it prints `CAPPED` and
+proceeds, so the adjudication becomes a sample rather than a pass. Set `--top` above the kept-pair
+count, or accept it knowingly — the sink surfaces a capped scope in its **Needs your eyes** section
+so a partial adjudication cannot read as a complete one.
 Writes `<C>/candidates.scoped.json` — the file to adjudicate — and reports what was dropped
 (both sides off, same-space-not-in-mirror, other space), the surviving exact-name clusters and any
 `scope.missing` ids (roster claims the Geo corpus did not contain).

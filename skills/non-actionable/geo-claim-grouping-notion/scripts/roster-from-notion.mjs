@@ -29,7 +29,10 @@ const USAGE = `usage: node --env-file=.env skills/non-actionable/geo-claim-group
   --space          Geo space id (32 hex) — optional when every Geo URL points at one space
   --geo-id-column  rich_text column holding the 32-hex Geo entity id   (default "Geo ID")
   --url-column     url column holding the geobrowser link              (default "Geo URL")
-  --rate           Notion requests per second                          (default 3)`;
+  --rate           Notion requests per second                          (default 3)
+  --type           expected Geo entity type id (32 hex)                (default Claim)
+  --skip-type-check  do not verify roster ids against Geo (offline use)
+  --endpoint       Geo GraphQL endpoint (for the type check)`;
 
 const NOTION = 'https://api.notion.com/v1';
 const VERSION = '2022-06-28';
@@ -45,6 +48,12 @@ const spaceArg = (opt('--space') || '').replace(/-/g, '').toLowerCase();
 const GEO_ID_COL = opt('--geo-id-column', 'Geo ID');
 const URL_COL = opt('--url-column', 'Geo URL');
 const RATE = parseFloat(opt('--rate', '3'));
+// Entity-type assertion (see the type-check block below). Defaults to Claim.
+const CLAIM_TYPE = '96f859efa1ca4b229372c86ad58b694b';
+const EXPECT_TYPE = (opt('--type', CLAIM_TYPE) || '').replace(/-/g, '').toLowerCase();
+const SKIP_TYPE_CHECK = args.includes('--skip-type-check');
+const GEO_ENDPOINT = opt('--endpoint', 'https://api-testnet.geobrowser.io/graphql');
+const TYPE_BATCH = 50;
 const HEX32 = /^[0-9a-f]{32}$/;
 
 if (!dbId || !HEX32.test(dbId) || !outFile) { console.error(USAGE); process.exit(2); }
@@ -129,9 +138,58 @@ try {
   }
   for (const id of ids) if (!rows[id].url) rows[id].url = `https://www.geobrowser.io/space/${space}/${id}`;
 
+  // ── entity-type assertion (read-only Geo GraphQL — no wallet, no env) ───────
+  // This script is schema-agnostic by design: any database with a title column and a
+  // Geo ID column is accepted. That makes a WRONG-TYPE mirror silently valid — a Topics
+  // database once produced a clean 70-id "claims" roster that every later step trusted,
+  // and only an external check caught it. Nothing else in the pipeline verifies type.
+  let typeCheck = { checked: false, reason: 'skipped (--skip-type-check)' };
+  if (!SKIP_TYPE_CHECK && ids.length) {
+    const geoGql = async (query, retries = 2) => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const r = await fetch(GEO_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
+          const j = await r.json();
+          if (j.errors) throw new Error(JSON.stringify(j.errors).slice(0, 300));
+          return j.data;
+        } catch (err) {
+          if (attempt >= retries) throw err;
+          await sleep(500 * 2 ** attempt);
+        }
+      }
+    };
+    const typesSeen = {}; const wrong = []; let unresolved = 0;
+    for (let i = 0; i < ids.length; i += TYPE_BATCH) {
+      const chunk = ids.slice(i, i + TYPE_BATCH);
+      const data = await geoGql('{' + chunk.map((id, k) => `e${k}: entity(id:"${id}"){ id name typeIds types { name } }`).join(' ') + '}');
+      chunk.forEach((id, k) => {
+        const e = data[`e${k}`];
+        const typeIds = e?.typeIds ?? [];
+        const names = (e?.types ?? []).map((t) => t?.name).filter(Boolean);
+        if (!typeIds.length) { unresolved++; wrong.push({ id, name: e?.name || '', types: [] }); return; }
+        for (const n of new Set(names.length ? names : ['(unnamed type)'])) typesSeen[n] = (typesSeen[n] || 0) + 1;
+        if (!typeIds.includes(EXPECT_TYPE)) wrong.push({ id, name: e?.name || '', types: names });
+      });
+      process.stderr.write(`\rtype-checking ${Math.min(i + TYPE_BATCH, ids.length)}/${ids.length} against Geo`);
+    }
+    process.stderr.write('\n');
+    typeCheck = { checked: true, expectedTypeId: EXPECT_TYPE, endpoint: GEO_ENDPOINT, total: ids.length,
+      matched: ids.length - wrong.length, wrong: wrong.length, unresolved, typesSeen };
+    if (wrong.length) {
+      console.error(`✗ roster type check FAILED — ${ids.length - wrong.length}/${ids.length} rows are type ${EXPECT_TYPE}.`);
+      console.error(`  types seen : ${Object.entries(typesSeen).map(([n, c]) => `${n} ${c}`).join(' · ') || '(none)'}`);
+      if (unresolved) console.error(`  unresolved : ${unresolved} id(s) returned no types at all (deleted, or not in this space)`);
+      for (const w of wrong.slice(0, 5)) console.error(`  - ${w.id} "${w.name}" → ${w.types.join(', ') || '(no types)'}`);
+      if (wrong.length > 5) console.error(`  … and ${wrong.length - 5} more`);
+      console.error(`  This database is not a mirror of type ${EXPECT_TYPE}. Point --db at the right database,`);
+      console.error(`  pass --type <32hex> to roster a different type, or --skip-type-check to bypass deliberately.`);
+      process.exit(2);
+    }
+  }
+
   const roster = {
     db: dbId, dbTitle, titleProperty, geoIdProperty: GEO_ID_COL, urlProperty: hasUrl ? URL_COL : null,
-    space, fetchedAt: new Date().toISOString(), rowCount: rowsRaw.length,
+    space, fetchedAt: new Date().toISOString(), rowCount: rowsRaw.length, typeCheck,
     ids, rows, duplicates, rowsWithoutGeoId: rowsWithoutGeoId.length, rowsWithoutGeoIdPageIds: rowsWithoutGeoId.slice(0, 20), spacesSeen,
   };
   mkdirSync(dirname(outFile), { recursive: true });
@@ -141,6 +199,7 @@ try {
   console.log(`  rows read         : ${rowsRaw.length}`);
   console.log(`  ids in roster     : ${ids.length}`);
   console.log(`  space             : ${space}${spaceArg ? ' (from --space)' : ''}`);
+  console.log(`  type check        : ${typeCheck.checked ? `${typeCheck.matched}/${typeCheck.total} are type ${typeCheck.expectedTypeId} ✓` : `SKIPPED — ${typeCheck.reason}`}`);
   console.log(`  title column      : "${titleProperty}"   geo id column: "${GEO_ID_COL}"   url column: ${hasUrl ? `"${URL_COL}"` : '(none — links built from space + id)'}`);
   if (duplicates.length) console.log(`  ⚠ duplicate Geo IDs (excluded): ${duplicates.length} → ${duplicates.slice(0, 5).map((d) => d.geoId).join(' | ')}${duplicates.length > 5 ? ' …' : ''}`);
   if (rowsWithoutGeoId.length) console.log(`  ⚠ rows without a valid Geo ID : ${rowsWithoutGeoId.length}`);

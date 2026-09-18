@@ -141,7 +141,7 @@ const floorOk = (conf) => floor === 'medium' || (conf || 'high') === 'high';
 const skipped = { notApproved: 0, notSimilar: 0, dedupSuppressed: 0, relatedOnly: 0, unknownBracket: 0, offRoster: 0, belowFloor: 0, alreadyOnGeo: Object.fromEntries(Object.keys(COLS).map((k) => [k, 0])), clustersTooSmall: 0 };
 const pairsIn = Object.fromEntries(Object.keys(COLS).map((k) => [k, 0]));
 const rowEntries = Object.fromEntries(Object.keys(COLS).map((k) => [k, 0]));
-const needsEyes = { bracketWithoutRelated: [], pairIdsNotInRoster: [], scopeMissing: [], rosterRowsMissing: [], unknownPageIds: [], duplicateGeoIds: [], preExistingColumns: [], staleExistingEdges: null, notesOverflow: [], unknownBrackets: [] };
+const needsEyes = { bracketWithoutRelated: [], pairIdsNotInRoster: [], scopeMissing: [], rosterRowsMissing: [], unknownPageIds: [], duplicateGeoIds: [], preExistingColumns: [], staleExistingEdges: null, notesOverflow: [], unknownBrackets: [], cappedScope: null };
 
 const addNote = (from, tag, conf, to, reason) => { const d = ensure(from); d.notes.push({ tag, conf: conf || 'high', to, reason: String(reason || '').replace(/\s+/g, ' ').trim() }); d.touched.add(to); };
 function propose(prop, from, to, tag, conf, reason) {
@@ -196,7 +196,18 @@ if (existing) {
   const ageH = (Date.now() - Date.parse(existing.generatedAt || 0)) / 36e5;
   if (!(ageH < STALE_EDGES_HOURS)) needsEyes.staleExistingEdges = `existing-edges.json is ${Math.round(ageH)}h old (generated ${existing.generatedAt}) — Geo changes daily; re-run existing-edges-from-geo.mjs`;
 }
-if (existsSync(scopedFile)) { const s = readJson(scopedFile); needsEyes.scopeMissing = s.scope?.missing || []; }
+if (existsSync(scopedFile)) {
+  const s = readJson(scopedFile);
+  needsEyes.scopeMissing = s.scope?.missing || [];
+  // A capped scope means the adjudication is a SAMPLE, not a pass over every kept pair.
+  // scope-candidates.mjs already records this; without surfacing it here, section 6 prints
+  // "nothing" over a partial adjudication and the columns read as complete.
+  const sc = s.scoped || {};
+  if (s.capped || sc.capped) {
+    const waiting = Number.isFinite(sc.keptBeforeCap) && Number.isFinite(sc.exported) ? sc.keptBeforeCap - sc.exported : null;
+    needsEyes.cappedScope = `adjudication is a SAMPLE — candidates.scoped.json is capped${sc.top ? ` at --top ${sc.top}` : ''}${waiting != null ? `, ${waiting} kept pair(s) were never adjudicated` : ''}. Re-run scope-candidates.mjs with a higher --top and adjudicate the remainder before treating these columns as a complete pass.`;
+  }
+}
 
 // ── notes rendering ─────────────────────────────────────────────────────────
 const clip = (s) => String(s ?? '').slice(0, MAX_TEXT);
@@ -335,6 +346,7 @@ try {
   L.push(`5 Write plan  ${Object.keys(toCreate).length ? `1 schema PATCH (${Object.keys(toCreate).length} column${Object.keys(toCreate).length === 1 ? '' : 's'}) + ` : ''}${plan.length} row PATCH${plan.length === 1 ? '' : 'es'} · estimated ~${Math.floor(eta / 60)}m ${eta % 60}s at ${RATE} req/s`);
   for (const p of plan.slice(0, 5)) L.push(`     ${p.name.slice(0, 70)}  →  ${Object.entries(p.changes).map(([k, c]) => k === 'notes' ? 'notes' : `${LABEL[k]} +${c.add.length}${c.remove.length ? `/−${c.remove.length}` : ''}`).join(', ')}`);
   const eyes = [];
+  if (needsEyes.cappedScope) eyes.push(needsEyes.cappedScope);
   if (needsEyes.scopeMissing.length) eyes.push(`${needsEyes.scopeMissing.length} roster id(s) were not in the Geo corpus at discovery (scope.missing): ${needsEyes.scopeMissing.slice(0, 5).join(', ')}${needsEyes.scopeMissing.length > 5 ? ' …' : ''}`);
   if (needsEyes.bracketWithoutRelated.length) eyes.push(`${needsEyes.bracketWithoutRelated.length} bracket pair(s) have no step-1 decision and no live Related edge: ${needsEyes.bracketWithoutRelated.slice(0, 5).join(' | ')}${needsEyes.bracketWithoutRelated.length > 5 ? ' …' : ''}`);
   if (needsEyes.pairIdsNotInRoster.length) eyes.push(`${needsEyes.pairIdsNotInRoster.length} pair(s) reference claims outside the roster (dropped): ${needsEyes.pairIdsNotInRoster.slice(0, 5).join(' | ')}${needsEyes.pairIdsNotInRoster.length > 5 ? ' …' : ''}`);

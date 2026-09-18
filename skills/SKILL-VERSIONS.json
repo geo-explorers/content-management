@@ -2,9 +2,9 @@
   "_doc": "Approved version of each editor-facing skill. Regenerate with skill-dev/skill_versions.py generate after reviewing a change.",
   "skills": {
     "actionable/geo-claim-grouping": {
-      "version": "0.6.0",
-      "approved_commit": "30f684639f39fae46748999ed00d88b21bc187a4",
-      "content_sha256": "f4da13ef460653c0762136902c06a3efab4254ec598486ab06adcb820407ce79"
+      "version": "0.7.0",
+      "approved_commit": "add3a0cb7c494a3b2c35f7f204c37d8aa25de832",
+      "content_sha256": "752599f39b52b06aa7d325a08fe4f84be65075902e00fa47d49c4e1f8157568c"
     },
     "actionable/geo-clean": {
       "version": "0.5.0",
@@ -17,9 +17,9 @@
       "content_sha256": "8c19551b8d15a2c7694144ac2b4a8a381b4fe8bc8c330d253511ad6e18bbc727"
     },
     "actionable/geo-mirror": {
-      "version": "0.11.0",
-      "approved_commit": "8f1b60d1a1fa508f182cd0073f6a3eeb6bd46e7e",
-      "content_sha256": "eb599a52bd73cbade05256dcd18e5babded6d8234954d55496999ecffa55e581"
+      "version": "0.12.0",
+      "approved_commit": "80ac742591cd60aca95824ea871a3349ee2d4673",
+      "content_sha256": "7a2ac98c4f7dd2af9296bfdce8f81e2e0ba1ce51db47bcb170996d67365c481b"
     },
     "actionable/geo-orchestrate": {
       "version": "0.2.0",
@@ -37,14 +37,19 @@
       "content_sha256": "0f13aecd820756cca87d1eebd5677357fb5a00a6ce9cdf6caa0baa6fd83d47a4"
     },
     "non-actionable/geo-claim-grouping-notion": {
-      "version": "0.1.0",
-      "approved_commit": "ad69e597ec20583c3dd629f5a109a47cd53074b9",
-      "content_sha256": "8d4622cdbc4bdea6f4497f71a1752e23359324f70b5a551abcc5603ddb4fbbe2"
+      "version": "0.2.0",
+      "approved_commit": "add3a0cb7c494a3b2c35f7f204c37d8aa25de832",
+      "content_sha256": "ddd6f23688d5bce7847f89f9367a96578549b83f33a198fcd7e63a4546e9ed98"
     },
     "non-actionable/geo-describe": {
       "version": "0.2.0",
       "approved_commit": "fe0a1419f6ae4273988d69558014930d6a5628e5",
       "content_sha256": "3ce74619445c9d01daf7ffcc226a2121f5943137c1cb4035c475868f465a9300"
+    },
+    "non-actionable/geo-mirror-and-group": {
+      "version": "1.0.0",
+      "approved_commit": "add3a0cb7c494a3b2c35f7f204c37d8aa25de832",
+      "content_sha256": "9da3312746ca716e60bffed36feccbd407b3b0e45811d9378d17487c079bb6ea"
     },
     "non-actionable/geo-press-review": {
       "version": "0.5.3",
@@ -60,6 +65,11 @@
       "version": "0.2.0",
       "approved_commit": "dd56a5e954aa4b18fc5cf896732b6cbf2395a315",
       "content_sha256": "ea9e37588885018e2246020f7b885c792ff1b8bb73730fdda8edd01deb1ce6a5"
+    },
+    "non-actionable/notion-operations": {
+      "version": "1.0.1",
+      "approved_commit": "6e9f5f955c31f4555b083174636c2cfea1ba6948",
+      "content_sha256": "8482332082fd810de09dc5b7ab7328286877b223cf6f1dfe4548382ef0d80aec"
     },
     "non-actionable/ontology-advisor": {
       "version": "0.1.0",
