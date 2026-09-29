@@ -269,9 +269,9 @@ A **News story** carries **two** times, and they answer different questions. Con
 | Field | What it records | Use it for |
 | --- | --- | --- |
 | **`Publish datetime`** property (`94e43fe8faf241009eb887ab4f999723`, a `date` value) | when the **source outlet** originally published the article — the real-world dateline | "when did the news happen", ordering stories by article date |
-| entity **`createdAt`** | when the story was **added to Geo** (indexed into the space) | **"published/added recently", "new stories in the last N hours", freshness monitoring** |
+| entity **`createdAt`** | when the story was **added to Geo** (indexed into the space), returned as a Unix-seconds string | **"published/added recently", "new stories in the last N hours", freshness monitoring** |
 
-When an editor asks *"how many news stories were **published** in {space} in the last N hours"*, they almost always mean **added to Geo** → filter on **`createdAt`**, **not** the `Publish datetime` property. The ingestion pipeline bulk-adds stories hours after their source dateline, so the two routinely differ by many hours — an article with an Aug-11 dateline can enter Geo on Aug-12. If the intent is genuinely ambiguous, report both or ask which one they mean.
+When an editor asks *"how many news stories were **published** in {space} in the last N hours"*, they almost always mean **added to Geo** → filter on **`createdAt`**, **not** the `Publish datetime` property. The ingestion pipeline bulk-adds stories hours after their source dateline, so the two routinely differ by many hours — an article with an Aug-11 dateline can enter Geo on Aug-12. If the intent is genuinely ambiguous, report both or ask which one they mean. **Filter `createdAt` with Unix-seconds strings, not ISO timestamps**: a live Crypto-space query on 2026-09-29 returned 0 with an ISO cutoff and 95 with the equivalent epoch cutoff.
 
 Count News stories added to a space within a window (per space):
 
@@ -280,7 +280,7 @@ Count News stories added to a space within a window (per space):
   entitiesConnection(
     typeId: "e550fe517e904b2c8fffdf13408f5634"   # News story
     spaceId: "<SPACE_ID>"
-    filter: { createdAt: { greaterThanOrEqualTo: "2026-08-12T01:25:00Z" } }
+    filter: { createdAt: { greaterThanOrEqualTo: "1786497900" } } # 2026-08-12T01:25:00Z in Unix seconds
     first: 0                                       # totalCount only — cheap
   ) { totalCount }
 }
