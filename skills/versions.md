@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-submission-review — 0.4.0
+- 2026-10-01 · Initial upstream release on `all-skills` for editor testing, preserving the v0.4.0 package tested locally. Establishes review intent across spaces and submission types; independently verifies findings; saves and reads back concise Notion feedback with four fixed columns and one example per recurring issue. Includes news duplicate, relevance and significance checks; evidence-backed feedback for curator-editable injector inaccuracies; Notion guidance; and fourteen fictional evaluation scenarios. Bounded direct pilots covered Afghanistan sources, news and X submissions. The scenarios are prepared fixtures, not a completed independent-agent evaluation; broader editor feedback remains pending.
+
 ### geo-query — 0.2.8
 - 2026-08-28 · **Hardcoded canonical space name→ID map — the space-scoping fix** (Arturas' list; recurring bug where live space-name resolution fuzzy-matches to the *nearest* space — a real case matched "World affairs" → "AI" — silently scoping a whole query to the wrong space and returning confident-but-wrong results). Added a "Canonical spaces (name → ID)" table to Well-known IDs: 13 canonical + 5 dataset spaces, all IDs **verified live 2026-08-28** against their `space.page.name`. Rule: scope canonical/dataset spaces with the hardcoded ID, never `space(name:)`/`search()`; for a space NOT in the table, resolve live but confirm `id`+`page.name` match exactly and STOP on substitution. Gotcha 16. Note on naming: ID `4582fbbe…` is live-named **"US Politics"** (not "U.S. Politics") and its dataset **"US politics datasets"** — table keys the live names + notes the "U.S. Politics" alias. Mirrors `src/constants.ts` CANONICAL_SPACE_IDS/DATASET_SPACE_IDS for the actionable skills (geo-query is browser-capable so it can't import them — the table is its standalone copy).
 

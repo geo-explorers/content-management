@@ -81,6 +81,7 @@ A tidy answer means you are set up. If the assistant improvises instead, name th
 | [geo-query](skills/non-actionable/geo-query) | Query the graph via GraphQL: lookups, search by type, relations, schema | read-only | no |
 | [ontology-advisor](skills/non-actionable/ontology-advisor) | Modeling advice: reuse vs new types, properties, duplicates | read-only | no |
 | [geo-press-review](skills/non-actionable/geo-press-review) | Compare press coverage against Geo, recommend what to publish | read-only | no |
+| [geo-submission-review](skills/non-actionable/geo-submission-review) | Review submissions across spaces; save concise, evidence-backed feedback in Notion | read-only on Geo; Notion output | no |
 | [geo-describe](skills/non-actionable/geo-describe) | Verified, original entity descriptions at scale (emits drafts) | read-only | no |
 | [image-banner-recompose](skills/non-actionable/image-banner-recompose) | Recompose any image into a Geo banner | utility | no |
 | [daily-report](skills/non-actionable/daily-report) | Internal editor routine (Notion daily update) | internal | no |
@@ -92,6 +93,18 @@ A tidy answer means you are set up. If the assistant improvises instead, name th
 Which skills are vetted right now lives on the [Agents Hub space](https://www.geobrowser.io/space/ddfd01098a71083119eb130a01a6d4c5): skills tagged **confirmed** there are the ones the skills team vouches for. Each Hub skill page carries its usage guide.
 
 Every write to Geo is a proposal that goes through space governance: skills dry-run first, show you the plan, and publish only on your explicit go.
+
+---
+
+## Try submission reviews
+
+`geo-submission-review` v0.4.0 is available on **`all-skills` for editor testing**. Copy the complete [`skills/non-actionable/geo-submission-review/`](https://github.com/geo-explorers/content-management/tree/all-skills/skills/non-actionable/geo-submission-review) folder, including `references/` and `evals/`, into your assistant's project skills directory. Preserve any local changes when updating an existing copy. Use the `all-skills` branch for this test release.
+
+Give the agent the submission links, target space, applicable requirements and a Notion destination it can write to:
+
+> Use geo-submission-review to review [submission links] for [space] against [requirements or review intent]. Save the review in [Notion destination] and return its link.
+
+The skill covers news, source arguments, datasets, claims, X posts and other submissions across spaces. Its default output is a short Notion page with up to five supported issues, one example per recurring problem, and a four-column evidence table. It needs access to the submissions, relevant evidence and Notion; it does not need a Geo signing key. Geo lookups can use `geo-query`. Share feedback on whether the findings are clear, supported and ready to forward to the curator.
 
 ---
 

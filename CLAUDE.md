@@ -7,7 +7,8 @@
 | If the user wants to… | Use skill |
 |---|---|
 | **publish / create / update / delete** entities, relations, or content; "add X to Geo"; "publish…"; submit a proposal | **geo-publish** |
-| **look up / search / inspect / query** the graph; "what type is…"; "show relations"; review or fact-check a submission | **geo-query** |
+| **look up / search / inspect / query** the graph; "what type is…"; "show relations" | **geo-query** |
+| **review / fact-check specified submissions**; check news duplicates, space relevance or source arguments; save submission feedback in Notion | **geo-submission-review** (use **geo-query** for Geo retrieval) |
 | find/merge **duplicates**, delete orphans, fix data types, move/copy entities, clean the graph | **geo-clean** |
 | compare external press vs Geo — "what should we publish next" | **geo-press-review** |
 
