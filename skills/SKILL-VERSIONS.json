@@ -38,8 +38,13 @@
     },
     "non-actionable/geo-query": {
       "version": "0.2.8",
-      "approved_commit": "2ea7c71f1da92b3ecc17a6c38083924c2d7011f4",
+      "approved_commit": "44d676d0a1bb05096cff581bc0fa52bfb00b1097",
       "content_sha256": "29a47b7695cff84b052cd8a7be740ad81a96cce9a09bda1bbc4061dddc0e3bdf"
+    },
+    "non-actionable/geo-submission-review": {
+      "version": "0.4.0",
+      "approved_commit": "4970627d397ade340d191744e4da6144f80b1779",
+      "content_sha256": "18ace1a922bb4d3af749cb2ad74ac38567e44488a9ee9a2b0174504304d1319e"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",
