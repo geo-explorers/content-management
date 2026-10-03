@@ -1,6 +1,6 @@
 {
   "skill_name": "geo-submission-review",
-  "skill_version": "0.4.0",
+  "skill_version": "0.5.0",
   "status": "Prepared fixtures; record live pilot and behavioral outcomes separately",
   "instructions": "Supply only the prompt and skill to the reviewing agent. Keep expected_output and assertions for evaluation. Fixtures authorize drafts only, using supplied evidence. Do not write to Notion, Geo, or message a contributor.",
   "evals": [

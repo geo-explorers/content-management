@@ -1,0 +1,20 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import {createRequire} from 'node:module';
+import {stableId} from '../scripts/review-core.mjs';
+import {buildReportOps} from '../scripts/report-ops.mjs';
+let sdk;try{sdk=await import('@geoprotocol/geo-sdk');}catch{const r=createRequire(path.join(process.env.GEO_CM_DIR,'package.json'));sdk=await import(r.resolve('@geoprotocol/geo-sdk'));}
+const id=n=>n.toString(16).padStart(32,'0');
+const original='Full original with meaningful qualifiers. '.repeat(30);
+const draft={caseId:id(1),pageId:stableId('submission-report:'+id(1)),publicationStatus:'draft_only',fingerprint:'fixture',targetSpaceId:id(2),title:'Fixture curator — submission review',markdown:'Compact recipient feedback.',review:{findings:[{itemId:id(3),originalRef:{proposalId:id(4)},original,excerpt:'meaningful qualifiers',issue:'A supported fixture mismatch',evidenceDetail:'Read fixture evidence',citations:[{url:'https://example.org/a',locator:'Paragraph A',retrievedAt:'2026-10-03T12:00Z'},{url:'https://example.org/a#b',locator:'Paragraph B',retrievedAt:'2026-10-03T12:00Z'}]}]}};
+const receiptDir=fs.mkdtempSync(path.join(os.tmpdir(),'report-receipt-test-'));const receiptFile=path.join(receiptDir,'receipt.json');fs.writeFileSync(receiptFile,JSON.stringify({complete:true,state:'verified'}));
+const plan={mode:'create',targetSpaceId:id(2),caseFingerprint:'fixture',discoveryReceipt:receiptFile,schemaReceipt:receiptFile,duplicateCheckReceipt:receiptFile,addIssueToFindingSchema:true,items:{[id(3)]:{name:'Fixture item',spaceId:id(5),proposalUrl:'https://www.geobrowser.io/space/'+id(5)+'/governance?proposalId='+id(4),state:'captured_pending'}},citations:{'https://example.org/a':{entityId:id(6),spaceId:id(5),state:'verified_live'},'https://example.org/a#b':{entityId:id(6),spaceId:id(5),state:'verified_live'}}};
+test('operation preview is deterministic, typed, complete and has no destructive operations',()=>{const a=buildReportOps(draft,plan,sdk.Graph),b=buildReportOps(draft,plan,sdk.Graph);assert.deepEqual(a,b);assert.ok(a.created.every(e=>e.types.length));assert.ok(a.ops.some(o=>(o.set??o.values??[]).some(v=>v.property==='5d4dda664938562da3eec5bc6017c04c'&&v.value.value===original)));assert.equal(a.ops.some(o=>/delete/.test(o.type)||o.unset?.length),false);});
+test('citation values target each relation entity, including distinct locators on the same source',()=>{const a=buildReportOps(draft,plan,sdk.Graph);const sources=a.ops.filter(o=>o.type==='createRelation'&&o.relationType==='49c5d5e1679a4dbdbfd33f618f227c94');assert.equal(sources.length,2);assert.equal(new Set(sources.map(s=>s.id)).size,2);for(const s of sources)assert.ok(a.ops.some(o=>o.id===s.entity&&(o.set??o.values??[]).some(v=>v.property==='412ff593e9154012a43d4c27ec5c68b6')));});
+test('stale or existing-report operations require a new preservation plan',()=>{assert.throws(()=>buildReportOps(draft,{...plan,caseFingerprint:'stale'},sdk.Graph),/revision/);assert.throws(()=>buildReportOps(draft,{...plan,mode:'update'},sdk.Graph),/preservation/);assert.throws(()=>buildReportOps(draft,{...plan,citations:{}},sdk.Graph),/identity/);});
+
+test('all serialized operation IDs are full hex strings, never Buffer JSON objects',()=>{const a=buildReportOps(draft,plan,sdk.Graph);for(const o of a.ops){for(const k of ['id','from','to','entity','relationType'])if(o[k]!==undefined)assert.match(o[k],/^[a-f0-9]{32}$/);for(const v of o.set??o.values??[])assert.match(v.property,/^[a-f0-9]{32}$/);}});
+test('unverified or invented receipt objects cannot authorize a dry-run',()=>{const bad=path.join(receiptDir,'failed.json');fs.writeFileSync(bad,JSON.stringify({complete:true,state:'verified',verified:false}));assert.throws(()=>buildReportOps(draft,{...plan,schemaReceipt:bad},sdk.Graph),/unverified/);assert.throws(()=>buildReportOps(draft,{...plan,discoveryReceipt:{verified:false}},sdk.Graph),/existing JSON/);});

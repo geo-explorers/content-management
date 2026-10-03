@@ -1,19 +1,19 @@
 ---
 name: geo-submission-review
-description: Review specified Geo submissions and save concise, evidence-backed feedback in Notion for the editor to forward. Use when checking news duplicates, space relevance and significance, or reviewing datasets, claim sets and Notion mirrors for credibility, completeness, debate suitability or ontology compliance. Broad proposal discovery, scoring, payouts and publishing have separate workflows.
+description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # Geo submission review
 
-Establish what the editor wants checked, review the agreed scope, then save a short, evidence-backed review page in Notion for the editor to forward. This applies across all Geo spaces and bounty types. Keep the research record separately for the editor.
+Choose the requested mode. **Space discovery / recurring bounty review:** read [references/routine.md](references/routine.md), use the packaged review runner, then review its queued cases and prepare one corresponding datasets-space report per curator/bounty submission. **Specified submission / Notion review:** follow sections 1–4 below. This applies across spaces and bounty types. Keep the full coverage record separately from compact recipient feedback.
 
-This skill is read-only on Geo. Use the editor's supplied Notion destination or established review location; ask only when neither is clear. An explicitly requested alternative destination takes precedence. Notion delivery and format verification are completion requirements, not optional final steps. Preparing feedback does not authorize sending it, editing the submission, voting, or paying a bounty.
+The intake and review scripts are read-only on Geo. Geo report writes route through `geo-publish` and its human gate; read [references/geo-delivery.md](references/geo-delivery.md) before preparing them. Discovery defaults to datasets-space drafts until report-only publication authorization is recorded. For specified-submission reviews, use the editor's supplied Notion destination or established review location; ask only when neither is clear. An explicitly requested alternative destination takes precedence. Notion delivery and format verification are completion requirements, not optional final steps. Preparing feedback does not authorize sending it, editing the submission, voting, or paying a bounty.
 
 ## 1. Establish intent
 
-Read the request, submission, applicable bounty requirements, and relevant existing review. A bounty is optional. Derive a brief covering:
+Read the request, submission, applicable bounty requirements, and relevant existing review. For bounty-specific checks read [references/bounty-profiles.md](references/bounty-profiles.md). Full ordered bounty Text blocks and applicable linked criteria are authoritative; a description or preview is insufficient. A bounty is optional. Derive a brief covering:
 
 - **Intent:** what to check, the intended use of the content, and the decision this supports.
 - **Scope:** items, fields, topic, period, depth, and the unit of verification.

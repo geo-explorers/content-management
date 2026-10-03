@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-submission-review — 0.5.0
+- 2026-10-03 · Add read-only space discovery, lossless GRC-20 snapshots, typed field/count/ownership checks, full ordered bounty/linked-page retrieval, durable curator/bounty cases and pending queues, exact-text review recording, six-field datasets drafts and create-only geo-publish operation previews. Preserve scoped Notion delivery. Scheduled activation and live report delivery require separate pilot authorization/readback; this revision does not vote, award or send.
+
 ### geo-submission-review — 0.4.0
 - 2026-10-01 · Initial upstream release on `all-skills` for editor testing, preserving the v0.4.0 package tested locally. Establishes review intent across spaces and submission types; independently verifies findings; saves and reads back concise Notion feedback with four fixed columns and one example per recurring issue. Includes news duplicate, relevance and significance checks; evidence-backed feedback for curator-editable injector inaccuracies; Notion guidance; and fourteen fictional evaluation scenarios. Bounded direct pilots covered Afghanistan sources, news and X submissions. The scenarios are prepared fixtures, not a completed independent-agent evaluation; broader editor feedback remains pending.
 
