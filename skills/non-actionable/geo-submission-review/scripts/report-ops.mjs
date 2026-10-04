@@ -26,7 +26,8 @@ export function buildReportOps(draft,plan,Graph){
   function text(parent,slug,body,position){const id=stableId(pageId+':text:'+slug);create(id,undefined,T.text,[val(P.markdown,body)]);rel(parent,P.blocks,id,{position});return id;}
   if(plan.addIssueToFindingSchema){rel(T.finding,P.columns,P.issue);}
   create(pageId,draft.title,T.page);
-  text(pageId,'feedback',draft.markdown,'a0');
+  const intro=draft.review.findings.length?draft.markdown.split('## Review feedback')[0]+'## Review feedback\n\nThe comparison table below links to the complete finding, including the full original statement, exact excerpt and source evidence.\n':draft.markdown;
+  text(pageId,'feedback',intro,'a0');
   if(draft.review.findings.length){
     const tableId=stableId(pageId+':feedback-table');create(tableId,'Review feedback',T.data);
     rel(tableId,P.sourceType,'1295037a5d9c4d09b27c5502654b9177');const config=rel(pageId,P.blocks,tableId,{position:'a1'});

@@ -12,7 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
-### geo-submission-review — 0.5.0
+### geo-submission-review — 0.5.1
+
+- **2026-10-04 · v0.5.1** — Live pilot readback exposed Geo’s unsupported Markdown-table rendering. Report introduction now points to the native comparison table; full originals/excerpts/citations remain on typed findings. Added rendering regression. Single-report publication and a report-owned one-field correction were indexed and read back; general comment-preserving updates and scheduling remain unverified.
 - 2026-10-03 · Add read-only space discovery, lossless GRC-20 snapshots, typed field/count/ownership checks, full ordered bounty/linked-page retrieval, durable curator/bounty cases and pending queues, exact-text review recording, six-field datasets drafts and create-only geo-publish operation previews. Preserve scoped Notion delivery. Scheduled activation and live report delivery require separate pilot authorization/readback; this revision does not vote, award or send.
 
 ### geo-submission-review — 0.4.0

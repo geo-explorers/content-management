@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Geo submission review
