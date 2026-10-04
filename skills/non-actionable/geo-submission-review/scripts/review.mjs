@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {SPACES,normalizeId,readJson,atomicJson,withLock,loadState,assemble,recordReview,reportDraft,prepareReportDraft,recordDecision,recordDelivery,caseEvidence,hash} from './review-core.mjs';
+import {SPACES,normalizeId,readJson,atomicJson,withLock,loadState,assemble,recordReview,reportDraft,prepareReportDraft,recordDecision,recordDelivery,caseEvidence,hash,editorSummary,editorSummaryMarkdown} from './review-core.mjs';
 import {readBounty,readEntity,readEntities,query} from './review-client.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const argv=process.argv.slice(2),command=argv.shift();
@@ -82,6 +82,7 @@ await withLock(stateDir,async()=>{
     }else if(command==='reports'){
       const drafts=[],unchangedDrafts=[];for(const c of Object.values(state.cases))if(c.review?.fingerprint===c.fingerprint){
         const {draft,changed}=prepareReportDraft(c,path.join(out,c.id+'.json'));(changed?drafts:unchangedDrafts).push(draft);atomicJson(path.join(out,c.id+'.json'),draft);fs.writeFileSync(path.join(out,c.id+'.md'),draft.markdown);
+        const summary=editorSummary(c);if(summary){atomicJson(path.join(out,c.id+'.editor.json'),summary);fs.writeFileSync(path.join(out,c.id+'.editor.md'),editorSummaryMarkdown(summary));}
       }atomicJson(stateFile,state);receipt.drafts=drafts.map(d=>({caseId:d.caseId,pageId:d.pageId,targetSpaceId:d.targetSpaceId}));receipt.unchangedDrafts=unchangedDrafts.map(d=>d.caseId);
     }else if(command==='preflight'){
       if(!config)throw Error('--config required');

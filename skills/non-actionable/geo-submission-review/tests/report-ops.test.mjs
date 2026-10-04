@@ -29,7 +29,7 @@ test('recipient draft and Geo page preserve separate title, readable review date
  assert.equal(body[0].includes(rendered.title),false);
  assert.equal(rendered.review.checkedAt,c.review.checkedAt);
  assert.equal(rendered.review.outcome,'unresolved');
- assert.match(body[0],/4 October 2026/); // Lagos date crosses midnight; internal UTC timestamp is preserved.
+ assert.match(body[0],/3 October 2026/); // Recipient dates now use UTC too.
  assert.equal(body[0].includes(c.review.checkedAt),false);
  assert.equal(body[0].includes('unresolved'),false);
  assert.match(body[0],/still in progress/);
@@ -38,4 +38,11 @@ test('recipient draft and Geo page preserve separate title, readable review date
  assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'&&e.to===finding.id));
  assert.ok(a.edges.some(e=>e.type==='beaba5cba67741a8b35377030613fc70'&&e.from===finding.id));
  assert.ok(body.some(t=>t.includes(original)&&t.includes('https://example.org/a')&&t.includes(draft.review.findings[0].issue)));
+});
+
+test('Geo publication ops exclude internal editor scoring and cap-ledger fields',()=>{
+ const internal={...draft,review:{...draft.review,scoring:{rate:37,ruleSource:'PRIVATE_EDITOR_RULE_SENTINEL',weekly:{priorPoints:243,evidence:['PRIVATE_LEDGER_SENTINEL']}}}};
+ const out=buildReportOps(internal,plan,sdk.Graph);
+ assert.equal(JSON.stringify(out).includes('PRIVATE_EDITOR_RULE_SENTINEL'),false);
+ assert.equal(JSON.stringify(out).includes('PRIVATE_LEDGER_SENTINEL'),false);
 });

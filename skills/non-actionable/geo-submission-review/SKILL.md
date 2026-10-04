@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.5.2"
+  version: "0.5.3"
 ---
 
 # Geo submission review
@@ -49,7 +49,7 @@ For canonical comparisons, record identity, submitted/current values, space and 
 
 ## 3. Select actionable feedback
 
-Write recipient pages in kind, clear, everyday language. Keep the title in the page name only; do not repeat it as a body heading. Explain what the review means and what the curator can act on without technical status labels. Use a readable review date (for example, “Last reviewed: 3 October 2026”), keeping the precise timestamp and structured assessment in the internal record. For Geo reports, tell readers to open each linked review in the table for its full details; verify those finding pages expose the complete original, issue and supporting evidence. Preserve meaningful uncertainty and distinguish the agent’s recommendation from an editor’s approval or payout.
+Write recipient pages in kind, clear, everyday language. Keep the title in the page name only; do not repeat it as a body heading. Explain what the review means and what the curator can act on without technical status labels. Use a readable UTC review date (for example, “Last reviewed: 3 October 2026”). When time matters, show both timestamps in UTC with dates; omit hours when dates alone establish the point. Keep precise timestamps and structured assessments internally. For Geo reports, tell readers to open each linked review in the table for its full details; verify those finding pages expose the complete original, issue and supporting evidence. Preserve meaningful uncertainty and distinguish the agent’s recommendation from an editor’s approval or payout.
 
 Default to **1–5 priority issues**, ordered by their consequence for the intended use and the value of fixing them. Select defensible issues the recipient can act on. Keep other findings and pending checks in the internal record; do not append the full audit beneath the short table.
 
@@ -69,7 +69,7 @@ Read [references/notion-review.md](references/notion-review.md). Unless the edit
 - One to five distinct, supported problems, one linked example for each recurring problem. No “What to fix” column, affected-entity appendix, internal audit or decision controls.
 - Optional review date. If no supported issue is established, save a brief truthful statement instead of inventing rows. Communicate unresolved review limits separately to the editor; do not imply an all-clear.
 
-Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
+Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. For routine multi-item news, X or blog bounties, also provide the editor-only accepted/rejected/unresolved item tally and points calculation described in [routine.md](references/routine.md); never include it in the curator’s page or message. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
 
 Create the page in the established destination, or update the matching review on resubmission while preserving comments and decisions. Use a separate page for a requested comparison test. Read back the saved page with the same identity and verify the format, entity links, evidence, quotations and preservation of existing records. Fix discrepancies before reporting completion. Inspect rendering when available; distinguish content checks from visual inspection.
 

@@ -146,6 +146,14 @@ export function recordReview(state,review){
   if(new Set(review.coverage.map(r=>r.itemId)).size!==review.coverage.length||review.coverage.some(r=>!c.itemIds.includes(r.itemId)))throw Error('Coverage must contain each scoped item once');
   if(!Number.isFinite(Date.parse(review.checkedAt)))throw Error('Invalid evidence cutoff');
   for(const r of [...review.coverage,...review.requirements])if(!OUTCOMES.has(r.outcome)||!r.evidence?.length)throw Error('Each item/requirement needs an assessment and evidence or a concrete gap');
+  for(const row of review.coverage)if(row.selection&&(!['qualifies','does_not_qualify','unresolved'].includes(row.selection.outcome)||!row.selection.evidence?.length))throw Error('Selection needs a supported independent item assessment');
+  if(review.scoring){
+    if(!Number.isFinite(review.scoring.rate)||review.scoring.rate<0||!review.scoring.ruleSource)throw Error('Scoring rate needs applicable rule provenance');
+    for(const cap of [review.scoring.weekly,review.scoring.monthly].filter(Boolean)){
+      if(!Number.isFinite(cap.limit)||cap.limit<0)throw Error('Invalid points cap');
+      if(cap.priorPoints!==null&&cap.priorPoints!==undefined&&(!Number.isFinite(cap.priorPoints)||cap.priorPoints<0||!cap.period||!cap.evidence?.length))throw Error('Known cap usage needs a period and ledger evidence');
+    }
+  }
   const findings=review.findings??[];if(findings.length>5)throw Error('Show at most five distinct priority problems');
   for(const f of findings){
     if(!f.issue||!f.citations?.length||!f.evidenceDetail||!f.itemId||!c.itemIds.includes(f.itemId))throw Error('Incomplete finding or item outside case');
@@ -170,7 +178,7 @@ function recipientAssessment(review){
   const detail=review.outcome==='unresolved'&&review.findings.length?' The findings below are ready for you to address.':'';
   return assessment+detail;
 }
-const recipientDate = timestamp => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'Africa/Lagos'}).format(new Date(timestamp));
+const recipientDate = timestamp => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(timestamp));
 export function reportDraft(c){
   if(!c.review||c.review.fingerprint!==c.fingerprint)throw Error('No current recorded review');
   const title=c.curatorName+' — '+c.bountyName+' — submission review · '+c.caseKey;
@@ -213,4 +221,51 @@ export function prepareReportDraft(c,draftFile){
     c.delivery={...c.delivery,status:'draft_ready',draftFingerprint:fingerprint,draftFile};
   }else c.delivery={...c.delivery,draftFile};
   return {draft,changed};
+}
+
+// Internal only. Recipient generators never call or embed this tally.
+export function editorSummary(c){
+  if(c.family!=='routine'||!['news','x','blog'].includes(c.kind)||new Set(c.itemIds).size<2)return null;
+  if(!c.review||c.review.fingerprint!==c.fingerprint)throw Error('No current recorded review');
+  const groups={accepted:[],rejected:[],unresolved:[]};
+  for(const itemId of new Set(c.itemIds)){
+    const row=c.review.coverage.find(r=>r.itemId===itemId);
+    const outcome=row?.selection?.outcome;
+    const key=outcome==='qualifies'?'accepted':outcome==='does_not_qualify'?'rejected':'unresolved';
+    groups[key].push({itemId,name:row?.itemName??itemId,evidence:row?.selection?.evidence??['Independent selection assessment not recorded']});
+  }
+  const rate=c.review.scoring?.rate??null,pointsBeforeCaps=rate===null?null:groups.accepted.length*rate;
+  const caps=['weekly','monthly'].map(period=>{
+    const cap=c.review.scoring?.[period];
+    if(!cap)return {period,status:'unknown',remaining:null};
+    const known=Number.isFinite(cap.priorPoints)&&cap.evidence?.length&&cap.period;
+    return {...cap,kind:period,status:known?'verified':'unknown',remaining:known?Math.max(0,cap.limit-cap.priorPoints):null};
+  });
+  const pointsAfterCaps=pointsBeforeCaps===0?0:pointsBeforeCaps===null||caps.some(x=>x.remaining===null)?null:Math.min(pointsBeforeCaps,...caps.map(x=>x.remaining));
+  return {audience:'editor_only',caseId:c.id,fingerprint:c.fingerprint,curator:c.curatorName.trim(),bounty:c.bountyName,space:c.space,category:c.kind,decisionStatus:'review_recommendation',totalItems:new Set(c.itemIds).size,counts:Object.fromEntries(Object.entries(groups).map(([k,v])=>[k,v.length])),items:groups,rate,ruleSource:c.review.scoring?.ruleSource??null,pointsBeforeCaps,pointsAfterCaps,caps,unresolvedItemsNotScored:groups.unresolved.length,limits:['Acceptance/rejection here are review recommendations; actual editor votes and payments require separate receipts.','Unresolved items earn no assumed credit in this subtotal; later qualifying items require an updated calculation.']};
+}
+export function editorSummaryMarkdown(s){
+  const fmt=n=>n===null?'Not yet determined':String(n);
+  const capRows=s.caps.map(c=>`| ${c.kind??c.period} | ${fmt(c.limit??null)} | ${fmt(c.priorPoints??null)} | ${fmt(c.remaining)} |`).join('\n');
+  return `# Editor-only review tally
+
+${s.curator} — ${s.bounty}
+
+These are review recommendations. No vote or payout is implied.
+
+| Total items | Accepted in review | Rejected in review | Unresolved |
+|---|---|---|---|
+| ${s.totalItems} | ${s.counts.accepted} | ${s.counts.rejected} | ${s.counts.unresolved} |
+
+Points before caps: ${s.counts.accepted} × ${fmt(s.rate)} = ${fmt(s.pointsBeforeCaps)}.
+
+Points after caps: ${fmt(s.pointsAfterCaps)}.${s.pointsAfterCaps===null?' Verify the applicable rate and prior weekly/monthly credits before confirming the award.':''}
+
+Rule: ${s.ruleSource??'Applicable point rule not recorded'}.
+
+| Cap | Limit | Prior credits, excluding this case | Remaining |
+|---|---|---|---|
+${capRows}
+
+`+Object.entries(s.items).map(([key,items])=>'## '+key[0].toUpperCase()+key.slice(1)+'\n\n'+(items.length?items.map(i=>'- '+i.name+' ('+i.itemId+')').join('\n'):'None.')).join('\n\n')+'\n';
 }
