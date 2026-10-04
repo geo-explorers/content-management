@@ -4,7 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import {createRequire} from 'node:module';
-import {stableId} from '../scripts/review-core.mjs';
+import {stableId,reportDraft} from '../scripts/review-core.mjs';
 import {buildReportOps} from '../scripts/report-ops.mjs';
 let sdk;try{sdk=await import('@geoprotocol/geo-sdk');}catch{const r=createRequire(path.join(process.env.GEO_CM_DIR,'package.json'));sdk=await import(r.resolve('@geoprotocol/geo-sdk'));}
 const id=n=>n.toString(16).padStart(32,'0');
@@ -19,4 +19,23 @@ test('stale or existing-report operations require a new preservation plan',()=>{
 test('all serialized operation IDs are full hex strings, never Buffer JSON objects',()=>{const a=buildReportOps(draft,plan,sdk.Graph);for(const o of a.ops){for(const k of ['id','from','to','entity','relationType'])if(o[k]!==undefined)assert.match(o[k],/^[a-f0-9]{32}$/);for(const v of o.set??o.values??[])assert.match(v.property,/^[a-f0-9]{32}$/);}});
 test('unverified or invented receipt objects cannot authorize a dry-run',()=>{const bad=path.join(receiptDir,'failed.json');fs.writeFileSync(bad,JSON.stringify({complete:true,state:'verified',verified:false}));assert.throws(()=>buildReportOps(draft,{...plan,schemaReceipt:bad},sdk.Graph),/unverified/);assert.throws(()=>buildReportOps(draft,{...plan,discoveryReceipt:{verified:false}},sdk.Graph),/existing JSON/);});
 
-test('Geo introduction omits unsupported Markdown table while the native table and full finding remain',()=>{const input={...draft,markdown:'# Report\n\n## Review feedback\n\n| Entity | Full original statement |\n| --- | --- |\n| Item | '+original+' |'};const a=buildReportOps(input,plan,sdk.Graph);const textValues=a.ops.flatMap(o=>o.values??[]).filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value);assert.ok(textValues[0].includes('comparison table below'));assert.equal(textValues[0].includes('| Entity |'),false);assert.ok(textValues.some(t=>t.includes('## Full original statement\n\n'+original)));assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'));});
+test('Geo introduction omits unsupported Markdown table while the native table and full finding remain',()=>{const input={...draft,markdown:'# Report\n\n## Review feedback\n\n| Entity | Full original statement |\n| --- | --- |\n| Item | '+original+' |'};const a=buildReportOps(input,plan,sdk.Graph);const textValues=a.ops.flatMap(o=>o.values??[]).filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value);assert.ok(textValues[0].includes('Open each review'));assert.equal(textValues[0].includes('| Entity |'),false);assert.ok(textValues.some(t=>t.includes('## Full original statement\n\n'+original)));assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'));});
+
+test('recipient draft and Geo page preserve separate title, readable review date and linked full details',()=>{
+ const c={id:draft.caseId,fingerprint:draft.fingerprint,curatorName:'Fixture curator',bountyName:'Fixture bounty',caseKey:'2026-10-02',space:'crypto',bountyId:id(8),spec:{spaceId:id(5)},proposalIds:[id(4)],proposalRefs:{[id(4)]:{spaceId:id(5)}},review:{...draft.review,fingerprint:draft.fingerprint,outcome:'unresolved',checkedAt:'2026-10-03T23:38:26.186Z'}};
+ const rendered=reportDraft(c),a=buildReportOps(rendered,{...plan,targetSpaceId:rendered.targetSpaceId},sdk.Graph);
+ const body=a.ops.flatMap(o=>o.values??[]).filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value);
+ assert.equal(a.created.find(e=>e.id===a.pageId).name,rendered.title);
+ assert.equal(body[0].includes(rendered.title),false);
+ assert.equal(rendered.review.checkedAt,c.review.checkedAt);
+ assert.equal(rendered.review.outcome,'unresolved');
+ assert.match(body[0],/4 October 2026/); // Lagos date crosses midnight; internal UTC timestamp is preserved.
+ assert.equal(body[0].includes(c.review.checkedAt),false);
+ assert.equal(body[0].includes('unresolved'),false);
+ assert.match(body[0],/still in progress/);
+ assert.match(body[0],/Open each review/);
+ const finding=a.created.find(e=>e.types.includes('b14985a95e0c5a3ca872f29e22719ace'));
+ assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'&&e.to===finding.id));
+ assert.ok(a.edges.some(e=>e.type==='beaba5cba67741a8b35377030613fc70'&&e.from===finding.id));
+ assert.ok(body.some(t=>t.includes(original)&&t.includes('https://example.org/a')&&t.includes(draft.review.findings[0].issue)));
+});

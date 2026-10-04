@@ -26,7 +26,7 @@ export function buildReportOps(draft,plan,Graph){
   function text(parent,slug,body,position){const id=stableId(pageId+':text:'+slug);create(id,undefined,T.text,[val(P.markdown,body)]);rel(parent,P.blocks,id,{position});return id;}
   if(plan.addIssueToFindingSchema){rel(T.finding,P.columns,P.issue);}
   create(pageId,draft.title,T.page);
-  const intro=draft.review.findings.length?draft.markdown.split('## Review feedback')[0]+'## Review feedback\n\nThe comparison table below links to the complete finding, including the full original statement, exact excerpt and source evidence.\n':draft.markdown;
+  const intro=draft.review.findings.length?draft.markdown.split('## Review feedback')[0]+'## Review feedback\n\nOpen each review in the table below to see the full details, including the original statement, the issue and supporting sources.\n':draft.markdown;
   text(pageId,'feedback',intro,'a0');
   if(draft.review.findings.length){
     const tableId=stableId(pageId+':feedback-table');create(tableId,'Review feedback',T.data);

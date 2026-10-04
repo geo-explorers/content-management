@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.5.1"
+  version: "0.5.2"
 ---
 
 # Geo submission review
@@ -48,6 +48,8 @@ An existing mirror need not be recreated. Use applicable team rules when availab
 For canonical comparisons, record identity, submitted/current values, space and evidence cutoff. A difference is not automatically an error. Never infer that an entity is absent from a capped or failed search.
 
 ## 3. Select actionable feedback
+
+Write recipient pages in kind, clear, everyday language. Keep the title in the page name only; do not repeat it as a body heading. Explain what the review means and what the curator can act on without technical status labels. Use a readable review date (for example, “Last reviewed: 3 October 2026”), keeping the precise timestamp and structured assessment in the internal record. For Geo reports, tell readers to open each linked review in the table for its full details; verify those finding pages expose the complete original, issue and supporting evidence. Preserve meaningful uncertainty and distinguish the agent’s recommendation from an editor’s approval or payout.
 
 Default to **1–5 priority issues**, ordered by their consequence for the intended use and the value of fixing them. Select defensible issues the recipient can act on. Keep other findings and pending checks in the internal record; do not append the full audit beneath the short table.
 

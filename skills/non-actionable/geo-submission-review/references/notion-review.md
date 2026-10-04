@@ -4,7 +4,7 @@ Read for every default review delivery. Use `notion-operations` when available, 
 
 ## Required page structure
 
-Use **“<Submission or topic> — review feedback”**, zero to two brief introductory bullets and one native table with exactly these headers:
+Put **“<Submission or topic> — review feedback”** in the page name only, without repeating it as a body heading. Use zero to two brief introductory bullets and one native table with exactly these headers:
 
 | Entity | Issue | Citations for quality checks | Relevant quote or evidence detail |
 |---|---|---|---|
@@ -30,7 +30,7 @@ Quotes must be exact excerpts from retrieved evidence. Observe source quotation 
 
 If no supported issue is established, create a brief honest review page without an empty or fabricated findings table. Keep any unresolved coverage limits in the editor handoff. Honor explicit requests for another format or delivery location; record that exception internally.
 
-Keep the review brief, inventory, all checks, other affected entities, unshown findings, verification status, severity, technical QA and editor decisions in a separate internal record. Do not append a long audit, affected-item toggle or general incomplete-review disclaimer to the forwardable page. Include uncertainty within an individual row when it changes that finding. A review date may appear at the bottom.
+Keep the review brief, inventory, all checks, other affected entities, unshown findings, verification status, severity, technical QA and editor decisions in a separate internal record. Do not append a long audit, affected-item toggle or general incomplete-review disclaimer to the forwardable page. Include uncertainty within an individual row when it changes that finding. A review date may appear at the bottom in a readable form, such as “Last reviewed: 3 October 2026”; keep precise timestamps and assessment codes internally.
 
 Record each finding's target, original content, criterion, evidence/locator, effect, resolution criterion and history. Keep agent findings separate from human decisions. Preserve dismissals and comments; match reruns by entity and underlying issue without deleting history. Reuse existing internal status/severity schemes. A short report does not imply that omitted items passed.
 

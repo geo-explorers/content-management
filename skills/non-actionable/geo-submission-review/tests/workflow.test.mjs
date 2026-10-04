@@ -48,3 +48,16 @@ test('unchanged drafts preserve verified delivery; changes retain report identit
  assert.equal(prepareReportDraft(c,'second.json').changed,false);assert.equal(c.delivery.status,'verified');assert.deepEqual(c.delivery.receipt,receipt);
  c.review.findings[0].issue='Revised finding';assert.equal(prepareReportDraft(c,'third.json').changed,true);assert.equal(c.delivery.reportId,id(99));assert.equal(c.deliveryHistory.at(-1).status,'verified');
 });
+
+test('readable outcomes do not turn unfinished research or a recommendation into editor approval',()=>{
+ const s=emptyState();assemble(s,intake(),config);const c=Object.values(s.cases)[0];
+ for(const outcome of ['meets_requirements','needs_correction','does_not_meet_requirements','unresolved']){
+  recordReview(s,review(c,{outcome,findings:[]}));const d=reportDraft(c);
+  assert.equal(d.review.outcome,outcome);
+  assert.equal(d.markdown.includes(d.title),false);
+  assert.equal(d.markdown.includes('Agent assessment:'),false);
+  assert.equal(d.markdown.includes('Evidence checked:'),false);
+  assert.equal(/approved|paid|accepted/i.test(d.markdown),false);
+  if(outcome==='unresolved'){assert.match(d.markdown,/still in progress/);assert.equal(d.markdown.includes('ready for you to address'),false);}
+ }
+});

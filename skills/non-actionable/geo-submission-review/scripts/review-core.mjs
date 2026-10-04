@@ -160,6 +160,17 @@ export function recordReview(state,review){
 }
 
 const esc = s => String(s??'').replaceAll('|','\\|').replaceAll('\n','<br>');
+function recipientAssessment(review){
+  const assessment={
+    meets_requirements:'The submission meets the requirements checked in this review.',
+    needs_correction:'Please address the issues below before the submission is reviewed again.',
+    does_not_meet_requirements:'The submission does not meet the bounty requirements checked in this review.',
+    unresolved:'This review is still in progress.'
+  }[review.outcome];
+  const detail=review.outcome==='unresolved'&&review.findings.length?' The findings below are ready for you to address.':'';
+  return assessment+detail;
+}
+const recipientDate = timestamp => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'Africa/Lagos'}).format(new Date(timestamp));
 export function reportDraft(c){
   if(!c.review||c.review.fingerprint!==c.fingerprint)throw Error('No current recorded review');
   const title=c.curatorName+' — '+c.bountyName+' — submission review · '+c.caseKey;
@@ -167,7 +178,7 @@ export function reportDraft(c){
   const rows=c.review.findings.map(f=>[f.itemUrl??f.itemId,f.originalRef?f.original:'Not supplied — '+f.missingRequirement,f.excerpt||'Not applicable — missing field',f.issue,f.citations.map(x=>`[${x.locator}](${x.url})`).join('<br>'),f.evidenceDetail]);
   const table=rows.length?'| Entity | Full original statement | Exact excerpt under review | Issue | Citations for quality checks | Relevant quote or evidence detail |\n|---|---|---|---|---|---|\n'+rows.map(r=>'| '+r.map(esc).join(' | ')+' |').join('\n'):'No supported actionable issue was established in the recorded scope.';
   return {schemaVersion:1,caseId:c.id,fingerprint:c.fingerprint,targetSpaceId:SPACES[c.space].datasets,pageId:c.delivery?.reportId??stableId('submission-report:'+c.id),title,publicationStatus:'draft_only',review:c.review,
-    markdown:`# ${title}\n\nBounty: [${c.bountyName}](https://www.geobrowser.io/space/${c.spec.spaceId}/${c.bountyId})\n\nAgent assessment: ${c.review.outcome}. Evidence checked: ${c.review.checkedAt}.\n\n## Proposals reviewed\n\n${proposalLinks.join('\n')}\n\n## Review feedback\n\n${table}\n`,
+    markdown:`Bounty: [${c.bountyName}](https://www.geobrowser.io/space/${c.spec.spaceId}/${c.bountyId})\n\n${recipientAssessment(c.review)}\n\nLast reviewed: ${recipientDate(c.review.checkedAt)}.\n\n## Proposals reviewed\n\n${proposalLinks.join('\n')}\n\n## Review feedback\n\n${table}\n`,
     findings:rows,editorDecisions:c.editorDecisions};
 }
 
