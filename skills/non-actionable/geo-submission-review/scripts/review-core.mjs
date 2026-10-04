@@ -162,7 +162,7 @@ export function recordReview(state,review){
     for(const citation of f.citations)if(!/^https:\/\//.test(citation.url)||!citation.locator||!Number.isFinite(Date.parse(citation.retrievedAt)))throw Error('Evidence link needs URL, locator and retrieval time');
   }
   if(c.review)c.reviewHistory=[...(c.reviewHistory??[]),c.review];
-  c.review={...review,findings,agentAssessment:true};c.status=review.outcome==='unresolved'?'review_unresolved':'reviewed';
+  c.review={...review,findings,agentAssessment:true};c.status=reviewReadiness(c).complete?'reviewed':'review_unresolved';
   if(c.delivery?.receipt)c.deliveryHistory=[...(c.deliveryHistory??[]),structuredClone(c.delivery)];
   c.delivery={...c.delivery,status:'draft_ready'};return c;
 }
@@ -179,13 +179,29 @@ function recipientAssessment(review){
   return assessment+detail;
 }
 const recipientDate = timestamp => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(timestamp));
+// Decision completeness, separate from exhaustive audits and payment-ledger reconciliation.
+export function reviewReadiness(c){
+  const review=c.review,blockers=[];
+  if(!review||review.fingerprint!==c.fingerprint)blockers.push({reason:'No current recorded review'});
+  if(!review||!['meets_requirements','needs_correction','does_not_meet_requirements'].includes(review.outcome))blockers.push({reason:'Submission decision still needs investigation'});
+  const ids=[...new Set(c.itemIds??review?.coverage?.map(r=>r.itemId)??[])];
+  if(!ids.length)blockers.push({reason:'Scoped item decisions are missing'});
+  const independent=c.family==='routine'&&['news','x','blog'].includes(c.kind)&&ids.length>1;
+  for(const itemId of ids){
+    const row=review?.coverage?.find(r=>r.itemId===itemId);
+    const resolved=independent?['qualifies','does_not_qualify'].includes(row?.selection?.outcome)&&row.selection.evidence?.length:row?.selection?['qualifies','does_not_qualify'].includes(row.selection.outcome)&&row.selection.evidence?.length:['meets_requirements','needs_correction','does_not_meet_requirements'].includes(row?.outcome)&&row.evidence?.length;
+    if(!resolved)blockers.push({itemId,reason:'Item decision still needs investigation'});
+  }
+  for(const gap of review?.decisionGaps??[])blockers.push({reason:String(gap)});
+  return {complete:blockers.length===0,blockers};
+}
 export function reportDraft(c){
   if(!c.review||c.review.fingerprint!==c.fingerprint)throw Error('No current recorded review');
   const title=c.curatorName+' — '+c.bountyName+' — submission review · '+c.caseKey;
   const proposalLinks=c.proposalIds.map(id=>`- [Proposal ${id.slice(0,8)}](https://www.geobrowser.io/space/${c.proposalRefs[id].spaceId}/governance?proposalId=${id})`);
   const rows=c.review.findings.map(f=>[f.itemUrl??f.itemId,f.originalRef?f.original:'Not supplied — '+f.missingRequirement,f.excerpt||'Not applicable — missing field',f.issue,f.citations.map(x=>`[${x.locator}](${x.url})`).join('<br>'),f.evidenceDetail]);
   const table=rows.length?'| Entity | Full original statement | Exact excerpt under review | Issue | Citations for quality checks | Relevant quote or evidence detail |\n|---|---|---|---|---|---|\n'+rows.map(r=>'| '+r.map(esc).join(' | ')+' |').join('\n'):'No supported actionable issue was established in the recorded scope.';
-  return {schemaVersion:1,caseId:c.id,fingerprint:c.fingerprint,targetSpaceId:SPACES[c.space].datasets,pageId:c.delivery?.reportId??stableId('submission-report:'+c.id),title,publicationStatus:'draft_only',review:c.review,
+  return {schemaVersion:1,caseId:c.id,fingerprint:c.fingerprint,targetSpaceId:SPACES[c.space].datasets,pageId:c.delivery?.reportId??stableId('submission-report:'+c.id),title,publicationStatus:'draft_only',reviewScope:{itemIds:c.itemIds,kind:c.kind,family:c.family},readiness:reviewReadiness(c),review:c.review,
     markdown:`Bounty: [${c.bountyName}](https://www.geobrowser.io/space/${c.spec.spaceId}/${c.bountyId})\n\n${recipientAssessment(c.review)}\n\nLast reviewed: ${recipientDate(c.review.checkedAt)}.\n\n## Proposals reviewed\n\n${proposalLinks.join('\n')}\n\n## Review feedback\n\n${table}\n`,
     findings:rows,editorDecisions:c.editorDecisions};
 }
@@ -214,6 +230,7 @@ export function recordDelivery(state,delivery){
 }
 
 export function prepareReportDraft(c,draftFile){
+  if(!reviewReadiness(c).complete)throw Error('Final report needs investigation before draft preparation');
   const draft=reportDraft(c), fingerprint=hash(draft);
   const changed=c.delivery?.draftFingerprint!==fingerprint;
   if(changed){
@@ -245,6 +262,7 @@ export function editorSummary(c){
   return {audience:'editor_only',caseId:c.id,fingerprint:c.fingerprint,curator:c.curatorName.trim(),bounty:c.bountyName,space:c.space,category:c.kind,decisionStatus:'review_recommendation',totalItems:new Set(c.itemIds).size,counts:Object.fromEntries(Object.entries(groups).map(([k,v])=>[k,v.length])),items:groups,rate,ruleSource:c.review.scoring?.ruleSource??null,pointsBeforeCaps,pointsAfterCaps,caps,unresolvedItemsNotScored:groups.unresolved.length,limits:['Acceptance/rejection here are review recommendations; actual editor votes and payments require separate receipts.','Unresolved items earn no assumed credit in this subtotal; later qualifying items require an updated calculation.']};
 }
 export function editorSummaryMarkdown(s){
+  if(s.counts.unresolved)throw Error('Finish unresolved item decisions before issuing a final editor tally');
   const fmt=n=>n===null?'Not yet determined':String(n);
   const capRows=s.caps.map(c=>`| ${c.kind??c.period} | ${fmt(c.limit??null)} | ${fmt(c.priorPoints??null)} | ${fmt(c.remaining)} |`).join('\n');
   return `# Editor-only review tally
@@ -253,9 +271,9 @@ ${s.curator} — ${s.bounty}
 
 These are review recommendations. No vote or payout is implied.
 
-| Total items | Accepted in review | Rejected in review | Unresolved |
-|---|---|---|---|
-| ${s.totalItems} | ${s.counts.accepted} | ${s.counts.rejected} | ${s.counts.unresolved} |
+| Total items | Accepted in review | Rejected in review |
+|---|---|---|
+| ${s.totalItems} | ${s.counts.accepted} | ${s.counts.rejected} |
 
 Points before caps: ${s.counts.accepted} × ${fmt(s.rate)} = ${fmt(s.pointsBeforeCaps)}.
 
@@ -267,5 +285,5 @@ Rule: ${s.ruleSource??'Applicable point rule not recorded'}.
 |---|---|---|---|
 ${capRows}
 
-`+Object.entries(s.items).map(([key,items])=>'## '+key[0].toUpperCase()+key.slice(1)+'\n\n'+(items.length?items.map(i=>'- '+i.name+' ('+i.itemId+')').join('\n'):'None.')).join('\n\n')+'\n';
+`+Object.entries(s.items).filter(([key])=>key!=='unresolved').map(([key,items])=>'## '+key[0].toUpperCase()+key.slice(1)+'\n\n'+(items.length?items.map(i=>'- '+i.name+' ('+i.itemId+')').join('\n'):'None.')).join('\n\n')+'\n';
 }

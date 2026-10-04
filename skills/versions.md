@@ -12,7 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
-### geo-submission-review — 0.5.3
+### geo-submission-review — 0.5.4
+
+- **2026-10-04 · v0.5.4** — Finish every material item decision before final reporting. Incomplete cases remain in an investigation queue, without forced acceptance/rejection or omitted curators. Final editor tallies show only decided groups; report publication operations independently enforce completeness. Preserve separate copy QA and cap-ledger checks.
 
 - **2026-10-04 · v0.5.3** — Recipient dates and precedence comparisons use UTC. Separate editor-only summaries count distinct accepted/rejected/unresolved routine news/X/blog items and calculate recommended points with sourced rates and verified weekly/monthly cap headroom. Keep copy findings separate from event eligibility; unknown ledger usage cannot produce a final award. No editor-only tally enters shared feedback.
 

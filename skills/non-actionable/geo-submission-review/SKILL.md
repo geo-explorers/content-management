@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.5.3"
+  version: "0.5.4"
 ---
 
 # Geo submission review
@@ -47,6 +47,14 @@ An existing mirror need not be recreated. Use applicable team rules when availab
 
 For canonical comparisons, record identity, submitted/current values, space and evidence cutoff. A difference is not automatically an error. Never infer that an entity is absent from a capped or failed search.
 
+## Completion before final reporting
+
+A final submission report must give an evidence-backed recommendation for every scoped item: accept, reject, or return for a specific correction. **Do not deliver or publish a final report containing unresolved submission decisions.** Complete the research first: read primary records and accessible full alternatives, reconcile dates and event identity, and explain editorial significance against the bounty criterion. Keep generated-copy checks separate from event eligibility under the applicable Crypto rule; an unchecked secondary detail does not by itself cancel a qualifying event.
+
+If a material decision still cannot be made, retain the case in the internal investigation queue and give the editor a separate, plainly labeled work-in-progress/blocker update. Do not hide the gap, rename it as rejection, assume acceptance or omit the affected item to make the report look complete. A specific evidence-backed correction can be a final review recommendation; the curator's unfinished repair is different from the agent's unfinished investigation. Preserve non-decisive audit limitations internally. Payment-ledger checks remain a separate award prerequisite and do not make completed submission decisions unresolved.
+
+For routine batches, complete each independent selection assessment before issuing the editor-only tally; final tallies show accepted/rejected counts and applicable points, with no unresolved category. For other bounties, complete each item's assessment. Record any remaining material requirement blockers in `decisionGaps`. Read [routine.md](references/routine.md) for the completion gate and queue behavior.
+
 ## 3. Select actionable feedback
 
 Write recipient pages in kind, clear, everyday language. Keep the title in the page name only; do not repeat it as a body heading. Explain what the review means and what the curator can act on without technical status labels. Use a readable UTC review date (for example, “Last reviewed: 3 October 2026”). When time matters, show both timestamps in UTC with dates; omit hours when dates alone establish the point. Keep precise timestamps and structured assessments internally. For Geo reports, tell readers to open each linked review in the table for its full details; verify those finding pages expose the complete original, issue and supporting evidence. Preserve meaningful uncertainty and distinguish the agent’s recommendation from an editor’s approval or payout.
@@ -57,7 +65,7 @@ Default to **1–5 priority issues**, ordered by their consequence for the inten
 - Each row identifies the exact item and disputed excerpt or missing requirement, explains the issue, and exposes its supporting citation and relevant quote or evidence detail. Keep meaningful uncertainty in that row when it changes the requested action.
 - Include verified inaccuracies the curator could review and edit before submitting, even when an injector generated them (Mohammed, 30 September 2026). Generation alone is no exemption. Technical failures such as edits not saving go to the editor/technical owner; recurring generation errors can also be recorded there while the curator receives feedback. Apply an explicitly different workflow only when supported by current editor instructions. Feedback does not automatically decide selection, voting or points.
 - Agent-verified findings may be drafted immediately for editor review; drafting does not require the editor to have pre-confirmed each one. Preserve human decisions separately and never mark agent conclusions as editor approval.
-- If no actionable issue is established, do not invent one to fill the table. Tell the editor what was checked and what remains unresolved; avoid an unsupported all-clear.
+- If no actionable issue is established, do not invent one to fill the table. Finish the agreed decision checks before reporting completion; if a material check is blocked, issue a separate work-in-progress update and retain the investigation internally.
 
 ## 4. Save and verify the Notion review
 
@@ -69,7 +77,7 @@ Read [references/notion-review.md](references/notion-review.md). Unless the edit
 - One to five distinct, supported problems, one linked example for each recurring problem. No “What to fix” column, affected-entity appendix, internal audit or decision controls.
 - Optional review date. If no supported issue is established, save a brief truthful statement instead of inventing rows. Communicate unresolved review limits separately to the editor; do not imply an all-clear.
 
-Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. For routine multi-item news, X or blog bounties, also provide the editor-only accepted/rejected/unresolved item tally and points calculation described in [routine.md](references/routine.md); never include it in the curator’s page or message. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
+Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. For routine multi-item news, X or blog bounties, also provide the editor-only accepted/rejected item tally and points calculation described in [routine.md](references/routine.md); never include it in the curator’s page or message. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
 
 Create the page in the established destination, or update the matching review on resubmission while preserving comments and decisions. Use a separate page for a requested comparison test. Read back the saved page with the same identity and verify the format, entity links, evidence, quotations and preservation of existing records. Fix discrepancies before reporting completion. Inspect rendering when available; distinguish content checks from visual inspection.
 

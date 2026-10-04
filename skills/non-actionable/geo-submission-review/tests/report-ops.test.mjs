@@ -9,7 +9,7 @@ import {buildReportOps} from '../scripts/report-ops.mjs';
 let sdk;try{sdk=await import('@geoprotocol/geo-sdk');}catch{const r=createRequire(path.join(process.env.GEO_CM_DIR,'package.json'));sdk=await import(r.resolve('@geoprotocol/geo-sdk'));}
 const id=n=>n.toString(16).padStart(32,'0');
 const original='Full original with meaningful qualifiers. '.repeat(30);
-const draft={caseId:id(1),pageId:stableId('submission-report:'+id(1)),publicationStatus:'draft_only',fingerprint:'fixture',targetSpaceId:id(2),title:'Fixture curator — submission review',markdown:'Compact recipient feedback.',review:{findings:[{itemId:id(3),originalRef:{proposalId:id(4)},original,excerpt:'meaningful qualifiers',issue:'A supported fixture mismatch',evidenceDetail:'Read fixture evidence',citations:[{url:'https://example.org/a',locator:'Paragraph A',retrievedAt:'2026-10-03T12:00Z'},{url:'https://example.org/a#b',locator:'Paragraph B',retrievedAt:'2026-10-03T12:00Z'}]}]}};
+const draft={caseId:id(1),pageId:stableId('submission-report:'+id(1)),publicationStatus:'draft_only',fingerprint:'fixture',targetSpaceId:id(2),title:'Fixture curator — submission review',markdown:'Compact recipient feedback.',review:{fingerprint:'fixture',outcome:'needs_correction',coverage:[{itemId:id(3),outcome:'needs_correction',evidence:['Verified fixture defect']}],findings:[{itemId:id(3),originalRef:{proposalId:id(4)},original,excerpt:'meaningful qualifiers',issue:'A supported fixture mismatch',evidenceDetail:'Read fixture evidence',citations:[{url:'https://example.org/a',locator:'Paragraph A',retrievedAt:'2026-10-03T12:00Z'},{url:'https://example.org/a#b',locator:'Paragraph B',retrievedAt:'2026-10-03T12:00Z'}]}]}};
 const receiptDir=fs.mkdtempSync(path.join(os.tmpdir(),'report-receipt-test-'));const receiptFile=path.join(receiptDir,'receipt.json');fs.writeFileSync(receiptFile,JSON.stringify({complete:true,state:'verified'}));
 const plan={mode:'create',targetSpaceId:id(2),caseFingerprint:'fixture',discoveryReceipt:receiptFile,schemaReceipt:receiptFile,duplicateCheckReceipt:receiptFile,addIssueToFindingSchema:true,items:{[id(3)]:{name:'Fixture item',spaceId:id(5),proposalUrl:'https://www.geobrowser.io/space/'+id(5)+'/governance?proposalId='+id(4),state:'captured_pending'}},citations:{'https://example.org/a':{entityId:id(6),spaceId:id(5),state:'verified_live'},'https://example.org/a#b':{entityId:id(6),spaceId:id(5),state:'verified_live'}}};
 test('operation preview is deterministic, typed, complete and has no destructive operations',()=>{const a=buildReportOps(draft,plan,sdk.Graph),b=buildReportOps(draft,plan,sdk.Graph);assert.deepEqual(a,b);assert.ok(a.created.every(e=>e.types.length));assert.ok(a.ops.some(o=>(o.set??o.values??[]).some(v=>v.property==='5d4dda664938562da3eec5bc6017c04c'&&v.value.value===original)));assert.equal(a.ops.some(o=>/delete/.test(o.type)||o.unset?.length),false);});
@@ -22,17 +22,17 @@ test('unverified or invented receipt objects cannot authorize a dry-run',()=>{co
 test('Geo introduction omits unsupported Markdown table while the native table and full finding remain',()=>{const input={...draft,markdown:'# Report\n\n## Review feedback\n\n| Entity | Full original statement |\n| --- | --- |\n| Item | '+original+' |'};const a=buildReportOps(input,plan,sdk.Graph);const textValues=a.ops.flatMap(o=>o.values??[]).filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value);assert.ok(textValues[0].includes('Open each review'));assert.equal(textValues[0].includes('| Entity |'),false);assert.ok(textValues.some(t=>t.includes('## Full original statement\n\n'+original)));assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'));});
 
 test('recipient draft and Geo page preserve separate title, readable review date and linked full details',()=>{
- const c={id:draft.caseId,fingerprint:draft.fingerprint,curatorName:'Fixture curator',bountyName:'Fixture bounty',caseKey:'2026-10-02',space:'crypto',bountyId:id(8),spec:{spaceId:id(5)},proposalIds:[id(4)],proposalRefs:{[id(4)]:{spaceId:id(5)}},review:{...draft.review,fingerprint:draft.fingerprint,outcome:'unresolved',checkedAt:'2026-10-03T23:38:26.186Z'}};
+ const c={id:draft.caseId,fingerprint:draft.fingerprint,curatorName:'Fixture curator',bountyName:'Fixture bounty',caseKey:'2026-10-02',space:'crypto',bountyId:id(8),spec:{spaceId:id(5)},proposalIds:[id(4)],proposalRefs:{[id(4)]:{spaceId:id(5)}},review:{...draft.review,fingerprint:draft.fingerprint,outcome:'needs_correction',checkedAt:'2026-10-03T23:38:26.186Z'}};
  const rendered=reportDraft(c),a=buildReportOps(rendered,{...plan,targetSpaceId:rendered.targetSpaceId},sdk.Graph);
  const body=a.ops.flatMap(o=>o.values??[]).filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value);
  assert.equal(a.created.find(e=>e.id===a.pageId).name,rendered.title);
  assert.equal(body[0].includes(rendered.title),false);
  assert.equal(rendered.review.checkedAt,c.review.checkedAt);
- assert.equal(rendered.review.outcome,'unresolved');
+ assert.equal(rendered.review.outcome,'needs_correction');
  assert.match(body[0],/3 October 2026/); // Recipient dates now use UTC too.
  assert.equal(body[0].includes(c.review.checkedAt),false);
  assert.equal(body[0].includes('unresolved'),false);
- assert.match(body[0],/still in progress/);
+ assert.match(body[0],/address the issues/);
  assert.match(body[0],/Open each review/);
  const finding=a.created.find(e=>e.types.includes('b14985a95e0c5a3ca872f29e22719ace'));
  assert.ok(a.edges.some(e=>e.type==='a99f9ce12ffa4dac8c61f6310d46064a'&&e.to===finding.id));
@@ -46,3 +46,5 @@ test('Geo publication ops exclude internal editor scoring and cap-ledger fields'
  assert.equal(JSON.stringify(out).includes('PRIVATE_EDITOR_RULE_SENTINEL'),false);
  assert.equal(JSON.stringify(out).includes('PRIVATE_LEDGER_SENTINEL'),false);
 });
+
+test('publication refuses incomplete item decisions and does not trust a ready label',()=>{const pending=structuredClone(draft);pending.readiness={complete:true};pending.review.coverage[0].outcome='unresolved';assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);pending.review.coverage[0].outcome='needs_correction';pending.review.outcome='unresolved';assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);pending.review.outcome='needs_correction';pending.review.decisionGaps=['Material bounty requirement not checked'];assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);});
