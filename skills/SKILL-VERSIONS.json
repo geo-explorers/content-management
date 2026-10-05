@@ -43,7 +43,7 @@
     },
     "non-actionable/geo-submission-review": {
       "version": "0.5.6",
-      "approved_commit": "3a7f9b32a5862fc7f0b85f458360c928e1e1784a",
+      "approved_commit": "351cfb810e69a29209b08be4ba60071d8594764d",
       "content_sha256": "13de47c93a9657205e586be5e11c4c3983caef307a5eb65e80cd93c0fa17a6a2"
     },
     "non-actionable/image-banner-recompose": {
