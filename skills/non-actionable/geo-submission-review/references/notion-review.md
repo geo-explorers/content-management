@@ -1,6 +1,6 @@
 # Notion review feedback
 
-Read for every default review delivery. Use `notion-operations` when available, or the authorized connector's documented identity, pagination and write/readback procedures. Confirm the actual destination and existing content before writing. Reuse a matching review for resubmissions; use a separate page for requested comparison tests. Preserve the submission, comments and human decisions.
+Read only when the editor explicitly requests a Notion delivery alternative for the current review. The default for all submission reviews is the matching Geo datasets space. An existing mirror or historical Notion review does not authorize this exception. Use `notion-operations` when available, or the authorized connector's documented identity, pagination and write/readback procedures. Confirm the actual destination and existing content before writing. Reuse a matching review for resubmissions; use a separate page for requested comparison tests. Preserve the submission, comments and human decisions.
 
 ## Required page structure
 

@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-submission-review — 0.5.6
+- 2026-10-05 · Deliver every submission review in its verified matching Geo datasets space, including individually supplied submissions without a bounty. Existing Notion mirrors no longer select delivery; Notion requires an explicit current-review exception. Preserve concise evidence-backed findings, full details, private editor summaries and separate vote/message/payment authorization. Verify live destination identity and signer access; correct the World affairs datasets mapping to da96a4c26e718bfa6c27c3b1f3c316cd after live readback.
+
 ### geo-submission-review — 0.5.5
 
 - **2026-10-05 · v0.5.5** — Make authorized datasets publication/readback and linked curator feedback drafts the default Geo completion flow. Present a concrete editor approval plan before YES/NO votes; apply and verify approved actions, with proposal execution explicitly scoped and eligibility checked. Mixed-batch replies identify passing and failing work, preserve accepted-item correction exceptions and keep counts/points private. Intake remains read-only; scheduling, payouts and message sending retain separate authorization.

@@ -6,7 +6,7 @@ export const SPACES = {
   crypto:{main:'c9f267dcb0d270718c2a3c45a64afd32',datasets:'5908c73ad336472ccbd983491d2d17e4'},
   ai:{main:'41e851610e13a19441c4d980f2f2ce6b',datasets:'941964642f4d3e70ef48f54a3915277d'},
   health:{main:'52c7ae149838b6d47ce0f3b2a5974546',datasets:'44eb138f564fbed6ed9ce543de1b849c'},
-  'world-affairs':{main:'89bd89bf28ff8a0963faf92a8c905e20',datasets:'2d48dbdab027c7b497799671d4ce52e2'},
+  'world-affairs':{main:'89bd89bf28ff8a0963faf92a8c905e20',datasets:'da96a4c26e718bfa6c27c3b1f3c316cd'},
   'us-politics':{main:'4582fbbee28a16589154f7e36f1ee3c5',datasets:'1b3d2963d14de99d4e440000125edb65'}
 };
 export const normalizeId = s => { const v=String(s??'').replaceAll('-','').toLowerCase(); if(!/^[a-f0-9]{32}$/.test(v))throw Error('Expected a full Geo ID');return v; };
