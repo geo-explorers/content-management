@@ -1,15 +1,25 @@
 ---
 name: geo-submission-review
-description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements and prepare datasets-space reports. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
+description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements, publish datasets-space reports, draft linked curator feedback and apply accept/reject votes after editor approval. Also review specified submissions and deliver evidence-backed Notion feedback when requested.
 metadata:
-  version: "0.5.4"
+  version: "0.5.5"
 ---
 
 # Geo submission review
 
-Choose the requested mode. **Space discovery / recurring bounty review:** read [references/routine.md](references/routine.md), use the packaged review runner, then review its queued cases and prepare one corresponding datasets-space report per curator/bounty submission. **Specified submission / Notion review:** follow sections 1–4 below. This applies across spaces and bounty types. Keep the full coverage record separately from compact recipient feedback.
+Choose the requested mode. **Space discovery / recurring bounty review:** read [references/routine.md](references/routine.md), use the packaged review runner, then review its queued cases and complete the Geo delivery flow below for each curator/bounty submission. **Specified submission / Notion review:** follow sections 1–4 below. This applies across spaces and bounty types. Keep the full coverage record separately from compact recipient feedback.
 
-The intake and review scripts are read-only on Geo. Geo report writes route through `geo-publish` and its human gate; read [references/geo-delivery.md](references/geo-delivery.md) before preparing them. Discovery defaults to datasets-space drafts until report-only publication authorization is recorded. For specified-submission reviews, use the editor's supplied Notion destination or established review location; ask only when neither is clear. An explicitly requested alternative destination takes precedence. Notion delivery and format verification are completion requirements, not optional final steps. Preparing feedback does not authorize sending it, editing the submission, voting, or paying a bounty.
+The intake and review scripts are read-only on Geo; the agent carries out delivery through `geo-publish` and approved governance tools. Read [references/geo-delivery.md](references/geo-delivery.md) and [references/feedback-and-votes.md](references/feedback-and-votes.md). Mohammed has authorized completed submission reports to be published in the matching datasets space as the default for this workflow. Record that standing scope; apply publication safeguards and readback without asking again within it. Honor an explicit drafts-only or narrower request. Other editors need their own applicable report authorization. For specified-submission reviews, use the editor's supplied Notion destination or established review location; ask only when neither is clear. An explicitly requested alternative destination takes precedence. Notion delivery and format verification are completion requirements, not optional final steps. Report publication does not authorize votes, editing curator submissions, payouts or sending messages. Ask the editor to approve the concrete accept/reject vote plan, then carry out the approved actions.
+
+## Default Geo completion flow
+
+1. Finish the review and resolve every material submission decision.
+2. Publish or update each report in the matching datasets space through `geo-publish`. Read it back and open every linked finding to verify the full details and sources.
+3. Draft a short, kind curator reply with the verified report URL. For mixed batches, distinguish items that passed from those that failed, identify rejected items and say what needs attention. Keep numerical tallies and points private to the editor.
+4. Present the editor with the exact proposal links, accept/reject recommendations, correction holds and execution consequences. Ask whether to carry out that plan; existing approval for those exact actions remains valid.
+5. With approval, refresh proposal state, apply only the approved votes and verify them. A separate proposal-execution transaction needs explicit coverage in the approval and must wait for voting eligibility. Update feedback drafts to reflect confirmed outcomes and record receipts.
+
+Drafting the report or reply alone does not complete Geo delivery. If publication is blocked, retain the draft and tell the editor the exact blocker; do not invent a published URL. Feedback remains a draft until sending is separately authorized. An editor approval wait is a valid handoff after the reports and linked drafts are ready.
 
 ## 1. Establish intent
 
@@ -77,7 +87,7 @@ Read [references/notion-review.md](references/notion-review.md). Unless the edit
 - One to five distinct, supported problems, one linked example for each recurring problem. No “What to fix” column, affected-entity appendix, internal audit or decision controls.
 - Optional review date. If no supported issue is established, save a brief truthful statement instead of inventing rows. Communicate unresolved review limits separately to the editor; do not imply an all-clear.
 
-Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. For routine multi-item news, X or blog bounties, also provide the editor-only accepted/rejected item tally and points calculation described in [routine.md](references/routine.md); never include it in the curator’s page or message. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
+Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. For routine multi-item news, X or blog bounties, also provide the editor-only accepted/rejected item tally and points calculation described in [routine.md](references/routine.md); keep its numerical counts, point calculation and cap/ledger details out of the curator’s page and message. Clear item-level acceptance/rejection feedback is appropriate; follow the linked feedback-and-votes reference. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
 
 Create the page in the established destination, or update the matching review on resubmission while preserving comments and decisions. Use a separate page for a requested comparison test. Read back the saved page with the same identity and verify the format, entity links, evidence, quotations and preservation of existing records. Fix discrepancies before reporting completion. Inspect rendering when available; distinguish content checks from visual inspection.
 

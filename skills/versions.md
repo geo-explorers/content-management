@@ -12,7 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
-### geo-submission-review — 0.5.4
+### geo-submission-review — 0.5.5
+
+- **2026-10-05 · v0.5.5** — Make authorized datasets publication/readback and linked curator feedback drafts the default Geo completion flow. Present a concrete editor approval plan before YES/NO votes; apply and verify approved actions, with proposal execution explicitly scoped and eligibility checked. Mixed-batch replies identify passing and failing work, preserve accepted-item correction exceptions and keep counts/points private. Intake remains read-only; scheduling, payouts and message sending retain separate authorization.
 
 - **2026-10-04 · v0.5.4** — Finish every material item decision before final reporting. Incomplete cases remain in an investigation queue, without forced acceptance/rejection or omitted curators. Final editor tallies show only decided groups; report publication operations independently enforce completeness. Preserve separate copy QA and cap-ledger checks.
 
