@@ -2,12 +2,14 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements, publish datasets-space reports, draft linked curator feedback and apply accept/reject votes after editor approval. Also review specified submissions, including those without a formal bounty, and publish their reports in the matching Geo datasets space.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # Geo submission review
 
 Choose the requested mode. **Space discovery / recurring bounty review:** read [references/routine.md](references/routine.md), use the packaged review runner, then review its queued cases and complete the Geo delivery flow below for each curator/bounty submission. **Specified submission:** follow sections 1–4 below and complete the same Geo delivery flow. All submission reviews use the matching Geo datasets space, whether discovered by a scan, supplied by URL/DM, recurring, bespoke or without a formal bounty. This applies across spaces and bounty types. Keep the full coverage record separately from compact recipient feedback.
+
+**Scheduled-review mode:** a prompt naming this skill and the target space invokes the [scheduled-run defaults](references/routine.md#scheduled-run-defaults). Those defaults include both paired spaces, Geo-only submission discovery, linked Discord reply drafts, the fixed private editor report and authorization/notification rules. Use `geo-submission-review` to orchestrate, the repository’s `geo-query` for graph retrieval and `geo-publish` for report publication. Scheduling and runtime readiness remain separate from these instructions.
 
 The intake and review scripts are read-only on Geo; the agent carries out delivery through `geo-publish` and approved governance tools. Read [references/geo-delivery.md](references/geo-delivery.md) and [references/feedback-and-votes.md](references/feedback-and-votes.md). Mohammed has authorized completed submission reports to be published in the matching datasets space as the default for this workflow. Record that standing scope; apply publication safeguards and readback without asking again within it. Honor an explicit drafts-only or narrower request. Other editors need their own applicable report authorization. Geo publication and format verification are completion requirements for every submission review. An existing Notion mirror or earlier Notion review does not change that destination. Use Notion only if the editor explicitly requests it for the current review; an explicitly requested alternative or drafts-only scope takes precedence. Verify the destination's live ID, name and editor authority before publishing; a stored map or duplicate space name alone is insufficient. A supplied submission already in a verified datasets space is evidence for the matching destination. Report publication does not authorize votes, editing curator submissions, payouts or sending messages. Ask the editor to approve the concrete accept/reject vote plan, then carry out the approved actions.
 
