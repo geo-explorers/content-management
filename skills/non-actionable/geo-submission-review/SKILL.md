@@ -1,19 +1,35 @@
 ---
 name: geo-submission-review
-description: Review specified Geo submissions and save concise, evidence-backed feedback in Notion for the editor to forward. Use when checking news duplicates, space relevance and significance, or reviewing datasets, claim sets and Notion mirrors for credibility, completeness, debate suitability or ontology compliance. Broad proposal discovery, scoring, payouts and publishing have separate workflows.
+description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements, publish datasets-space reports, draft linked curator feedback and apply accept/reject votes after editor approval. Also review specified submissions, including those without a formal bounty, and publish their reports in the matching Geo datasets space.
 metadata:
-  version: "0.4.0"
+  version: "0.6.2"
 ---
 
 # Geo submission review
 
-Establish what the editor wants checked, review the agreed scope, then save a short, evidence-backed review page in Notion for the editor to forward. This applies across all Geo spaces and bounty types. Keep the research record separately for the editor.
+Choose the requested mode. **Space discovery / recurring bounty review:** read [references/routine.md](references/routine.md), use the packaged review runner, then review its queued cases and complete the Geo delivery flow below for each curator/bounty submission. **Specified submission:** follow sections 1–4 below and complete the same Geo delivery flow. All submission reviews use the matching Geo datasets space, whether discovered by a scan, supplied by URL/DM, recurring, bespoke or without a formal bounty. This applies across spaces and bounty types. Keep the full coverage record separately from compact recipient feedback.
 
-This skill is read-only on Geo. Use the editor's supplied Notion destination or established review location; ask only when neither is clear. An explicitly requested alternative destination takes precedence. Notion delivery and format verification are completion requirements, not optional final steps. Preparing feedback does not authorize sending it, editing the submission, voting, or paying a bounty.
+**Scheduled-review mode:** a prompt naming this skill and the target space invokes the [scheduled-run defaults](references/routine.md#scheduled-run-defaults). Those defaults include both paired spaces, Geo-only submission discovery, linked Discord reply drafts, the fixed private editor report and authorization/notification rules. Use `geo-submission-review` to orchestrate, the repository’s `geo-query` for graph retrieval and `geo-publish` for report publication. Scheduling and runtime readiness remain separate from these instructions.
+
+The intake and review scripts are read-only on Geo; the agent carries out delivery through `geo-publish` and approved governance tools. Read [references/geo-delivery.md](references/geo-delivery.md) and [references/feedback-and-votes.md](references/feedback-and-votes.md). Mohammed has authorized completed submission reports to be published in the matching datasets space as the default for this workflow. Record that standing scope; apply publication safeguards and readback without asking again within it. Honor an explicit drafts-only or narrower request. Other editors need their own applicable report authorization. Geo publication and format verification are completion requirements for every submission review. An existing Notion mirror or earlier Notion review does not change that destination. Use Notion only if the editor explicitly requests it for the current review; an explicitly requested alternative or drafts-only scope takes precedence. Verify the destination's live ID, name and editor authority before publishing; a stored map or duplicate space name alone is insufficient. A supplied submission already in a verified datasets space is evidence for the matching destination. Report publication does not authorize votes, editing curator submissions, payouts or sending messages. Ask the editor to approve the concrete accept/reject vote plan, then carry out the approved actions.
+
+## Default Geo completion flow
+
+1. Finish the review and resolve every material submission decision.
+2. Publish or update each report in the matching datasets space through `geo-publish`. Read it back and open every linked finding to verify the full details and sources.
+3. Draft a short, kind curator reply with the verified report URL. For mixed batches, distinguish items that passed from those that failed, identify rejected items and say what needs attention. Keep numerical tallies and points private to the editor.
+4. Present the editor with the exact proposal links, accept/reject recommendations, correction holds and execution consequences. Ask whether to carry out that plan; existing approval for those exact actions remains valid.
+5. With approval, refresh proposal state, apply only the approved votes and verify them. A separate proposal-execution transaction needs explicit coverage in the approval and must wait for voting eligibility. Update feedback drafts to reflect confirmed outcomes and record receipts.
+
+Drafting the report or reply alone does not complete Geo delivery. If publication is blocked, retain the draft and tell the editor the exact blocker; do not invent a published URL. Feedback remains a draft until sending is separately authorized. An editor approval wait is a valid handoff after the reports and linked drafts are ready.
+
+## Mandatory editor handoff after every run
+
+Read [references/editor-run-report.md](references/editor-run-report.md) and generate the fixed [editor report template](assets/editor-run-report.md) after every manual, scheduled, space-discovery or specified-submission run, including no-change, failed and partial runs. Save EDITOR-RUN-REPORT.md plus its JSON input privately; return the report or an accessible link. This requirement applies in every environment, not just Mohammed's workspace or one scheduler. Use the portable generator when available; otherwise fill the exact bundled template, retain every section and state the runtime/persistence limitation. Never substitute a free-form recap. Scheduled no-change runs still save the report while remaining quiet under the notification policy. Refresh it after approved actions so it distinguishes recommendations, confirmed outcomes and remaining approvals. This editor handoff does not replace Geo recipient delivery or grant any additional authorization.
 
 ## 1. Establish intent
 
-Read the request, submission, applicable bounty requirements, and relevant existing review. A bounty is optional. Derive a brief covering:
+Read the request, submission, applicable bounty requirements, and relevant existing review. For bounty-specific checks read [references/bounty-profiles.md](references/bounty-profiles.md). Full ordered bounty Text blocks and applicable linked criteria are authoritative; a preview is insufficient. A short description is the specification only when complete, space-scoped retrieval proves there are no requirement blocks; never substitute it for failed or missing block content. A bounty is optional. Derive a brief covering:
 
 - **Intent:** what to check, the intended use of the content, and the decision this supports.
 - **Scope:** items, fields, topic, period, depth, and the unit of verification.
@@ -47,7 +63,17 @@ An existing mirror need not be recreated. Use applicable team rules when availab
 
 For canonical comparisons, record identity, submitted/current values, space and evidence cutoff. A difference is not automatically an error. Never infer that an entity is absent from a capped or failed search.
 
+## Completion before final reporting
+
+A final submission report must give an evidence-backed recommendation for every scoped item: accept, reject, or return for a specific correction. **Do not deliver or publish a final report containing unresolved submission decisions.** Complete the research first: read primary records and accessible full alternatives, reconcile dates and event identity, and explain editorial significance against the bounty criterion. Keep generated-copy checks separate from event eligibility under the applicable Crypto rule; an unchecked secondary detail does not by itself cancel a qualifying event.
+
+If a material decision still cannot be made, retain the case in the internal investigation queue and give the editor a separate, plainly labeled work-in-progress/blocker update. Do not hide the gap, rename it as rejection, assume acceptance or omit the affected item to make the report look complete. A specific evidence-backed correction can be a final review recommendation; the curator's unfinished repair is different from the agent's unfinished investigation. Preserve non-decisive audit limitations internally. Payment-ledger checks remain a separate award prerequisite and do not make completed submission decisions unresolved.
+
+For routine batches, complete each independent selection assessment before issuing the editor-only tally; final tallies show accepted/rejected counts and applicable points, with no unresolved category. For other bounties, complete each item's assessment. Record any remaining material requirement blockers in `decisionGaps`. Read [routine.md](references/routine.md) for the completion gate and queue behavior.
+
 ## 3. Select actionable feedback
+
+Write recipient pages in kind, clear, everyday language. Keep the title in the page name only; do not repeat it as a body heading. Explain what the review means and what the curator can act on without technical status labels. Use a readable UTC review date (for example, “Last reviewed: 3 October 2026”). When time matters, show both timestamps in UTC with dates; omit hours when dates alone establish the point. Keep precise timestamps and structured assessments internally. For Geo reports, tell readers to open each linked review in the table for its full details; verify those finding pages expose the complete original, issue and supporting evidence. Preserve meaningful uncertainty and distinguish the agent’s recommendation from an editor’s approval or payout.
 
 Default to **1–5 priority issues**, ordered by their consequence for the intended use and the value of fixing them. Select defensible issues the recipient can act on. Keep other findings and pending checks in the internal record; do not append the full audit beneath the short table.
 
@@ -55,24 +81,18 @@ Default to **1–5 priority issues**, ordered by their consequence for the inten
 - Each row identifies the exact item and disputed excerpt or missing requirement, explains the issue, and exposes its supporting citation and relevant quote or evidence detail. Keep meaningful uncertainty in that row when it changes the requested action.
 - Include verified inaccuracies the curator could review and edit before submitting, even when an injector generated them (Mohammed, 30 September 2026). Generation alone is no exemption. Technical failures such as edits not saving go to the editor/technical owner; recurring generation errors can also be recorded there while the curator receives feedback. Apply an explicitly different workflow only when supported by current editor instructions. Feedback does not automatically decide selection, voting or points.
 - Agent-verified findings may be drafted immediately for editor review; drafting does not require the editor to have pre-confirmed each one. Preserve human decisions separately and never mark agent conclusions as editor approval.
-- If no actionable issue is established, do not invent one to fill the table. Tell the editor what was checked and what remains unresolved; avoid an unsupported all-clear.
+- If no actionable issue is established, do not invent one to fill the table. Finish the agreed decision checks before reporting completion; if a material check is blocked, issue a separate work-in-progress update and retain the investigation internally.
 
-## 4. Save and verify the Notion review
+## 4. Publish and verify the Geo review
 
-Read [references/notion-review.md](references/notion-review.md). Unless the editor explicitly requests otherwise, use this exact contract:
+Read [references/geo-delivery.md](references/geo-delivery.md) for every review. Publish the compact recipient report and its linked full finding pages in the verified matching datasets space. Use the existing compatible Page / Review finding / block model and its six comparison fields. Keep one to five distinct, evidence-backed examples, the submission title in the page name only, and an instruction to open each finding for its full original statement, issue and supporting sources. If no supported issue is established, publish a brief truthful review instead of inventing rows.
 
-- Title: **“<Submission or topic> — review feedback”**.
-- Zero to two short introductory bullets; a brief reminder to verify content and sources before submitting may be useful.
-- One native table with these four headers, in this order: **Entity | Issue | Citations for quality checks | Relevant quote or evidence detail**.
-- One to five distinct, supported problems, one linked example for each recurring problem. No “What to fix” column, affected-entity appendix, internal audit or decision controls.
-- Optional review date. If no supported issue is established, save a brief truthful statement instead of inventing rows. Communicate unresolved review limits separately to the editor; do not imply an all-clear.
+Preserve earlier reports, comments and human decisions. Match the submission and underlying finding before creating or updating; a fresh dated review may differ from a historical presentation prototype. Keep internal coverage, other findings, numerical tallies, points, cap/ledger checks and decision controls outside recipient reports and messages. Applicable editor-only item tallies and points remain separate under [routine.md](references/routine.md). Quote only text actually read, faithfully and within applicable limits; never fabricate links, quotations or evidence of absence.
 
-Keep internal coverage, other findings, responsibility notes and human decisions separate from the forwardable page. Include uncertainty in a row when it materially changes the finding. Quote only text actually read, faithfully and within applicable quotation limits; use a labeled paraphrase or concrete field/timestamp detail when a quotation is unavailable or unsuitable. Never fabricate links, quotations or evidence of absence.
+Dry-run through geo-publish, then use the applicable report authorization. Read back every published field and relation in the destination perspective, open every linked finding and verify its full original, exact excerpt, issue and evidence. Inspect rendering when available. After an unknown write outcome, reconcile before retrying; publication failure leaves delivery incomplete, with a useful draft and exact blocker. A Notion page, chat answer or local file alone does not complete Geo delivery.
 
-Create the page in the established destination, or update the matching review on resubmission while preserving comments and decisions. Use a separate page for a requested comparison test. Read back the saved page with the same identity and verify the format, entity links, evidence, quotations and preservation of existing records. Fix discrepancies before reporting completion. Inspect rendering when available; distinguish content checks from visual inspection.
+Return the **verified Geo datasets report URL** as the main deliverable and draft the short linked curator reply. Votes, separate execution, payouts and sending remain separately authorized actions; when no actionable governance proposal was established, record that rather than inventing a vote plan.
 
-If access or missing destination prevents saving, explain the exact delivery blocker and keep useful draft work available. A chat response or local file alone does not complete the default Notion workflow. After a write with an unknown outcome, inspect the destination before retrying to avoid duplicate pages.
-
-Return the **saved Notion page link** as the main deliverable, plus a brief editor-only handoff about material gaps. Send feedback to the contributor only when authorized. On resubmission, compare changes with the recorded findings; expand checks only for affected dependencies or a newly requested scope.
+Only for an explicitly requested Notion alternative, read [references/notion-review.md](references/notion-review.md), use its four-column compact contract and same-identity readback, and record the editor's delivery exception. An old mirror is not an exception.
 
 For maintainers: [evals/evals.json](evals/evals.json) contains fictional scenarios. Record actual test outcomes separately; structural validation and prepared fixtures do not prove behavioral reliability.

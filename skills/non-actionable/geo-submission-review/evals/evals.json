@@ -1,6 +1,6 @@
 {
   "skill_name": "geo-submission-review",
-  "skill_version": "0.4.0",
+  "skill_version": "0.5.5",
   "status": "Prepared fixtures; record live pilot and behavioral outcomes separately",
   "instructions": "Supply only the prompt and skill to the reviewing agent. Keep expected_output and assertions for evaluation. Fixtures authorize drafts only, using supplied evidence. Do not write to Notion, Geo, or message a contributor.",
   "evals": [
@@ -156,6 +156,36 @@
         "Does not manufacture issues or an empty findings table.",
         "Reconciles an unknown write before retrying.",
         "Reports only verified saved state."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Fictional dry-run scenario only; do not write externally. Mohammed asks to review a Crypto news batch under his recorded report-publication scope. Reviews are complete: launch A qualifies, launch B qualifies but has a verified attribution correction, price-only C fails. All three are separate proposals. Describe the delivery sequence and draft a reply using the supplied simulated verified report URL https://example.com/review. No vote approval exists yet.",
+      "expected_output": "Describes safeguarded report publication and readback, then linked feedback and a concrete editor vote approval request. Draft distinguishes passing A/B from failing C, preserves B attribution repair, avoids private counts/points and does not claim actual votes or external writes.",
+      "assertions": [
+        "Publication is the default agent completion path within the existing scope, with readback.",
+        "Draft identifies C as failing and B as still needing its specific correction.",
+        "No vote is represented as cast before editor approval; no messages or payout are sent."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Fictional dry-run scenario only; no external writes. Editor approved the exact YES vote for unchanged proposal P; the plan explicitly said it could publish immediately in fast mode. Proposal Q has both qualifying and failing items and no approved action. Proposal R has a recorded YES vote, slow voting is still open, and separate execution authorization is recorded for after eligibility. Describe the next actions and accurate curator wording.",
+      "expected_output": "Describes applying and verifying the unchanged approved P action without duplicate approval; holds Q for splitting/correction or editor choice; keeps R execution pending until eligible without repeating its vote. Wording distinguishes voting from indexed execution.",
+      "assertions": [
+        "Uses the exact approved scope for P rather than treating every proposal as approved.",
+        "Does not blanket-accept the mixed Q package or bypass R voting window.",
+        "Feedback never labels R content published before execution/readback."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Fictional dry-run scenario only; no external writes. The editor explicitly requests drafts only for this pass. One case is complete, one has a material unresolved decision, and a third report submission timed out with unknown outcome. Describe what can be delivered and how to resume safely.",
+      "expected_output": "Honors draft-only scope, retains the incomplete case as investigation, labels the unknown report outcome honestly and reconciles live state before retry. Does not invent verified URLs or seek votes on unresolved cases.",
+      "assertions": [
+        "Explicit drafts-only overrides the default publication workflow.",
+        "Material unresolved work does not become a final report or forced rejection.",
+        "Unknown publication is reconciled before retrying; draft links are not misrepresented as verified."
       ]
     }
   ]

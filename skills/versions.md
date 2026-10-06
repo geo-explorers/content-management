@@ -12,6 +12,23 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-submission-review — 0.6.0
+- 2026-10-06 · Make the user-approved editor run report mandatory across environments and invocation modes. Bundle a fixed Markdown template, offline dependency-free renderer and runner summary command; require outputs for no-change/failed/partial runs, with honest unknowns, private points, verified delivery links and separate approval/action receipts. Preserve quiet no-change notifications and existing review/publication boundaries.
+
+### geo-submission-review — 0.5.6
+- 2026-10-05 · Deliver every submission review in its verified matching Geo datasets space, including individually supplied submissions without a bounty. Existing Notion mirrors no longer select delivery; Notion requires an explicit current-review exception. Preserve concise evidence-backed findings, full details, private editor summaries and separate vote/message/payment authorization. Verify live destination identity and signer access; correct the World affairs datasets mapping to da96a4c26e718bfa6c27c3b1f3c316cd after live readback.
+
+### geo-submission-review — 0.5.5
+
+- **2026-10-05 · v0.5.5** — Make authorized datasets publication/readback and linked curator feedback drafts the default Geo completion flow. Present a concrete editor approval plan before YES/NO votes; apply and verify approved actions, with proposal execution explicitly scoped and eligibility checked. Mixed-batch replies identify passing and failing work, preserve accepted-item correction exceptions and keep counts/points private. Intake remains read-only; scheduling, payouts and message sending retain separate authorization.
+
+- **2026-10-04 · v0.5.4** — Finish every material item decision before final reporting. Incomplete cases remain in an investigation queue, without forced acceptance/rejection or omitted curators. Final editor tallies show only decided groups; report publication operations independently enforce completeness. Preserve separate copy QA and cap-ledger checks.
+
+- **2026-10-04 · v0.5.3** — Recipient dates and precedence comparisons use UTC. Separate editor-only summaries count distinct accepted/rejected/unresolved routine news/X/blog items and calculate recommended points with sourced rates and verified weekly/monthly cap headroom. Keep copy findings separate from event eligibility; unknown ledger usage cannot produce a final award. No editor-only tally enters shared feedback.
+
+- **2026-10-04 · v0.5.1** — Live pilot readback exposed Geo’s unsupported Markdown-table rendering. Report introduction now points to the native comparison table; full originals/excerpts/citations remain on typed findings. Added rendering regression. Single-report publication and a report-owned one-field correction were indexed and read back; general comment-preserving updates and scheduling remain unverified.
+- 2026-10-03 · Add read-only space discovery, lossless GRC-20 snapshots, typed field/count/ownership checks, full ordered bounty/linked-page retrieval, durable curator/bounty cases and pending queues, exact-text review recording, six-field datasets drafts and create-only geo-publish operation previews. Preserve scoped Notion delivery. Scheduled activation and live report delivery require separate pilot authorization/readback; this revision does not vote, award or send.
+
 ### geo-submission-review — 0.4.0
 - 2026-10-01 · Initial upstream release on `all-skills` for editor testing, preserving the v0.4.0 package tested locally. Establishes review intent across spaces and submission types; independently verifies findings; saves and reads back concise Notion feedback with four fixed columns and one example per recurring issue. Includes news duplicate, relevance and significance checks; evidence-backed feedback for curator-editable injector inaccuracies; Notion guidance; and fourteen fictional evaluation scenarios. Bounded direct pilots covered Afghanistan sources, news and X submissions. The scenarios are prepared fixtures, not a completed independent-agent evaluation; broader editor feedback remains pending.
 

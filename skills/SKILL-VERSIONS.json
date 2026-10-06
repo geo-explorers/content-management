@@ -42,9 +42,9 @@
       "content_sha256": "29a47b7695cff84b052cd8a7be740ad81a96cce9a09bda1bbc4061dddc0e3bdf"
     },
     "non-actionable/geo-submission-review": {
-      "version": "0.4.0",
-      "approved_commit": "4970627d397ade340d191744e4da6144f80b1779",
-      "content_sha256": "18ace1a922bb4d3af749cb2ad74ac38567e44488a9ee9a2b0174504304d1319e"
+      "version": "0.6.2",
+      "approved_commit": "2d1fececc0d8f2187112ee0103eb51b897afcaf9",
+      "content_sha256": "4d1c04d1a0dd465d9315b06e8ff42249446bb665e7af68d04635f364bed2a759"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",
