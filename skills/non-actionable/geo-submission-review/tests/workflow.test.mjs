@@ -61,3 +61,57 @@ test('readable outcomes do not turn unfinished research or a recommendation into
   if(outcome==='unresolved'){assert.match(d.markdown,/still in progress/);assert.equal(d.markdown.includes('ready for you to address'),false);}
  }
 });
+
+test('historical multi-proposal case survives missing config/spec and does not regress to identification',()=>{
+ const s=emptyState();assemble(s,intake(),config);assemble(s,intake(id(6),id(7)),config);const c=Object.values(s.cases)[0];recordReview(s,review(c));
+ recordDecision(s,{id:'paid',caseId:c.id,kind:'paid',recordedAt:'2026-10-03',evidence:['receipt']});
+ recordDelivery(s,{caseId:c.id,fingerprint:c.fingerprint,status:'verified',reportId:id(99),receipt:{url:'https://example.org/report',readbackAt:'2026-10-03',evidence:['verified']}});
+ const before=structuredClone(c),i=intake();i.specs={};const cfg=structuredClone(config);cfg.spaces.crypto.bountyProfiles={};
+ const result=assemble(s,i,cfg);assert.deepEqual(c,before);assert.deepEqual(result.changedCases,[]);assert.deepEqual(result.identification,[]);assert.equal(result.preservedCases[0],c.id);assert.equal(result.dependencyWarnings[0].reason,'saved_profile_retained');
+});
+test('changed bounty requirements retain historical review and request applicability check',()=>{
+ const s=emptyState();assemble(s,intake(),config);const c=Object.values(s.cases)[0];recordReview(s,review(c));const before=structuredClone(c),i=intake();i.specs={[bounty]:{...spec,contentHash:hash('changed')}};
+ const r=assemble(s,i,config);assert.deepEqual(c,before);assert.equal(r.dependencyWarnings[0].reason,'spec_changed_check_applicability');
+});
+test('complete scoped description-only bounty is valid but foreign/empty/partial content is not',async()=>{
+ const description={spaceId:id(8),property:{name:'Description'},text:'Add events with dates and organizer.'};
+ const e=fullEntity(bounty,{description:'Aggregate is not authoritative',values:{totalCount:1,nodes:[description]}});
+ const a=await readBounty(bounty,async()=>({entity:e}),true,[id(8)]);assert.equal(a.format,'description_only');assert.equal(a.descriptionValues[0].text,description.text);assert.equal(a.complete,true);
+ await assert.rejects(readBounty(bounty,async()=>({entity:e}),true,[id(20)]),/requirements/);
+ await assert.rejects(readBounty(bounty,async()=>({entity:{...e,relations:{totalCount:1,nodes:[]}}}),true,[id(8)]),/coverage/);
+ await assert.rejects(readBounty(bounty,async(q,v)=>({entity:v.id===bounty?{...e,relations:{totalCount:1,nodes:[{id:id(12),spaceId:id(8),type:{name:'Blocks'},toEntity:{id:id(13)}}]}}:fullEntity(v.id)}),true,[id(8)]),/requirements/);
+});
+test('legacy verified report survives renderer change; unknown write cannot become a new create draft',()=>{
+ const s=emptyState();assemble(s,intake(),config);const c=Object.values(s.cases)[0];recordReview(s,review(c));
+ c.delivery={status:'verified',fingerprint:c.fingerprint,reportId:id(99),draftFingerprint:'older-renderer',receipt:{url:'https://example.org/report',readbackAt:'2026-10-03',evidence:['readback']}};
+ assert.equal(prepareReportDraft(c,'draft.json').changed,false);assert.equal(c.delivery.status,'verified');
+ c.review.scoring={rate:10};c.review.checkedAt='2026-10-06T12:00:00Z';assert.equal(prepareReportDraft(c,'draft.json').changed,false);
+ recordDelivery(s,{caseId:c.id,fingerprint:c.fingerprint,status:'unknown',reportId:id(99),receipt:{evidence:['Durable intent; outcome unknown']}});
+ const before=structuredClone(c.delivery),result=prepareReportDraft(c,'retry.json');assert.equal(result.reconciliationNeeded,true);assert.equal(result.draft.publicationAction,'reconcile');assert.deepEqual(c.delivery,before);
+ recordDelivery(s,{caseId:c.id,fingerprint:c.fingerprint,status:'verified',reportId:id(99),receipt:{url:'https://example.org/report',readbackAt:'2026-10-06',evidence:['Recovered existing write']}});
+ assert.equal(prepareReportDraft(c,'retry.json').draft.publicationAction,'none');assert.equal(c.delivery.reportId,id(99));
+});
+
+test('identical review and refreshed citation checks do not reopen verified publication',()=>{
+ const s=emptyState();assemble(s,intake(),config);const c=Object.values(s.cases)[0];recordReview(s,review(c));
+ recordDelivery(s,{caseId:c.id,fingerprint:c.fingerprint,status:'verified',reportId:id(99),receipt:{url:'https://example.org/report',readbackAt:'2026-10-03',evidence:['verified']}});
+ const r=review(c);r.findings[0].citations[0].retrievedAt='2026-10-06T12:00:00Z';recordReview(s,r);
+ assert.equal(c.delivery.status,'verified');assert.equal(prepareReportDraft(c,'again.json').readyToPublish,false);
+});
+test('failed write requires explicit no-submission reconciliation before retry; new revision cannot bypass it',()=>{
+ const s=emptyState();assemble(s,intake(),config);const c=Object.values(s.cases)[0];recordReview(s,review(c));const fp=c.fingerprint;
+ recordDelivery(s,{caseId:c.id,fingerprint:fp,status:'unknown',reportId:id(99),receipt:{evidence:['Intent journal']}});
+ assert.throws(()=>recordDelivery(s,{caseId:c.id,fingerprint:fp,status:'retryable',receipt:{evidence:['Try again']}}),/reconciled/);
+ assemble(s,intake(id(6),entity,'2026-10-02T12:00:00Z'),config);assert.equal(c.delivery.status,'unknown');assert.throws(()=>recordReview(s,review(c)),/Reconcile/);
+ recordDelivery(s,{caseId:c.id,fingerprint:fp,status:'retryable',receipt:{evidence:['Verified no broadcast'],outcome:'verified_not_submitted',reconciledAt:'2026-10-06T12:00:00Z'}});
+ assert.equal(c.delivery.status,'update_draft_needed');recordReview(s,review(c));assert.equal(prepareReportDraft(c,'retry.json').readyToPublish,true);
+});
+test('blank or foreign block text cannot certify scoped requirements; short description changes alter hash',async()=>{
+ const d={spaceId:id(8),property:{name:'Description'},text:'First requirement'};
+ const make=text=>fullEntity(bounty,{description:'Unchanged aggregate',values:{totalCount:1,nodes:[{...d,text}]}});
+ const a=await readBounty(bounty,async()=>({entity:make('First requirement')}),true,[id(8)]),b=await readBounty(bounty,async()=>({entity:make('Second requirement')}),true,[id(8)]);assert.notEqual(a.contentHash,b.contentHash);
+ for(const [text,spaceId] of [['   ',id(8)],['Foreign requirements',id(20)]]){
+  const req=async(q,v)=>({entity:v.id===bounty?fullEntity(bounty,{relations:{totalCount:1,nodes:[{id:id(10),spaceId:id(8),type:{name:'Blocks'},toEntity:{id:id(12)}}]}}):fullEntity(v.id,{values:{totalCount:1,nodes:[{spaceId,property:{name:'Markdown content'},text}]}})});
+  await assert.rejects(readBounty(bounty,req,true,[id(8)]),/requirements/);
+ }
+});

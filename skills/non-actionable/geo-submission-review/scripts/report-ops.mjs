@@ -10,6 +10,7 @@ const T={page:'480e3fc267f3499385fbacdf4ddeaa6b',finding:'b14985a95e0c5a3ca872f2
 const hex=x=>Buffer.from(x).toString('hex');
 const serialize=(k,v)=>typeof v==='bigint'?v.toString():v instanceof Uint8Array?hex(v):v;
 export function buildReportOps(draft,plan,Graph){
+  if(draft.publicationAction&&draft.publicationAction!=='create')throw Error('Report must be reconciled or updated through geo-publish; create is not allowed: '+draft.publicationAction);
   const readiness=reviewReadiness({fingerprint:draft.fingerprint,review:draft.review,...draft.reviewScope});
   if(!readiness.complete)throw Error('Final report needs investigation: '+readiness.blockers.map(b=>b.itemId??b.reason).join(', '));
   if(draft.publicationStatus!=='draft_only'||draft.pageId!==stableId('submission-report:'+draft.caseId))throw Error('Expected a deterministic recorded report draft');

@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements, publish datasets-space reports, draft linked curator feedback and apply accept/reject votes after editor approval. Also review specified submissions, including those without a formal bounty, and publish their reports in the matching Geo datasets space.
 metadata:
-  version: "0.6.1"
+  version: "0.6.2"
 ---
 
 # Geo submission review
@@ -29,7 +29,7 @@ Read [references/editor-run-report.md](references/editor-run-report.md) and gene
 
 ## 1. Establish intent
 
-Read the request, submission, applicable bounty requirements, and relevant existing review. For bounty-specific checks read [references/bounty-profiles.md](references/bounty-profiles.md). Full ordered bounty Text blocks and applicable linked criteria are authoritative; a description or preview is insufficient. A bounty is optional. Derive a brief covering:
+Read the request, submission, applicable bounty requirements, and relevant existing review. For bounty-specific checks read [references/bounty-profiles.md](references/bounty-profiles.md). Full ordered bounty Text blocks and applicable linked criteria are authoritative; a preview is insufficient. A short description is the specification only when complete, space-scoped retrieval proves there are no requirement blocks; never substitute it for failed or missing block content. A bounty is optional. Derive a brief covering:
 
 - **Intent:** what to check, the intended use of the content, and the decision this supports.
 - **Scope:** items, fields, topic, period, depth, and the unit of verification.

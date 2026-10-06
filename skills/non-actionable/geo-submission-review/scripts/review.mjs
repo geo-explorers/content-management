@@ -83,11 +83,13 @@ await withLock(stateDir,async()=>{
     }else if(command==='evidence'){
       const ids=arg('case')?[arg('case')]:Object.keys(state.cases);for(const id of ids)atomicJson(path.join(out,id+'.evidence.json'),caseEvidence(state,id));receipt.cases=ids;
     }else if(command==='reports'){
-      const drafts=[],unchangedDrafts=[],investigationNeeded=[];for(const c of Object.values(state.cases))if(c.review?.fingerprint===c.fingerprint){
+      const drafts=[],unchangedDrafts=[],investigationNeeded=[],reconciliationNeeded=[];for(const c of Object.values(state.cases)){
+        if(['submitted','unknown','failed'].includes(c.delivery?.status)){reconciliationNeeded.push({caseId:c.id,delivery:c.delivery});continue;}
+        if(c.review?.fingerprint!==c.fingerprint)continue;
         const readiness=reviewReadiness(c);if(!readiness.complete){c.status='review_unresolved';investigationNeeded.push({caseId:c.id,...readiness});continue;}
-        const {draft,changed}=prepareReportDraft(c,path.join(out,c.id+'.json'));(changed?drafts:unchangedDrafts).push(draft);atomicJson(path.join(out,c.id+'.json'),draft);fs.writeFileSync(path.join(out,c.id+'.md'),draft.markdown);
+        const prepared=prepareReportDraft(c,path.join(out,c.id+'.json'));const {draft,changed}=prepared;if(prepared.reconciliationNeeded)reconciliationNeeded.push({caseId:c.id,delivery:c.delivery});else (prepared.readyToPublish?drafts:unchangedDrafts).push(draft);atomicJson(path.join(out,c.id+'.json'),draft);fs.writeFileSync(path.join(out,c.id+'.md'),draft.markdown);
         const summary=editorSummary(c);if(summary){atomicJson(path.join(out,c.id+'.editor.json'),summary);fs.writeFileSync(path.join(out,c.id+'.editor.md'),editorSummaryMarkdown(summary));}
-      }atomicJson(stateFile,state);receipt.investigationNeeded=investigationNeeded;receipt.drafts=drafts.map(d=>({caseId:d.caseId,pageId:d.pageId,targetSpaceId:d.targetSpaceId}));receipt.unchangedDrafts=unchangedDrafts.map(d=>d.caseId);
+      }atomicJson(stateFile,state);receipt.investigationNeeded=investigationNeeded;receipt.reconciliationNeeded=reconciliationNeeded;receipt.drafts=drafts.map(d=>({caseId:d.caseId,pageId:d.pageId,targetSpaceId:d.targetSpaceId}));receipt.unchangedDrafts=unchangedDrafts.map(d=>d.caseId);
     }else if(command==='preflight'){
       if(!config)throw Error('--config required');
       const checks=[];for(const [name,ids] of Object.entries(SPACES)){

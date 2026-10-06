@@ -64,6 +64,15 @@ export function submittedText(state,ref){
   return matches[0];
 }
 
+function comparableSpecHash(spec){
+  // Legacy short-bounty adapters used a different serialization. Compare their
+  // captured scoped requirement values, not adapter-specific hash formats.
+  if(spec?.complete&&spec.blocks?.length===0){
+    const values=spec.descriptionValues??spec.entity?.values?.nodes?.filter(v=>(v.property?.id==='9b1f76ff9711404c861e59dc3fa7d037'||v.property?.name==='Description')&&v.spaceId===spec.spaceId&&v.text?.trim());
+    if(values?.length)return hash({name:spec.name,spaceId:spec.spaceId,descriptions:values.map(v=>({spaceId:v.spaceId,text:v.text})),links:spec.linkedCriteriaCandidates??[]});
+  }
+  return spec?.contentHash;
+}
 const OUTCOMES=new Set(['meets_requirements','needs_correction','does_not_meet_requirements','unresolved']);
 const KINDS=new Set(['news','x','blog','fact-check','organize-claims']);
 function eligibleIds(items,kind){const names={news:['News story','News'],x:['Post','Tweet'],blog:['Blog post'], 'fact-check':['Claim'],'organize-claims':['Claim']};return [...new Set(items.filter(i=>names[kind]?.includes(i.kind)).map(i=>normalizeId(i.id)))];}
@@ -78,7 +87,7 @@ export function assemble(state,intake,config){
     if(p.bounties.length!==1)return null;
     return [{bountyId:p.bounties[0].id}];
   };
-  const newCases=new Set(),changedCases=new Set(),identification=[...(state.spaces[space]?.identification??[])].filter(r=>!manifest.some(p=>normalizeId(p.id)===r.proposalId));
+  const preservedCases=new Set(),dependencyWarnings=[],newCases=new Set(),changedCases=new Set(),identification=[...(state.spaces[space]?.identification??[])].filter(r=>!manifest.some(p=>normalizeId(p.id)===r.proposalId));
   const sorted=[...manifest].sort((a,b)=>a.createdEpoch-b.createdEpoch||a.id.localeCompare(b.id));
   for(const p0 of sorted){
     const p={...p0,id:normalizeId(p0.id),proposedBy:normalizeId(p0.proposedBy)};
@@ -92,6 +101,19 @@ export function assemble(state,intake,config){
     const seed=config.reviewHistory?.[p.id];
     if(seed){if(!seed.evidence?.length)throw Error('History seed requires exact-proposal evidence');state.proposals[p.id].priorReview=seed;}
     if(disposition){state.proposals[p.id].disposition=disposition;continue;}
+    const known=Object.values(state.cases).filter(c=>c.space===space&&c.proposalIds.includes(p.id));
+    if(previous&&previous.hash===record.hash&&known.length){
+      if(known.some(c=>c.curatorId!==p.proposedBy))throw Error('Captured proposal creator changed; reconcile '+p.id);
+      for(const c of known){
+        preservedCases.add(c.id);
+        // Existing membership remains evidence. Dependency failure is not new ambiguity.
+        if(!scope.bountyProfiles?.[c.bountyId]||!specs[c.bountyId]?.complete)
+          dependencyWarnings.push({caseId:c.id,proposalId:p.id,bountyId:c.bountyId,reason:!scope.bountyProfiles?.[c.bountyId]?'saved_profile_retained':'spec_fetch_failed_history_retained'});
+        else if(comparableSpecHash(specs[c.bountyId])!==comparableSpecHash(c.spec))
+          dependencyWarnings.push({caseId:c.id,bountyId:c.bountyId,reason:'spec_changed_check_applicability',previousHash:c.spec?.contentHash,currentHash:specs[c.bountyId].contentHash});
+      }
+      continue;
+    }
     let partitionRows=partition(p);
     if(!partitionRows?.length){identification.push({proposalId:p.id,reason:p.bounties.length?'mixed_bounty_requires_item_assignment':'bounty_unidentified'});continue;}
     if(p.bounties.length>1&&!partitionRows.every(r=>r.itemIds?.length)){identification.push({proposalId:p.id,reason:'mixed_bounty_requires_item_assignment'});continue;}
@@ -129,12 +151,12 @@ export function assemble(state,intake,config){
       const fp=hash({proposals:next.proposalIds.map(pid=>[pid,state.proposals[pid].hash]),items:next.itemIds,spec:spec.contentHash,profile});
       if(next.fingerprint!==fp){if(next.fingerprint)next.revisions.push({fingerprint:next.fingerprint,review:next.review??null,delivery:next.delivery});next.fingerprint=fp;
         next.status=next.proposalIds.every(pid=>state.proposals[pid].priorReview)?'prior_review_recorded':'needs_review';
-        next.delivery={...next.delivery,status:next.delivery.reportId?'update_draft_needed':'not_prepared'};changedCases.add(id);}
+        if(!['submitted','unknown','failed'].includes(next.delivery?.status))next.delivery={...next.delivery,status:next.delivery.reportId?'update_draft_needed':'not_prepared'};changedCases.add(id);}
       state.cases[id]=next;
     }
   }
   state.spaces[space]={...(state.spaces[space]??{}),discoveryCutoff:runStatus.mode==='selected_replay'?state.spaces[space]?.discoveryCutoff??null:runStatus.window.until,identification,latestIntake:config.intakePath??null};
-  return {newCases:[...newCases],changedCases:[...changedCases],identification,pendingCases:Object.values(state.cases).filter(c=>c.space===space&&['needs_review','review_unresolved'].includes(c.status)).map(c=>c.id)};
+  return {newCases:[...newCases],changedCases:[...changedCases],preservedCases:[...preservedCases],dependencyWarnings:[...new Map(dependencyWarnings.map(w=>[JSON.stringify(w),w])).values()],identification,pendingCases:Object.values(state.cases).filter(c=>c.space===space&&['needs_review','review_unresolved'].includes(c.status)).map(c=>c.id)};
 }
 
 export function recordReview(state,review){
@@ -161,10 +183,12 @@ export function recordReview(state,review){
     else if(f.missingField!==true||!f.missingRequirement||f.excerpt)throw Error('Missing-field findings need an explicit requirement and no invented excerpt');
     for(const citation of f.citations)if(!/^https:\/\//.test(citation.url)||!citation.locator||!Number.isFinite(Date.parse(citation.retrievedAt)))throw Error('Evidence link needs URL, locator and retrieval time');
   }
+  const sameContent=c.review?.fingerprint===review.fingerprint&&reviewContentHash(c)===reviewContentHash({...c,review:{...review,findings}});
+  if(!sameContent&&['submitted','unknown','failed'].includes(c.delivery?.status))throw Error('Reconcile pending delivery before replacing its review');
   if(c.review)c.reviewHistory=[...(c.reviewHistory??[]),c.review];
   c.review={...review,findings,agentAssessment:true};c.status=reviewReadiness(c).complete?'reviewed':'review_unresolved';
-  if(c.delivery?.receipt)c.deliveryHistory=[...(c.deliveryHistory??[]),structuredClone(c.delivery)];
-  c.delivery={...c.delivery,status:'draft_ready'};return c;
+  if(!sameContent){if(c.delivery?.receipt)c.deliveryHistory=[...(c.deliveryHistory??[]),structuredClone(c.delivery)];c.delivery={...c.delivery,status:'draft_ready'};}
+  return c;
 }
 
 const esc = s => String(s??'').replaceAll('|','\\|').replaceAll('\n','<br>');
@@ -222,22 +246,38 @@ function replayOrder(r,c){const order=c.editOrders?.[r.proposal.id];replayEdits(
 
 export function recordDelivery(state,delivery){
   const c=state.cases[delivery.caseId];if(!c)throw Error('Unknown case');
-  if(delivery.fingerprint!==c.fingerprint)throw Error('Delivery does not match current report revision');
-  if(!['submitted','verified','failed','unknown'].includes(delivery.status)||!delivery.receipt?.evidence?.length)throw Error('Delivery needs status and explicit receipt evidence');
+  const priorPending=delivery.fingerprint!==c.fingerprint&&['submitted','unknown','failed'].includes(c.delivery?.status)&&delivery.fingerprint===c.delivery.fingerprint;
+  if(delivery.fingerprint!==c.fingerprint&&!priorPending)throw Error('Delivery does not match current or pending report revision');
+  if(!['submitted','verified','failed','unknown','retryable'].includes(delivery.status)||!delivery.receipt?.evidence?.length)throw Error('Delivery needs status and explicit receipt evidence');
   if(delivery.status==='verified'&&(!delivery.reportId||!delivery.receipt.readbackAt||!delivery.receipt.url))throw Error('Verified delivery requires report ID and successful readback');
+  if(delivery.status==='retryable'&&(!['submitted','failed','unknown'].includes(c.delivery?.status)||delivery.receipt.outcome!=='verified_not_submitted'||!Number.isFinite(Date.parse(delivery.receipt.reconciledAt))))throw Error('Retry requires a reconciled receipt proving no write was submitted');
   c.deliveryHistory=[...(c.deliveryHistory??[]),c.delivery];
-  c.delivery={...c.delivery,...delivery};return c;
+  c.delivery={...c.delivery,...delivery,status:delivery.status==='retryable'?'draft_ready':delivery.status,reviewContentHash:priorPending?c.delivery.reviewContentHash:reviewContentHash(c)};
+  if(priorPending&&['verified','retryable'].includes(delivery.status)){c.deliveryHistory.push(structuredClone(c.delivery));c.delivery.status='update_draft_needed';}
+  return c;
 }
 
+// Renderer changes, evidence-check timestamps and private scoring do not constitute
+// a new recipient review. Track the actual findings/outcome and submission scope.
+export function reviewContentHash(c){
+  return hash({fingerprint:c.fingerprint,curatorName:c.curatorName,bountyName:c.bountyName,proposalIds:c.proposalIds,itemIds:c.itemIds,outcome:c.review?.outcome,findings:c.review?.findings?.map(f=>({...f,citations:f.citations?.map(({retrievedAt,...citation})=>citation)}))});
+}
 export function prepareReportDraft(c,draftFile){
   if(!reviewReadiness(c).complete)throw Error('Final report needs investigation before draft preparation');
-  const draft=reportDraft(c), fingerprint=hash(draft);
-  const changed=c.delivery?.draftFingerprint!==fingerprint;
+  const draft=reportDraft(c), fingerprint=hash(draft), contentHash=reviewContentHash(c);
+  const pending=['submitted','unknown','failed'].includes(c.delivery?.status);
+  if(pending)return {draft:{...draft,publicationAction:'reconcile'},changed:false,reconciliationNeeded:true};
+  // Migrate legacy verified receipts without rebuilding historical pages. A receipt
+  // for this exact case fingerprint anchors the recorded review; keep its history.
+  if(!c.delivery?.reviewContentHash&&c.delivery?.status==='verified'&&c.delivery.fingerprint===c.fingerprint)
+    c.delivery.reviewContentHash=contentHash;
+  const changed=c.delivery?.reviewContentHash!==contentHash;
   if(changed){
     if(c.delivery?.receipt)c.deliveryHistory=[...(c.deliveryHistory??[]),structuredClone(c.delivery)];
-    c.delivery={...c.delivery,status:'draft_ready',draftFingerprint:fingerprint,draftFile};
+    c.delivery={...c.delivery,status:'draft_ready',draftFingerprint:fingerprint,reviewContentHash:contentHash,draftFile};
   }else c.delivery={...c.delivery,draftFile};
-  return {draft,changed};
+  const readyToPublish=changed||c.delivery?.status==='draft_ready';
+  return {draft:{...draft,publicationAction:readyToPublish?(c.delivery.reportId?'update':'create'):'none'},changed,readyToPublish};
 }
 
 // Internal only. Recipient generators never call or embed this tally.
