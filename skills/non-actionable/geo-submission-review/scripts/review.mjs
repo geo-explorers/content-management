@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Review-only entrypoint. No signing, votes, payments or external writes.
 import fs from 'node:fs';
+import {writeEditorRunReport} from './editor-run-report.mjs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -24,7 +25,9 @@ await withLock(stateDir,async()=>{
   const receipt={command,startedAt:new Date().toISOString(),state:'running',complete:false};atomicJson(path.join(out,'workflow-status.json'),receipt);
   try{
     const state=loadState(stateFile);
-    if(command==='scan'||command==='import'){
+    if(command==='summary'){
+      Object.assign(receipt,writeEditorRunReport(arg('summary'),out));
+    }else if(command==='scan'||command==='import'){
       if(!config||!config.spaces)throw Error('--config is required');normalizeId(config.editorSpaceId);
       const space=arg('space');if(!SPACES[space]||!config.spaces[space])throw Error('Configured --space is required');
       const scope=config.spaces[space];
@@ -92,7 +95,7 @@ await withLock(stateDir,async()=>{
           if(!d.space||!Array.isArray(d.space.editorsList))throw Error('Membership response incomplete');checks.push({space:name,...ids,configured:!!config.spaces?.[name],dataset:d.space.page?.name,canPublish:d.space.editorsList.some(e=>normalizeId(e.memberSpaceId)===normalizeId(config.editorSpaceId)),checkedAt:new Date().toISOString()});}
         catch(e){checks.push({space:name,...ids,error:e.message});}
       }atomicJson(path.join(out,'space-preflight.json'),checks);receipt.spaces=checks;if(checks.some(c=>c.error))throw Error('Preflight incomplete; see per-space errors');
-    }else throw Error('Expected scan, import, evidence, record, decision, reports or preflight');
+    }else throw Error('Expected scan, import, evidence, record, decision, reports, summary or preflight');
     receipt.state='complete';receipt.complete=true;receipt.finishedAt=new Date().toISOString();atomicJson(path.join(out,'workflow-status.json'),receipt);trace(JSON.stringify(receipt));
   }catch(error){receipt.state='failed';receipt.error=error.message;receipt.finishedAt=new Date().toISOString();atomicJson(path.join(out,'workflow-status.json'),receipt);throw error;}
 });

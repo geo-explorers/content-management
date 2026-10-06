@@ -2,7 +2,7 @@
 name: geo-submission-review
 description: Use when checking a space for new bounty submissions. Discover them, group a curator’s work across proposals, review against complete bounty requirements, publish datasets-space reports, draft linked curator feedback and apply accept/reject votes after editor approval. Also review specified submissions, including those without a formal bounty, and publish their reports in the matching Geo datasets space.
 metadata:
-  version: "0.5.6"
+  version: "0.6.0"
 ---
 
 # Geo submission review
@@ -20,6 +20,10 @@ The intake and review scripts are read-only on Geo; the agent carries out delive
 5. With approval, refresh proposal state, apply only the approved votes and verify them. A separate proposal-execution transaction needs explicit coverage in the approval and must wait for voting eligibility. Update feedback drafts to reflect confirmed outcomes and record receipts.
 
 Drafting the report or reply alone does not complete Geo delivery. If publication is blocked, retain the draft and tell the editor the exact blocker; do not invent a published URL. Feedback remains a draft until sending is separately authorized. An editor approval wait is a valid handoff after the reports and linked drafts are ready.
+
+## Mandatory editor handoff after every run
+
+Read [references/editor-run-report.md](references/editor-run-report.md) and generate the fixed [editor report template](assets/editor-run-report.md) after every manual, scheduled, space-discovery or specified-submission run, including no-change, failed and partial runs. Save EDITOR-RUN-REPORT.md plus its JSON input privately; return the report or an accessible link. This requirement applies in every environment, not just Mohammed's workspace or one scheduler. Use the portable generator when available; otherwise fill the exact bundled template, retain every section and state the runtime/persistence limitation. Never substitute a free-form recap. Scheduled no-change runs still save the report while remaining quiet under the notification policy. Refresh it after approved actions so it distinguishes recommendations, confirmed outcomes and remaining approvals. This editor handoff does not replace Geo recipient delivery or grant any additional authorization.
 
 ## 1. Establish intent
 

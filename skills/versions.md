@@ -12,6 +12,9 @@ Per-skill version history. Pairs with `SKILL-VERSIONS.json` (machine-checkable i
 
 ## non-actionable/
 
+### geo-submission-review — 0.6.0
+- 2026-10-06 · Make the user-approved editor run report mandatory across environments and invocation modes. Bundle a fixed Markdown template, offline dependency-free renderer and runner summary command; require outputs for no-change/failed/partial runs, with honest unknowns, private points, verified delivery links and separate approval/action receipts. Preserve quiet no-change notifications and existing review/publication boundaries.
+
 ### geo-submission-review — 0.5.6
 - 2026-10-05 · Deliver every submission review in its verified matching Geo datasets space, including individually supplied submissions without a bounty. Existing Notion mirrors no longer select delivery; Notion requires an explicit current-review exception. Preserve concise evidence-backed findings, full details, private editor summaries and separate vote/message/payment authorization. Verify live destination identity and signer access; correct the World affairs datasets mapping to da96a4c26e718bfa6c27c3b1f3c316cd after live readback.
 
