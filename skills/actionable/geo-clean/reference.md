@@ -198,3 +198,7 @@ Run it live (no snapshot) BEFORE a merge as a pre-flight: it lists exactly what 
 If `bun run` errors with a network host blocked by the host platform's sandbox, the editor adds that host to the platform's network allowlist and retries. (Exact config location varies by platform — settings UI, a `config.toml`, or similar.) Do not suggest disabling the sandbox.
 
 If a multi-space publish fails partway (some spaces proposed, others not), do NOT rerun blindly: re-run the dry-run, diff the per-space op files against what already landed (proposal URLs from the partial run), and publish only the missing spaces. Deterministic relation ids (HARD RULE 5) make the re-publish idempotent.
+
+## System-generated ranking outputs (live verified 2026-10-12)
+
+Rank position (`890deffb384349fa826974000e3dcef6`) is a read-only aggregate relation emitted by Ranking blocks; Rank position value (`e1ffac9fbeb446548a5000e1d6c662fb`) is its system-maintained aggregate score. They are included in the shared excluded relation/value sets. They must not be copied, redirected, deleted or restored manually. Do not count a generated Rank position as an editable backlink or require an exact recreated edge after a topic merge. Generated output edges can regenerate independently; compare underlying voter records exactly. A failure to read back a hand-created ranking edge is not a reason to retry writing its metadata.

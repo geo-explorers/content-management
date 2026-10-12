@@ -70,17 +70,23 @@ export const RANK_VOTES_RELATION_TYPE_ID = "19a4cfff45f24150abf2af0f43eb2eec";
 export const VOTE_ORDINAL_VALUE_PROPERTY_ID = "49ee1b8918204e75a1ae38a2dcaad4a5";
 /** "Vote Weighted Value" — numeric score on a vote relation entity. */
 export const VOTE_WEIGHTED_VALUE_PROPERTY_ID = "103701ddcabe4a8e835b10345327b647";
+/** System-generated aggregate edges of Ranking blocks; these are not editable topic backlinks. */
+export const RANK_POSITION_RELATION_TYPE_ID = "890deffb384349fa826974000e3dcef6";
+/** System-maintained aggregate score on a Rank position relation entity. */
+export const RANK_POSITION_VALUE_PROPERTY_ID = "e1ffac9fbeb446548a5000e1d6c662fb";
 
 /** Value properties our ops must never set, copy, or unset. */
 export const EXCLUDED_VALUE_PROPERTY_IDS = new Set<string>([
   SCORE_PROPERTY_ID,
   VOTE_ORDINAL_VALUE_PROPERTY_ID,
   VOTE_WEIGHTED_VALUE_PROPERTY_ID,
+  RANK_POSITION_VALUE_PROPERTY_ID,
 ]);
 
 /** Relation types our ops must never create, redirect, or delete. */
 export const EXCLUDED_RELATION_TYPE_IDS = new Set<string>([
   RANK_VOTES_RELATION_TYPE_ID,
+  RANK_POSITION_RELATION_TYPE_ID,
 ]);
 
 // ─── Anchored (identity) entities ─────────────────────────────────────────────
