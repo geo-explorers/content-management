@@ -21,8 +21,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = REPO / "agents" / "MD-FILES.md"
-# Run outputs are listed by pattern, not one line per file.
-PATTERN_COVERED = re.compile(r"^output/fix_properties/[^/]+/README\.md$")
+# Listed by pattern, not one line per file: run outputs, and the migration working
+# notes in audit/ and audit-2/ (temporary; removed when the migration is finished).
+PATTERN_COVERED = re.compile(r"^(output/fix_properties/[^/]+/README\.md|audit(-2)?/.+\.md)$")
 
 
 def tracked_md() -> list[str]:

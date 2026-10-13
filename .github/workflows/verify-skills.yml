@@ -3,20 +3,14 @@ name: Verify skill integrity
 # Fails the build if any shipped skill changed without being re-approved
 # (bump version + changelog + `python3 skill-dev/skill_versions.py generate`),
 # or if agents/MD-FILES.md no longer matches the repo's Markdown files.
+#
+# This is a REQUIRED status check on main, so it runs on every pull request with
+# no path filter: a required check that is skipped never reports, and the pull
+# request would wait on it forever.
 on:
   pull_request:
-    paths:
-      - "skills/**"
-      - "skill-dev/skill_versions.py"
-      - "agents/**"
-      - "skill-dev/check_md_manifest.py"
   push:
     branches: [main]
-    paths:
-      - "skills/**"
-      - "skill-dev/skill_versions.py"
-      - "agents/**"
-      - "skill-dev/check_md_manifest.py"
 
 jobs:
   verify:
