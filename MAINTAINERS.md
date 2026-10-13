@@ -2,7 +2,7 @@
 
 For the people who maintain this repository. Editors and agents do not need this file.
 
-This repository is becoming a **skills library**. Agents are moving to `geo-explorers/geo-agents`. This file records what belongs here and what does not. The procedures for changing a skill and for cutting a release are added in migration step 2.
+This repository is becoming a **skills library**. Agents are moving to `geo-explorers/geo-agents`. This file records what belongs here and what does not. It also holds the procedures for changing a skill and for cutting a release.
 
 ## Bucket list — what belongs in this repository
 
@@ -113,8 +113,72 @@ Working notes from the 9 and 11 October audit sessions. They are the source of t
 
 ## Changing a skill
 
-To be written in migration step 2.
+Every change under `skills/` or `skill-dev/` goes through a pull request. Nothing is pushed straight to `main`.
+
+1. **Branch from `main`** and make the change.
+2. **Lint the skill** against the authoring standard:
+   ```bash
+   python3 skill-dev/skill-quality-check/scripts/check_skill.py skills/<tier>/<skill> --format table
+   ```
+3. **Bump `version`** in the skill's `SKILL.md` frontmatter. Patch for wording or a fix, minor for a new capability, major for a breaking change to how the skill is used.
+4. **Add a dated bullet** for the skill in `skills/versions.md`: what changed and why.
+5. **Update `agents/MD-FILES.md`** if the version changed or a Markdown file was added or removed.
+6. **Commit the change, then re-approve it.** Regenerate the integrity manifest and commit it in the same pull request:
+   ```bash
+   python3 skill-dev/skill_versions.py generate
+   python3 skill-dev/skill_versions.py verify       # must end with "All skills match"
+   python3 skill-dev/check_md_manifest.py           # must end with "matches the repo"
+   ```
+7. **Open the pull request.** It can merge only when the `verify` check passes and another team member has approved. A new commit on the pull request cancels earlier approvals.
+
+What the `verify` check proves: every skill folder matches the content fingerprint recorded for it in `skills/SKILL-VERSIONS.json`, and every Markdown file is listed in the manifest. A skill edited without step 6 fails as `DRIFT`; a new skill fails as `UNLISTED`. The fingerprint covers the skill folders only, not the shared code in `src/`, `lib/` and `scripts/`.
+
+### How a change reaches the people and agents who use it
+
+- **Nothing downloads skills while it runs.** No agent fetches or overwrites skill files during a task. If a skill is missing, the agent stops and asks a person.
+- **A person updates a local install**, from a checkout of a release tag: `bash skill-dev/sync-skills.sh`, then restart the app.
+- **`geo-agents` updates through its own pull request.** It keeps a copy of the skills pinned to one release tag and one commit, with a fingerprint per file in `skills.lock.json`. Moving to a newer release is a reviewed pull request in that repository.
 
 ## Cutting a release
 
-To be written in migration step 2.
+A release is a signed tag on `main`. It is the only thing consumers pin to, so it is cut on purpose, by a person, from a commit where the check is green.
+
+1. **Pick the commit.** It must be on `main` with a passing `verify` run. Check locally from a clean checkout of that commit:
+   ```bash
+   python3 skill-dev/skill_versions.py verify
+   python3 skill-dev/check_md_manifest.py
+   ```
+2. **Pick the version.**
+
+   | Bump | When |
+   |---|---|
+   | Major | A skill is removed or renamed, or the way a skill is used changes in a breaking way |
+   | Minor | A skill is added or gains a capability, or files outside the skill folders are added or removed |
+   | Patch | Fixes and wording only |
+
+   `v1.0.0` is the library as it stood before the agents moved out. `v1.1.0` follows the cut-over in migration step 6.
+3. **Tag and push.** The tag is signed, so signing must be set up in your git configuration first.
+   ```bash
+   git tag -s vX.Y.Z -m "content-management vX.Y.Z" <commit>
+   git push origin vX.Y.Z
+   ```
+4. **Record the commit.** A tag can be moved; a commit hash cannot. Print the full 40-character hash and put it in the release notes:
+   ```bash
+   git rev-list -n 1 vX.Y.Z
+   ```
+5. **Write the release notes** on GitHub for that tag: the full commit hash, each skill with its version (from `skills/SKILL-VERSIONS.json`), and what changed since the previous release (from `skills/versions.md`).
+6. **Never move or delete a published tag.** A mistake in a release is fixed by the next version.
+
+After a release, `geo-agents` is updated by a pull request there that points its lock file at the new tag and commit.
+
+## Branch protection on `main`
+
+These settings live in the repository settings on GitHub, not in a file. They are what makes the procedures above binding.
+
+| Setting | Value |
+|---|---|
+| Require a pull request before merging | On |
+| Require approvals | On, at least one, from a team member other than the author |
+| Dismiss stale pull request approvals when new commits are pushed | On |
+| Require status checks to pass before merging | On, with the check `verify` |
+| Do not allow bypassing the above settings | On, so the rules apply to administrators too |

@@ -16,7 +16,7 @@ Every Markdown file in this repository: what it contains, who reads it, and when
 
 | File | Contents | Read by | Trigger |
 |---|---|---|---|
-| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, self-heal a missing skill, deletes only via geo-clean, never touch the private key), self-heal procedure, route to `agents/` | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
+| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, stop when a skill is missing, deletes only via geo-clean, never touch the private key), route to `agents/` | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
 | `README.md` | Setup runbook: install, the security contract, where skills go per host, skills index, entity-operations toolkit, project structure | Every agent and every human setting up | On routing — first file for a non-Claude agent |
 
 ## 2. Agent contracts — `agents/`
@@ -92,6 +92,7 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `skills/README.md` | What the skills folder is, the actionable/non-actionable split, how to add a skill |
 | `skills/versions.md` | Per-skill changelog: what changed, why, and the evidence. Paired with `SKILL-VERSIONS.json` |
 | `skill-dev/README.md` | Maintainer tooling: version manifest generator, quality linter, `sync-skills.sh` |
+| `MAINTAINERS.md` | What belongs in this repository (the bucket list), how to change a skill, how to cut a release |
 | `skill-dev/skill-quality-check/SKILL.md` | The linter itself, packaged as a skill |
 
 ## 6. Project documentation — `documentation/`
@@ -108,6 +109,7 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 |---|---|
 | `output/fix_properties/ASSIGNMENTS.md` and `output/fix_properties/<id>/README.md` (8 files) | Output of one past cleanup run. Historical evidence, not instructions |
 | `todo.md` | A scratch note |
+| `audit/` and `audit-2/` (46 files, listed by pattern) | Working notes behind the migration to `geo-agents`. Temporary: removed when the migration is finished |
 
 ---
 
@@ -118,4 +120,4 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 - **Changing a skill:** bump `version` in its `SKILL.md`, add a line to `skills/versions.md`, regenerate `skills/SKILL-VERSIONS.json`, and update the version in section 3.
 - **Before trusting an install:** compare the installed `SKILL.md` version with this file. A mismatch means the install is stale — run `bash skill-dev/sync-skills.sh` and restart the host. Two agents running different versions of the same skill will overwrite each other's work.
 
-*Counts on 18 September 2026: **63** tracked `.md` files — 2 entry points, 5 agent contracts, 15 skills, 21 skill reference files, 3 ontology/standard documents, 4 maintainer documents, 3 project documents, 9 run artifacts and 1 scratch note. Every tracked file appears in exactly one section above.*
+*Counts on 13 October 2026: **110** tracked `.md` files — 2 entry points, 5 agent contracts, 15 skills, 21 skill reference files, 3 ontology/standard documents, 5 maintainer documents, 3 project documents, 9 run artifacts, 1 scratch note and 46 migration working notes. Every tracked file appears in exactly one section above.*
