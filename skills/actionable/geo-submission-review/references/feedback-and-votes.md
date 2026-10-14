@@ -8,6 +8,10 @@ For a mixed batch, state that some items passed and others failed. Name the item
 
 Use the actual stage: before voting, say “passed the review” / “recommended for acceptance” and “did not meet the requirements” / “recommended for rejection.” After verified votes, say “voted to accept/reject”; when execution is pending, say so. Only say the changes are published after execution and readback. Never imply payment without a payment receipt.
 
+**Repair requests must have a useful outcome (Mohammed, 11 October 2026).** Ask for a correction when it could make the work eligible, or when otherwise eligible/accepted work needs a specific content fix. For work that will remain rejected because of a separate eligibility failure, explain the failed criterion and do not request repairs that cannot change that outcome. Explain each distinct verified error type with a clear example and ask neutrally how it arose; offer a concrete check for future submissions without creating a task to repair an independently ineligible item. Keep the full affected-item list in the private editor/QA record. Keep cause/process questions and prevention details in the linked report so Discord replies stay short. If relevant, the reply may ask the curator to explain their checking process for the named types. Do not invent a process answer or require a reply before completing an evidence-backed review.
+
+For example, a routine activity-metrics story still fails the substantial-event requirement after its percentage is corrected, so its curator reply explains the rejection without asking for that percentage repair.
+
 Accepted eligibility can coexist with a verified content correction. Name that exception clearly: the curator need not redo the accepted selection, but should address the specific wording, attribution or source issue. A correction-only case receives a correction request, not invented accepted/rejected groups. After approved voting, revise the draft to match the confirmed outcomes and preserve any required corrections.
 
 ## Concrete editor approval

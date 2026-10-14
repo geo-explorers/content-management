@@ -2,6 +2,7 @@
 // Review-only entrypoint. No signing, votes, payments or external writes.
 import fs from 'node:fs';
 import {writeEditorRunReport} from './editor-run-report.mjs';
+import {recordHistoryReceipt,historyKey} from './review-history.mjs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -75,7 +76,10 @@ await withLock(stateDir,async()=>{
       Object.assign(receipt,{space,...result,specErrors:specResult.errors});
     }else if(command==='record'){
       const input=readJson(arg('review'));const rows=Array.isArray(input)?input:[input];
+      if(rows.some(r=>r.feedbackPolicy!=='error_types_v1'))throw Error('New reviews require the error_types_v1 feedback policy; preserve historical reviews without re-recording them');
       const updated=rows.map(r=>recordReview(state,r));atomicJson(stateFile,state);receipt.recordedCases=updated.map(c=>c.id);
+    }else if(command==='history-receipt'){
+      const input=readJson(arg('history'));const rows=Array.isArray(input)?input:[input];receipt.historyLogs=rows.map(r=>recordHistoryReceipt(state,r).id);atomicJson(stateFile,state);
     }else if(command==='decision'){
       const input=readJson(arg('decision'));const rows=Array.isArray(input)?input:[input];receipt.decisions=rows.map(d=>recordDecision(state,d).id);atomicJson(stateFile,state);
     }else if(command==='delivery'){
@@ -83,13 +87,16 @@ await withLock(stateDir,async()=>{
     }else if(command==='evidence'){
       const ids=arg('case')?[arg('case')]:Object.keys(state.cases);for(const id of ids)atomicJson(path.join(out,id+'.evidence.json'),caseEvidence(state,id));receipt.cases=ids;
     }else if(command==='reports'){
-      const drafts=[],unchangedDrafts=[],investigationNeeded=[],reconciliationNeeded=[];for(const c of Object.values(state.cases)){
+      const drafts=[],unchangedDrafts=[],investigationNeeded=[],reconciliationNeeded=[],historyLoggingPending=[];for(const c of Object.values(state.cases)){
+        const keys=new Set((c.curatorReviewLog??[]).map(r=>r.key));
+        for(const key of keys){const rows=c.curatorReviewLog.filter(r=>r.key===key),last=rows.at(-1);if(!rows.some(r=>r.status==='verified')&&['unknown','failed'].includes(last.status))historyLoggingPending.push({caseId:c.id,key,status:'reconciliation_needed',receipt:last});}
         if(['submitted','unknown','failed'].includes(c.delivery?.status)){reconciliationNeeded.push({caseId:c.id,delivery:c.delivery});continue;}
         if(c.review?.fingerprint!==c.fingerprint)continue;
         const readiness=reviewReadiness(c);if(!readiness.complete){c.status='review_unresolved';investigationNeeded.push({caseId:c.id,...readiness});continue;}
         const prepared=prepareReportDraft(c,path.join(out,c.id+'.json'));const {draft,changed}=prepared;if(prepared.reconciliationNeeded)reconciliationNeeded.push({caseId:c.id,delivery:c.delivery});else (prepared.readyToPublish?drafts:unchangedDrafts).push(draft);atomicJson(path.join(out,c.id+'.json'),draft);fs.writeFileSync(path.join(out,c.id+'.md'),draft.markdown);
+        if(c.review.feedbackPolicy==='error_types_v1'&&c.delivery?.status==='verified'&&c.delivery.fingerprint===c.fingerprint){const key=historyKey(c);if(!(c.curatorReviewLog??[]).some(r=>r.key===key&&r.status==='verified')&&!historyLoggingPending.some(r=>r.caseId===c.id&&r.key===key))historyLoggingPending.push({caseId:c.id,key,status:'needs_logging'});}
         const summary=editorSummary(c);if(summary){atomicJson(path.join(out,c.id+'.editor.json'),summary);fs.writeFileSync(path.join(out,c.id+'.editor.md'),editorSummaryMarkdown(summary));}
-      }atomicJson(stateFile,state);receipt.investigationNeeded=investigationNeeded;receipt.reconciliationNeeded=reconciliationNeeded;receipt.drafts=drafts.map(d=>({caseId:d.caseId,pageId:d.pageId,targetSpaceId:d.targetSpaceId}));receipt.unchangedDrafts=unchangedDrafts.map(d=>d.caseId);
+      }atomicJson(stateFile,state);receipt.investigationNeeded=investigationNeeded;receipt.reconciliationNeeded=reconciliationNeeded;receipt.historyLoggingPending=historyLoggingPending;receipt.drafts=drafts.map(d=>({caseId:d.caseId,pageId:d.pageId,targetSpaceId:d.targetSpaceId}));receipt.unchangedDrafts=unchangedDrafts.map(d=>d.caseId);
     }else if(command==='preflight'){
       if(!config)throw Error('--config required');
       const checks=[];for(const [name,ids] of Object.entries(SPACES)){
@@ -97,7 +104,7 @@ await withLock(stateDir,async()=>{
           if(!d.space||!Array.isArray(d.space.editorsList))throw Error('Membership response incomplete');checks.push({space:name,...ids,configured:!!config.spaces?.[name],dataset:d.space.page?.name,canPublish:d.space.editorsList.some(e=>normalizeId(e.memberSpaceId)===normalizeId(config.editorSpaceId)),checkedAt:new Date().toISOString()});}
         catch(e){checks.push({space:name,...ids,error:e.message});}
       }atomicJson(path.join(out,'space-preflight.json'),checks);receipt.spaces=checks;if(checks.some(c=>c.error))throw Error('Preflight incomplete; see per-space errors');
-    }else throw Error('Expected scan, import, evidence, record, decision, reports, summary or preflight');
+    }else throw Error('Expected scan, import, evidence, record, decision, delivery, history-receipt, reports, summary or preflight');
     receipt.state='complete';receipt.complete=true;receipt.finishedAt=new Date().toISOString();atomicJson(path.join(out,'workflow-status.json'),receipt);trace(JSON.stringify(receipt));
   }catch(error){receipt.state='failed';receipt.error=error.message;receipt.finishedAt=new Date().toISOString();atomicJson(path.join(out,'workflow-status.json'),receipt);throw error;}
 });
