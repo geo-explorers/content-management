@@ -1,6 +1,6 @@
 {
   "skill_name": "geo-submission-review",
-  "skill_version": "0.4.0",
+  "skill_version": "0.7.0",
   "status": "Prepared fixtures; record live pilot and behavioral outcomes separately",
   "instructions": "Supply only the prompt and skill to the reviewing agent. Keep expected_output and assertions for evaluation. Fixtures authorize drafts only, using supplied evidence. Do not write to Notion, Geo, or message a contributor.",
   "evals": [
@@ -11,7 +11,7 @@
       "assertions": [
         "Does not characterize the publisher's qualified statement as a guarantee.",
         "Separates the judgment's factual relevance from Country A's legal liability.",
-        "Does not invent a defect to meet the 1–5 preference or assert an unrestricted all-clear."
+        "Does not invent a defect to meet the example-per-error-type requirement or assert an unrestricted all-clear."
       ]
     },
     {
@@ -50,13 +50,13 @@
     {
       "id": 5,
       "prompt": "Format feedback for a fictional historical-source submission from these already verified findings; use only this fixture and write nothing externally. Findings and supplied evidence: A misattributes a court's judgment about State B to State A, altering its main claim (judgment J, operative section); B reports 800 victims where the event report lists 80 (report R, table 2); C1–C3 omit the source-specific rationale required in the bounty (records C1–C3, Rationale fields blank); D says the publisher has no peer review although its policy says scholarly titles are anonymously reviewed (policy P, Review section); E states an allegation as a conviction (docket E, case pending); F has a minor founding-year typo unrelated to the cited material; G is a cosmetic capitalization inconsistency. The editor wants a short page to forward, with all evidence locators preserved. Keep other findings in an internal note.",
-      "expected_output": "Selects up to five significant distinct problems in the exact four-column format. Uses one representative of C1–C3, keeping the other examples internally; no group label, affected-entity appendix or fix column. Minor F/G remain internal. Preserves supplied evidence locators without inventing URLs.",
+      "expected_output": "Covers all six verified error types A–F in the exact four-column format, with one representative of C1–C3. Keeps optional cosmetic G internal because no violated criterion was established. Includes a neutral process question, a useful correction and prevention check for each verified category, including minor factual F, without assuming the cause. Preserves supplied evidence locators without inventing URLs.",
       "assertions": [
-        "Returns at most five rows without collapsing unrelated defects into a catch-all.",
-        "Shows only one named C example; keeps the others internal.",
-        "Each row explains the issue and has separately visible supplied citation and quote or evidence detail.",
-        "Keeps F/G out of the main table when choosing the five consequential repairs.",
-        "Does not display seven-column controls, a full research queue or an incomplete-review footer."
+        "Includes all six verified error categories; no five-row cap or catch-all.",
+        "Shows only one named C example; keeps repeated occurrences internal.",
+        "Each row explains the issue, asks neutrally how it arose and gives a prevention check.",
+        "Distinguishes verified factual F from optional cosmetic G.",
+        "Does not expose private scoring or invent evidence URLs."
       ]
     },
     {
@@ -79,7 +79,7 @@
         "Identifies B despite its different headline and retains C precedence despite later execution.",
         "Distinguishes a material new ruling from the earlier lawsuit.",
         "Finds the within-curator repeat and records a recommendation for each story.",
-        "Keeps feedback within five rows and four columns without actual scoring, votes or graph actions."
+        "Covers every verified error type with one example and four columns, without actual scoring, votes or graph actions."
       ]
     },
     {
@@ -156,6 +156,46 @@
         "Does not manufacture issues or an empty findings table.",
         "Reconciles an unknown write before retrying.",
         "Reports only verified saved state."
+      ]
+    },
+    {
+      "id": 15,
+      "prompt": "Fictional dry-run scenario only; do not write externally. Mohammed asks to review a Crypto news batch under his recorded report-publication scope. Reviews are complete: launch A qualifies, launch B qualifies but has a verified attribution correction, price-only C fails. All three are separate proposals. Describe the delivery sequence and draft a reply using the supplied simulated verified report URL https://example.com/review. No vote approval exists yet.",
+      "expected_output": "Describes safeguarded report publication and readback, then linked feedback and a concrete editor vote approval request. Draft distinguishes passing A/B from failing C, preserves B attribution repair, avoids private counts/points and does not claim actual votes or external writes.",
+      "assertions": [
+        "Publication is the default agent completion path within the existing scope, with readback.",
+        "Draft identifies C as failing and B as still needing its specific correction.",
+        "No vote is represented as cast before editor approval; no messages or payout are sent."
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "Fictional dry-run scenario only; no external writes. Editor approved the exact YES vote for unchanged proposal P; the plan explicitly said it could publish immediately in fast mode. Proposal Q has both qualifying and failing items and no approved action. Proposal R has a recorded YES vote, slow voting is still open, and separate execution authorization is recorded for after eligibility. Describe the next actions and accurate curator wording.",
+      "expected_output": "Describes applying and verifying the unchanged approved P action without duplicate approval; holds Q for splitting/correction or editor choice; keeps R execution pending until eligible without repeating its vote. Wording distinguishes voting from indexed execution.",
+      "assertions": [
+        "Uses the exact approved scope for P rather than treating every proposal as approved.",
+        "Does not blanket-accept the mixed Q package or bypass R voting window.",
+        "Feedback never labels R content published before execution/readback."
+      ]
+    },
+    {
+      "id": 17,
+      "prompt": "Fictional dry-run scenario only; no external writes. The editor explicitly requests drafts only for this pass. One case is complete, one has a material unresolved decision, and a third report submission timed out with unknown outcome. Describe what can be delivered and how to resume safely.",
+      "expected_output": "Honors draft-only scope, retains the incomplete case as investigation, labels the unknown report outcome honestly and reconciles live state before retry. Does not invent verified URLs or seek votes on unresolved cases.",
+      "assertions": [
+        "Explicit drafts-only overrides the default publication workflow.",
+        "Material unresolved work does not become a final report or forced rejection.",
+        "Unknown publication is reconciled before retrying; draft links are not misrepresented as verified."
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "Using a fictional completed Geo review, prepare a Notion curator history entry. The same case and recipient feedback were already logged with an exact Review key and a verified row URL. Only the scan time, evidence retrieval time and private points calculation have changed. No external writes.",
+      "expected_output": "Reuses the verified history entry; does not create or republish anything, preserves the actual original review date and feedback snapshot, and does not treat published feedback as a sent Discord message. A substantive later feedback change would get a new entry linked to this one.",
+      "assertions": [
+        "No duplicate history entry for an unchanged review.",
+        "Keeps private scoring out of shared history.",
+        "Preserves publication and authorization boundaries."
       ]
     }
   ]

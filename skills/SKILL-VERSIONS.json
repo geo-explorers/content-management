@@ -21,6 +21,11 @@
       "approved_commit": "009001b0aafcc789e87ce31ccb189d3f104921db",
       "content_sha256": "5c0c6b49fb50fb9b39df714c97b11c2178f5c1fc642c0c880db564d05b7c33fb"
     },
+    "actionable/geo-submission-review": {
+      "version": "0.7.2",
+      "approved_commit": "ee0bf2ccb74b2490aef2dbf7d9e24a3443bb0f69",
+      "content_sha256": "9ec9dbff73b394eb7b324577eaaf58b146e5dc5e8f3c83f4a46fd65986c61ed4"
+    },
     "non-actionable/daily-report": {
       "version": "0.1.0",
       "approved_commit": "5c1c5c22c2946ae1dbdd698e496f9951f2a0100f",
@@ -40,11 +45,6 @@
       "version": "0.2.8",
       "approved_commit": "44d676d0a1bb05096cff581bc0fa52bfb00b1097",
       "content_sha256": "29a47b7695cff84b052cd8a7be740ad81a96cce9a09bda1bbc4061dddc0e3bdf"
-    },
-    "non-actionable/geo-submission-review": {
-      "version": "0.4.0",
-      "approved_commit": "4970627d397ade340d191744e4da6144f80b1779",
-      "content_sha256": "18ace1a922bb4d3af749cb2ad74ac38567e44488a9ee9a2b0174504304d1319e"
     },
     "non-actionable/image-banner-recompose": {
       "version": "0.2.0",
