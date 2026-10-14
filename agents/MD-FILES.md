@@ -16,7 +16,7 @@ Every Markdown file in this repository: what it contains, who reads it, and when
 
 | File | Contents | Read by | Trigger |
 |---|---|---|---|
-| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, stop when a skill is missing, deletes only via geo-clean, never touch the private key), route to `agents/` | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
+| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, stop when a skill is missing, deletes only via geo-clean, never touch the private key), route to `agents/`, the short procedure for changing, adding and releasing a skill | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
 | `README.md` | Setup runbook: install, the security contract, where skills go per host, skills index, entity-operations toolkit, project structure | Every agent and every human setting up | On routing — first file for a non-Claude agent |
 
 ## 2. Agent contracts — `agents/`
