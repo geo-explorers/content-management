@@ -2,7 +2,7 @@
 
 For the people who maintain this repository. Editors and agents do not need this file.
 
-This repository is becoming a **skills library**. Agents are moving to `geo-explorers/geo-agents`. This file records what belongs here and what does not. It also holds the procedures for changing a skill and for cutting a release.
+This repository is a **skills library**. The agents moved to `geo-explorers/geo-agents` in migration step 6. This file records what belongs here and what does not. It also holds the procedures for changing a skill and for cutting a release.
 
 ## Bucket list — what belongs in this repository
 
@@ -15,7 +15,7 @@ Every tracked file sits in exactly one bucket. The rule for each bucket:
 | **A · Skill** | Inside a skill folder, or one of the three skill index files. Stays. | 88 |
 | **B · Shared code** | Outside a skill folder, and at least one skill calls it or points to it, or it maintains such a file. Stays for now. | 14 |
 | **C · Library tooling** | Needed to build, check or install the library itself. Stays. | 21 |
-| **D · Leaves at cut-over** | Neither a skill nor called by one. Removed in migration step 6. | 49 |
+| **D · Removed at cut-over** | Neither a skill nor called by one. Removed in migration step 6. | 49 |
 | **E · Temporary** | Migration working notes. Removed when the migration is finished. | 62 |
 
 The migration plan names three buckets: skill, shared code, neither. Bucket C is added here because files such as `package.json` and `skill-dev/` are none of the three. Bucket E is separate from D because it leaves later.
@@ -73,7 +73,7 @@ None of these files imports anything from bucket D.
 | Path | Files | What it is |
 |---|---|---|
 | `skill-dev/` | 8 | Linter, integrity manifest tools, Markdown manifest check, local install script |
-| `agents/MD-FILES.md` | 1 | Manifest of this library's Markdown files. Moves out of `agents/` in step 6, because that folder is removed |
+| `MD-FILES.md` | 1 | Manifest of this library's Markdown files. Moved out of `agents/` in step 6, when that folder was removed |
 | `.github/workflows/verify-skills.yml` | 1 | Integrity check |
 | `.github/workflows/discord-notify.yml` | 1 | Change feed to Discord |
 | `.claude/settings.json` | 1 | Auto-approve allowlist |
@@ -83,7 +83,7 @@ None of these files imports anything from bucket D.
 | `package.json`, `package-lock.json`, `bun.lock`, `tsconfig.json` | 4 | Toolchain |
 | `.gitignore`, `.env.example` | 2 | |
 
-### D · Leaves at cut-over, migration step 6 (49 files)
+### D · Removed at cut-over, migration step 6 (49 files)
 
 | Path | Files | Where it goes |
 |---|---|---|
@@ -100,7 +100,7 @@ None of these files imports anything from bucket D.
 
 No skill runs any of these files. One skill, geo-orchestrate, names `03_merge_duplicates.ts` in a sentence as a style example.
 
-**Also in the step 6 pull request.** `agents/MD-FILES.md` moves out of `agents/` before the folder is removed, and its new path is set in `skill-dev/check_md_manifest.py` and `.github/workflows/verify-skills.yml`. These bucket C files mention `agents/` or `documentation/` and will point at nothing once the folders are gone: `CLAUDE.md`, `README.md`, `skill-dev/README.md`, `skill-dev/check_md_manifest.py`, `.github/workflows/verify-skills.yml`, `skill-dev/skill-quality-check/evals/evals.json`. `README.md` also documents the numbered scripts in its "Entity operations toolkit" section.
+**Done in the same step 6 pull request.** `MD-FILES.md` moved to the repository root, and its path changed in `skill-dev/check_md_manifest.py` and `.github/workflows/verify-skills.yml`. `CLAUDE.md`, `README.md` and `skill-dev/README.md` now point to `geo-agents` instead of the removed folders, and the README no longer documents the numbered scripts.
 
 ### E · Temporary — removed when the migration is finished (62 files)
 
@@ -122,7 +122,7 @@ Every change under `skills/` or `skill-dev/` goes through a pull request. Nothin
    ```
 3. **Bump `version`** in the skill's `SKILL.md` frontmatter. Patch for wording or a fix, minor for a new capability, major for a breaking change to how the skill is used.
 4. **Add a dated bullet** for the skill in `skills/versions.md`: what changed and why.
-5. **Update `agents/MD-FILES.md`** if the version changed or a Markdown file was added or removed.
+5. **Update `MD-FILES.md`** if the version changed or a Markdown file was added or removed.
 6. **Commit the change, then re-approve it.** Regenerate the integrity manifest and commit it in the same pull request:
    ```bash
    python3 skill-dev/skill_versions.py generate
@@ -139,7 +139,7 @@ Everything in "Changing a skill" applies, plus:
 
 - **Pick the tier.** `skills/actionable/` if the skill can change Geo, otherwise `skills/non-actionable/`.
 - **Frontmatter.** `SKILL.md` starts with `name`, a `description` that carries the phrases that should trigger it, and `version: 0.1.0`.
-- **List it.** Add a row to the index in `skills/README.md`, a section in `skills/versions.md`, and a row in `agents/MD-FILES.md` for every new Markdown file.
+- **List it.** Add a row to the index in `skills/README.md`, a section in `skills/versions.md`, and a row in `MD-FILES.md` for every new Markdown file.
 - **Route to it,** if editors should be sent to it by default: add a row to the routing table in `CLAUDE.md`.
 - **Expect `UNLISTED`.** `verify` reports the new skill as unlisted until the manifest is regenerated in step 6.
 

@@ -14,16 +14,11 @@
 
 If a request is ambiguous, ask which skill — don't guess and improvise.
 
-## Agents — read `agents/` before creating or running one
+## Agents live in `geo-agents`
 
-If the task involves **creating, editing, or invoking an agent** — or doing any work inside the **Agents flow** Notion teamspace (Agents flow center, Geo content work, the "- new" mirrors, Project tracking) — read these first:
+The agents, the Agents flow workflow guide and the Notion tracker ids moved to [geo-explorers/geo-agents](https://github.com/geo-explorers/geo-agents). If the task involves **creating, editing or invoking an agent**, or any work in the **Agents flow** Notion teamspace, do it from a checkout of `geo-agents`, and read its `CLAUDE.md` and `workflow/AGENT-WORKFLOW.md` first. This repository holds only the skills, the shared code they call, and the tools that check them.
 
-| File | Read it when |
-|---|---|
-| **[`agents/AGENT-WORKFLOW.md`](agents/AGENT-WORKFLOW.md)** | **Always, before any work in the Agents flow teamspace.** The operating contract: where to work, the mandatory task lifecycle (log the task → `In progress` → do the work → write the result **+ a link to where it lives** → `Done`), the Work tracker and QA issue tracker schemas with their exact option values, the hard rules, and the known traps. |
-| **[`agents/README.md`](agents/README.md)** | Before **creating or installing** an agent — the file format, where agents get installed, and the index of existing agents. Check whether an agent already covers the job before writing a new one. |
-
-Two rules that come from those files and are easy to get wrong:
+Two rules from that guide that are easy to get wrong:
 - **Log the task BEFORE starting work**, in the Work tracker, with `Projects` set to **Agent flows** — every view filters on it, so a task without it is invisible to the team.
 - **Problems go in the QA issue tracker**, with severity + urgency + evidence — never buried in a task note.
 
@@ -48,7 +43,7 @@ This applies when the task is to **edit the skills themselves**, not to use them
   1. Lint it: `python3 skill-dev/skill-quality-check/scripts/check_skill.py skills/<tier>/<skill> --format table`.
   2. Bump `version` in its `SKILL.md`: patch for wording or a fix, minor for a new capability, major for a breaking change.
   3. Add a dated line for it in `skills/versions.md`: what changed and why.
-  4. Update its version in `agents/MD-FILES.md`, and add a row for any new Markdown file.
+  4. Update its version in `MD-FILES.md`, and add a row for any new Markdown file.
   5. Commit the change, then re-approve it: `python3 skill-dev/skill_versions.py generate`, then `python3 skill-dev/skill_versions.py verify` and `python3 skill-dev/check_md_manifest.py` must both pass. Commit `skills/SKILL-VERSIONS.json`.
 - **Adding a skill** is the same, plus: put it in `skills/actionable/` if it can change Geo, otherwise in `skills/non-actionable/`; give `SKILL.md` frontmatter with `name`, a `description` full of trigger phrases, and `version: 0.1.0`; add a row to the index in `skills/README.md`; add a section for it in `skills/versions.md`; and add a row to the routing table above if editors should be sent to it by default. `verify` reports it as `UNLISTED` until the manifest is regenerated.
 - **If `verify` reports `DRIFT` on a skill you did not mean to change, undo that change. Do not regenerate.** Regenerating approves whatever changed.

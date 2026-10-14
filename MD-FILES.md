@@ -16,20 +16,10 @@ Every Markdown file in this repository: what it contains, who reads it, and when
 
 | File | Contents | Read by | Trigger |
 |---|---|---|---|
-| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, stop when a skill is missing, deletes only via geo-clean, never touch the private key), route to `agents/`, the short procedure for changing, adding and releasing a skill | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
-| `README.md` | Setup runbook: install, the security contract, where skills go per host, skills index, entity-operations toolkit, project structure | Every agent and every human setting up | On routing — first file for a non-Claude agent |
+| `CLAUDE.md` | Skill routing table, the four hard rules (no hand-written Geo writes, stop when a skill is missing, deletes only via geo-clean, never touch the private key), where the agents went, the short procedure for changing, adding and releasing a skill | Every agent | Automatic in Claude Code; other hosts reach it from `README.md` |
+| `README.md` | Setup runbook: install, the security contract, where skills go per host, skills index, shared-code reference, project structure | Every agent and every human setting up | On routing — first file for a non-Claude agent |
 
-## 2. Agent contracts — `agents/`
-
-| File | Contents | Read by | Trigger |
-|---|---|---|---|
-| `agents/AGENT-WORKFLOW.md` | Operating contract for the Agents flow Notion teamspace: page IDs, the task lifecycle (log → In progress → result + link → Done), Work tracker and QA tracker fields with exact option values, hard rules, known traps | Every agent working in that teamspace | On routing — before any teamspace work |
-| `agents/README.md` | What an agent definition file is, where to install it, index of the agents in this repo | Anyone creating or installing an agent | On demand |
-| `agents/geo-research.md` | The geo-research agent definition: research a question under the trusted-sources allowlist and return a cited draft. Read-only; never publishes | Loaded as an agent, not read as a doc | On routing |
-| `agents/geo-mirror-refresh.md` | The mirror-refresh agent: refresh the "- new" Notion mirrors or mirror a space into a Notion page, then report what changed. Reads Geo, writes Notion, never publishes | Loaded as an agent | On routing |
-| `agents/MD-FILES.md` | This manifest | Maintainers; agents looking for the right document | On demand |
-
-## 3. Skills — `skills/`
+## 2. Skills — `skills/`
 
 Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `description`). The description decides when a skill is triggered. Versions below were current on **18 September 2026** (re-checked after the 18 Sep merge); `skills/versions.md` holds the changelog and `skills/SKILL-VERSIONS.json` the approved hashes.
 
@@ -77,7 +67,7 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `skills/non-actionable/geo-claim-grouping-notion/references/column-contract.md` | Which Notion columns the grouping results are written into |
 | `skills/non-actionable/ontology-advisor/README.md` | How to run the ontology-advisor scripts |
 
-## 4. Ontology and standards — the judgment layer
+## 3. Ontology and standards — the judgment layer
 
 | File | Contents | Read by | Trigger |
 |---|---|---|---|
@@ -85,7 +75,7 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `knowledge-graph-ontology.md` | The ontology specification: entities, properties, relations, data types, spaces. Structural reference behind the SDK | Data and schema agents | On demand |
 | `skill-dev/skill-quality-check/references/skill-quality-standard.md` | The skill authoring and validation standard the linter enforces | Anyone writing or reviewing a skill | On demand |
 
-## 5. Maintainer documents — not agent instructions
+## 4. Maintainer documents — not agent instructions
 
 | File | Contents |
 |---|---|
@@ -93,31 +83,22 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `skills/versions.md` | Per-skill changelog: what changed, why, and the evidence. Paired with `SKILL-VERSIONS.json` |
 | `skill-dev/README.md` | Maintainer tooling: version manifest generator, quality linter, `sync-skills.sh` |
 | `MAINTAINERS.md` | What belongs in this repository (the bucket list), how to change a skill, how to cut a release |
+| `MD-FILES.md` | This manifest |
 | `skill-dev/skill-quality-check/SKILL.md` | The linter itself, packaged as a skill |
 
-## 6. Project documentation — `documentation/`
-
-| File | Contents |
-|---|---|
-| `documentation/research-agent-mvp.md` | The geo-research agent spec: scope, inputs, outputs, acceptance |
-| `documentation/research-agent-allowlist.md` | The trusted-sources allowlist the research agent must stay inside |
-| `documentation/research-agent-source-policy.md` | How sources are judged, cited and ranked |
-
-## 7. Not distributed — run artifacts
+## 5. Not distributed — temporary
 
 | File | Why it is excluded |
 |---|---|
-| `output/fix_properties/ASSIGNMENTS.md` and `output/fix_properties/<id>/README.md` (8 files) | Output of one past cleanup run. Historical evidence, not instructions |
-| `todo.md` | A scratch note |
 | `audit/` and `audit-2/` (46 files, listed by pattern) | Working notes behind the migration to `geo-agents`. Temporary: removed when the migration is finished |
 
 ---
 
 ## Keeping this current
 
-- **CI enforces this file.** `python3 skill-dev/check_md_manifest.py` fails if a tracked `.md` is missing here, if a listed file no longer exists, or if a `SKILL.md` version differs from the one recorded above. It runs on every PR touching `skills/` or `agents/`, so run it before you push.
+- **CI enforces this file.** `python3 skill-dev/check_md_manifest.py` fails if a tracked `.md` is missing here, if a listed file no longer exists, or if a `SKILL.md` version differs from the one recorded above. It runs on every pull request as part of the required `verify` check, so run it before you push.
 - **Adding an MD file:** add a row here in the same pass, and a row in the Notion catalog only if agents outside this repo need to find it.
 - **Changing a skill:** bump `version` in its `SKILL.md`, add a line to `skills/versions.md`, regenerate `skills/SKILL-VERSIONS.json`, and update the version in section 3.
 - **Before trusting an install:** compare the installed `SKILL.md` version with this file. A mismatch means the install is stale — run `bash skill-dev/sync-skills.sh` and restart the host. Two agents running different versions of the same skill will overwrite each other's work.
 
-*Counts on 13 October 2026: **110** tracked `.md` files — 2 entry points, 5 agent contracts, 15 skills, 21 skill reference files, 3 ontology/standard documents, 5 maintainer documents, 3 project documents, 9 run artifacts, 1 scratch note and 46 migration working notes. Every tracked file appears in exactly one section above.*
+*Counts on 14 October 2026: **93** tracked `.md` files — 2 entry points, 15 skills, 21 skill reference files, 3 ontology/standard documents, 6 maintainer documents and 46 migration working notes. Every tracked file appears in exactly one section above. The agents, their workflow guide and the research documents moved to `geo-agents` in migration step 6.*
