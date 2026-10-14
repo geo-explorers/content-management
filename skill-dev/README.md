@@ -12,13 +12,13 @@ python3 skill-dev/skill-quality-check/scripts/check_skill.py skills/<tier>/<skil
 
 # 2. (required) bump version + add a versions.md changelog bullet  — see ../skills/versions.md
 
-# 3. (required) re-approve: regenerate the integrity manifest and stage it IN THE SAME COMMIT
+# 3. (required) re-approve: commit the skill change, then regenerate the manifest and commit it IN THE SAME PULL REQUEST
 python3 skill-dev/skill_versions.py generate
 python3 skill-dev/skill_versions.py verify        # must print "✅ All skills match"
 git add skills/SKILL-VERSIONS.json
 ```
 
-Skip step 3 and CI's `verify-skills` job rejects the PR as `DRIFT` (you changed a skill) or `UNLISTED` (you added one). The manifest **must** be committed together with the skill change. Details below.
+Skip step 3 and CI's `verify-skills` job rejects the PR as `DRIFT` (you changed a skill) or `UNLISTED` (you added one). The manifest **must** be committed in the same pull request as the skill change. The full procedure, including adding a new skill, is in [`../MAINTAINERS.md`](../MAINTAINERS.md). Details below.
 
 ---
 
@@ -57,4 +57,4 @@ python3 skill-dev/skill_versions.py generate   # updates skills/SKILL-VERSIONS.j
 python3 skill-dev/skill_versions.py verify     # exit 0 = all match, 1 = drift
 ```
 
-`verify` reports per skill: `OK` · `DRIFT` (modified since approval) · `MISSING` · `UNLISTED`. **CI runs it on every PR** (`.github/workflows/verify-skills.yml`) — any unreviewed change to a shipped skill fails the build. Re-run `generate` whenever you intentionally approve a change, and commit the updated manifest in the same commit.
+`verify` reports per skill: `OK` · `DRIFT` (modified since approval) · `MISSING` · `UNLISTED`. **CI runs it on every PR** (`.github/workflows/verify-skills.yml`) — any unreviewed change to a shipped skill fails the build. Re-run `generate` whenever you intentionally approve a change, and commit the updated manifest in the same pull request.

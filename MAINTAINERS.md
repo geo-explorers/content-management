@@ -133,6 +133,20 @@ Every change under `skills/` or `skill-dev/` goes through a pull request. Nothin
 
 What the `verify` check proves: every skill folder matches the content fingerprint recorded for it in `skills/SKILL-VERSIONS.json`, and every Markdown file is listed in the manifest. A skill edited without step 6 fails as `DRIFT`; a new skill fails as `UNLISTED`. The fingerprint covers the skill folders only, not the shared code in `src/`, `lib/` and `scripts/`.
 
+### Adding a skill
+
+Everything in "Changing a skill" applies, plus:
+
+- **Pick the tier.** `skills/actionable/` if the skill can change Geo, otherwise `skills/non-actionable/`.
+- **Frontmatter.** `SKILL.md` starts with `name`, a `description` that carries the phrases that should trigger it, and `version: 0.1.0`.
+- **List it.** Add a row to the index in `skills/README.md`, a section in `skills/versions.md`, and a row in `agents/MD-FILES.md` for every new Markdown file.
+- **Route to it,** if editors should be sent to it by default: add a row to the routing table in `CLAUDE.md`.
+- **Expect `UNLISTED`.** `verify` reports the new skill as unlisted until the manifest is regenerated in step 6.
+
+### A skill built for one agent
+
+A skill that only one agent needs starts in that agent's folder in `geo-agents` (`agents/<name>/`). It moves into this library once it is stable and has been evaluated, following "Adding a skill". This keeps unproven skills out of the release that every agent pins.
+
 ### How a change reaches the people and agents who use it
 
 - **Nothing downloads skills while it runs.** No agent fetches or overwrites skill files during a task. If a skill is missing, the agent stops and asks a person.

@@ -38,3 +38,19 @@ Two rules that come from those files and are easy to get wrong:
 3. **Deletion is the highest-risk operation — treat it as a red line.** NEVER hand-write a delete, and NEVER write a loop that deletes many entities (an improvised script once mass-deleted an entire personal space). Any delete/merge/cleanup MUST go through **geo-clean**, which runs an orphan check + explicit human confirmation first. As a backstop, `publishOps` refuses any batch that removes data from more than ~50 relations/values unless `CONFIRM_DESTRUCTIVE=1` is set — **do not set that flag to route around the skill.** If a user asks to "clear/delete/reset my space", route to geo-clean; do not build it yourself.
 
 4. **Secrets:** never read, print, or accept the user's private key — see the security contract in `README.md`.
+
+## Changing, adding or releasing a skill
+
+This applies when the task is to **edit the skills themselves**, not to use them. Read [`MAINTAINERS.md`](MAINTAINERS.md) first: "Changing a skill", "Adding a skill" and "Cutting a release". The short version:
+
+- **Every change goes through a pull request.** `main` is protected: the required `verify` check must pass and a teammate must approve. Never push to `main`.
+- **Updating a skill**, all in the same pull request:
+  1. Lint it: `python3 skill-dev/skill-quality-check/scripts/check_skill.py skills/<tier>/<skill> --format table`.
+  2. Bump `version` in its `SKILL.md`: patch for wording or a fix, minor for a new capability, major for a breaking change.
+  3. Add a dated line for it in `skills/versions.md`: what changed and why.
+  4. Update its version in `agents/MD-FILES.md`, and add a row for any new Markdown file.
+  5. Commit the change, then re-approve it: `python3 skill-dev/skill_versions.py generate`, then `python3 skill-dev/skill_versions.py verify` and `python3 skill-dev/check_md_manifest.py` must both pass. Commit `skills/SKILL-VERSIONS.json`.
+- **Adding a skill** is the same, plus: put it in `skills/actionable/` if it can change Geo, otherwise in `skills/non-actionable/`; give `SKILL.md` frontmatter with `name`, a `description` full of trigger phrases, and `version: 0.1.0`; add a row to the index in `skills/README.md`; add a section for it in `skills/versions.md`; and add a row to the routing table above if editors should be sent to it by default. `verify` reports it as `UNLISTED` until the manifest is regenerated.
+- **If `verify` reports `DRIFT` on a skill you did not mean to change, undo that change. Do not regenerate.** Regenerating approves whatever changed.
+- **A skill built for one agent starts in that agent's folder** in `geo-agents` (`agents/<name>/`), not here. It moves into this library, as a new skill, once it is stable and evaluated.
+- **A change reaches the agents only through a release.** A maintainer tags `main` (`vX.Y.Z`), and `geo-agents` takes that tag in its own pull request with `node tools/sync-skills.mjs --ref vX.Y.Z`. Never edit the copies under `geo-agents/.claude/skills/`. Never create, move or delete a release tag yourself.
