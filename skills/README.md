@@ -26,6 +26,7 @@ Skills are organized by **what they can do to Geo**, because that's the safety-c
 | **geo-clean** | Find/merge duplicates, delete orphans, fix data types, fix stale relations, etc. Safeguards before any destructive op. | Repo + wallet key |
 | **geo-orchestrate** | Editor entry point. Turns "I want to X" into a plan → generates a script → dry-run → confirm → publish. Routes to query + publish. | Repo + wallet key |
 | **geo-discovery** | Run a gap-discovery pass over a space's daily stream → ranked coverage/depth/freshness/structural/trending gaps as Gap finding entities. Read-only until the human-reviewed publish stage. | Repo (Python; publish stage needs wallet key) |
+| **geo-submission-review** | Discover and review bounty submissions, publish datasets reports, draft linked feedback and log review history; votes require editor approval. | Repo + Geo/Notion access; key for publishing |
 
 `geo-publish` is portable — one skill for Claude Code, Codex (CLI + Desktop), and Claude cowork (any local-execution agent). Browser-only assistants can't publish.
 

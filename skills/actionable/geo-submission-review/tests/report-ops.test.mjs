@@ -48,3 +48,12 @@ test('Geo publication ops exclude internal editor scoring and cap-ledger fields'
 });
 
 test('publication refuses incomplete item decisions and does not trust a ready label',()=>{const pending=structuredClone(draft);pending.readiness={complete:true};pending.review.coverage[0].outcome='unresolved';assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);pending.review.coverage[0].outcome='needs_correction';pending.review.outcome='unresolved';assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);pending.review.outcome='needs_correction';pending.review.decisionGaps=['Material bounty requirement not checked'];assert.throws(()=>buildReportOps(pending,plan,sdk.Graph),/needs investigation/);});
+
+test('published Issue property and full finding expose process, correction and prevention guidance',()=>{
+ const input=structuredClone(draft),f=input.review.findings[0];
+ f.processQuestion='How did you check this against the source?';f.repairRequest='Please restore the original qualifier.';f.prevention='Compare qualifiers with the source before submitting.';
+ const out=buildReportOps(input,plan,sdk.Graph),values=out.ops.flatMap(o=>o.values??o.set??[]);
+ const issue=values.find(v=>v.property==='6bb3a7b114ac5582af25aeb811115301').value.value;
+ const body=values.filter(v=>v.property==='e3e363d1dd294ccb8e6ff3b76d99bc33').map(v=>v.value.value).find(text=>text.includes('## Full original statement'));
+ for(const text of [f.issue,f.processQuestion,f.repairRequest,f.prevention]){assert.ok(issue.includes(text));assert.ok(body.includes(text));}
+});

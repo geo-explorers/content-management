@@ -4,7 +4,7 @@ import {createRequire} from 'node:module';
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
-import {stableId,normalizeId,atomicJson,reviewReadiness} from './review-core.mjs';
+import {stableId,normalizeId,atomicJson,reviewReadiness,findingIssue,usesRoutineIntroduction} from './review-core.mjs';
 const P={related:'dfa6aebe1ca94bf29faccc4cc7afb24c',sources:'49c5d5e1679a4dbdbfd33f618f227c94',url:'412ff593e9154012a43d4c27ec5c68b6',markdown:'e3e363d1dd294ccb8e6ff3b76d99bc33',blocks:'beaba5cba67741a8b35377030613fc70',columns:'01412f8381894ab1836565c7fd358cc1',types:'8f151ba4de204e3c9cb499ddf96f48f1',sourceType:'1f69cc9880d444abad493df6a7b15ee4',item:'a99f9ce12ffa4dac8c61f6310d46064a',view:'1907fd1c81114a3ca378b1f353425b65',original:'5d4dda664938562da3eec5bc6017c04c',excerpt:'4ecf5a8df4e45301a72b9c29d59f3f7a',issue:'6bb3a7b114ac5582af25aeb811115301',evidence:'77508faa156b5802a5e46147f5fbd8a1'};
 const T={page:'480e3fc267f3499385fbacdf4ddeaa6b',finding:'b14985a95e0c5a3ca872f29e22719ace',text:'76474f2f00894e77a0410b39fb17d0bf',data:'b8803a8665de412bbb357e0c84adf473',source:'706779bf537744a68694ea06cf87a3a2'};
 const hex=x=>Buffer.from(x).toString('hex');
@@ -29,7 +29,16 @@ export function buildReportOps(draft,plan,Graph){
   function text(parent,slug,body,position){const id=stableId(pageId+':text:'+slug);create(id,undefined,T.text,[val(P.markdown,body)]);rel(parent,P.blocks,id,{position});return id;}
   if(plan.addIssueToFindingSchema){rel(T.finding,P.columns,P.issue);}
   create(pageId,draft.title,T.page);
-  const intro=draft.review.findings.length?draft.markdown.split('## Review feedback')[0]+'## Review feedback\n\nOpen each review in the table below to see the full details, including the original statement, the issue and supporting sources.\n':draft.markdown;
+  let intro;
+  if(usesRoutineIntroduction(draft.reviewScope??{})){
+    if(draft.introductionLayout!=='routine-three-bullets-v1'||typeof draft.introduction!=='string')throw Error('Routine reports need the three-bullet introduction');
+    const lines=draft.introduction.trim().split('\n');
+    if(lines.length!==3||lines.some((line,i)=>!line.startsWith(['- **Acceptance:** ','- **Rejection:** ','- **Feedback:** '][i])||!line.split('** ')[1]?.trim()))throw Error('Routine report text area must contain exactly the acceptance, rejection and feedback bullets');
+    intro=draft.introduction;
+  }else{
+    intro=draft.review.findings.length?draft.markdown.split('## Review feedback')[0].trimEnd():draft.markdown;
+    if(draft.review.findings.length&&!/Open each (?:review|finding)/i.test(intro))intro+='\n\nOpen each review in the table below to see the full details, including the original statement, the issue and supporting sources.\n';
+  }
   text(pageId,'feedback',intro,'a0');
   if(draft.review.findings.length){
     const tableId=stableId(pageId+':feedback-table');create(tableId,'Review feedback',T.data);
@@ -38,13 +47,13 @@ export function buildReportOps(draft,plan,Graph){
     draft.review.findings.forEach((f,index)=>{
       const findingId=stableId(pageId+':finding:'+f.itemId+':'+(f.issueKey??index));
       const item=plan.items[f.itemId];if(!item?.proposalUrl||!item.name||!item.spaceId)throw Error('Pending/live item identity and proposal URL must be captured');
-      create(findingId,item.name+' — review feedback',T.finding,[val(P.original,f.originalRef?f.original:'Not supplied — '+f.missingRequirement),val(P.excerpt,f.excerpt||'Not applicable — missing field'),val(P.issue,f.issue),val(P.evidence,f.evidenceDetail)]);
+      create(findingId,item.name+' — review feedback',T.finding,[val(P.original,f.originalRef?f.original:'Not supplied — '+f.missingRequirement),val(P.excerpt,f.excerpt||'Not applicable — missing field'),val(P.issue,findingIssue(f)),val(P.evidence,f.evidenceDetail)]);
       rel(findingId,P.related,f.itemId,{toSpace:item.spaceId});rel(tableId,P.item,findingId,{position:'a'+index});
       for(const citation of f.citations){const source=plan.citations[citation.url];if(!source?.entityId||!source.spaceId||!['verified_live','captured_pending'].includes(source.state))throw Error('Citation target identity/provenance required: '+citation.url);
         rel(findingId,P.sources,source.entityId,{toSpace:source.spaceId,identityKey:citation.url,entityTypes:[T.source],entityValues:[val(P.url,citation.url)]});
       }
       const citations=f.citations.map(c=>'['+c.locator+']('+c.url+')').join('\n\n');
-      text(findingId,'finding:'+f.itemId,`## Entity\n\n[${item.name}](${item.proposalUrl})\n\n${item.state==='captured_pending'?'Submitted content is captured in the linked proposal; a live item page was not verified.\n\n':''}## Full original statement\n\n${f.originalRef?f.original:'Not supplied — '+f.missingRequirement}\n\n## Exact excerpt under review\n\n${f.excerpt||'Not applicable — missing field'}\n\n## Issue\n\n${f.issue}\n\n## Citations for quality checks\n\n${citations}\n\n## Relevant quote or evidence detail\n\n${f.evidenceDetail}`,'a0');
+      text(findingId,'finding:'+f.itemId,`## Entity\n\n[${item.name}](${item.proposalUrl})\n\n${item.state==='captured_pending'?'Submitted content is captured in the linked proposal; a live item page was not verified.\n\n':''}## Full original statement\n\n${f.originalRef?f.original:'Not supplied — '+f.missingRequirement}\n\n## Exact excerpt under review\n\n${f.excerpt||'Not applicable — missing field'}\n\n## Issue\n\n${findingIssue(f)}\n\n## Citations for quality checks\n\n${citations}\n\n## Relevant quote or evidence detail\n\n${f.evidenceDetail}`,'a0');
     });
   }
   for(const op of ops)if(['deleteEntity','deleteRelation'].includes(op.type)||op.unset?.length)throw Error('Report create draft must not remove existing data');

@@ -176,7 +176,21 @@ export function recordReview(state,review){
       if(cap.priorPoints!==null&&cap.priorPoints!==undefined&&(!Number.isFinite(cap.priorPoints)||cap.priorPoints<0||!cap.period||!cap.evidence?.length))throw Error('Known cap usage needs a period and ledger evidence');
     }
   }
-  const findings=review.findings??[];if(findings.length>5)throw Error('Show at most five distinct priority problems');
+  const findings=review.findings??[];
+  if(review.recipientSummary){
+    for(const key of ['acceptance','rejection','feedback'])if(typeof review.recipientSummary[key]!=='string'||!review.recipientSummary[key].trim()||/[\r\n]/.test(review.recipientSummary[key]))throw Error('Recipient summary needs three nonempty, single-paragraph fields: acceptance, rejection and feedback');
+  }
+  // Legacy reviews stay readable; newly authored reviews use the category contract.
+  if(review.feedbackPolicy==='error_types_v1'){
+    const kinds=review.verifiedErrorKinds;
+    if(!Array.isArray(kinds)||kinds.some(k=>typeof k!=='string'||!k.trim())||new Set(kinds).size!==kinds.length)throw Error('List each verified error type once');
+    if(findings.length!==kinds.length||new Set(findings.map(f=>f.errorKind)).size!==findings.length||kinds.some(k=>!findings.some(f=>f.errorKind===k)))throw Error('Feedback must cover every verified error type, with one example per type');
+    for(const f of findings){
+      if(!f.processQuestion?.trim()||!f.prevention?.trim()||typeof f.repairEligible!=='boolean')throw Error('Each error type needs a neutral process question, prevention step and explicit repair eligibility');
+      if(f.repairEligible&&!f.repairRequest?.trim())throw Error('Eligible repairs need a specific correction request');
+      if(!f.repairEligible&&f.repairRequest?.trim())throw Error('Do not request futile repairs to independently ineligible work');
+    }
+  }else if(review.feedbackPolicy)throw Error('Unknown feedback policy');
   for(const f of findings){
     if(!f.issue||!f.citations?.length||!f.evidenceDetail||!f.itemId||!c.itemIds.includes(f.itemId))throw Error('Incomplete finding or item outside case');
     if(f.originalRef){if(!c.proposalIds.includes(f.originalRef.proposalId))throw Error('Original text comes from another case');if(submittedText(state,f.originalRef)!==f.original)throw Error('Original text is not verbatim');if(!f.excerpt||!f.original.includes(f.excerpt))throw Error('Disputed excerpt is not verbatim');}
@@ -192,6 +206,9 @@ export function recordReview(state,review){
 }
 
 const esc = s => String(s??'').replaceAll('|','\\|').replaceAll('\n','<br>');
+export function findingIssue(f){
+  return [f.issue,f.processQuestion,f.repairRequest,f.prevention].filter(Boolean).join('\n\n');
+}
 function recipientAssessment(review){
   const assessment={
     meets_requirements:'The submission meets the requirements checked in this review.',
@@ -203,6 +220,26 @@ function recipientAssessment(review){
   return assessment+detail;
 }
 const recipientDate = timestamp => new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(timestamp));
+export const usesRoutineIntroduction = c => c.family==='routine'&&['news','x','blog'].includes(c.kind)&&new Set(c.itemIds??[]).size>1;
+export function routineIntroduction(c){
+  const summary=c.review.recipientSummary;
+  let acceptance,rejection,feedback;
+  if(summary){({acceptance,rejection,feedback}=summary);}
+  else{
+    const coverage=c.review.coverage??[],passing=coverage.filter(r=>r.selection?.outcome==='qualifies'),failing=coverage.filter(r=>r.selection?.outcome==='does_not_qualify');
+    const names=rows=>rows.every(r=>r.recipientName||r.itemName)?rows.map(r=>String(r.recipientName??r.itemName).replace(/\s+/g,' ').trim()).join(', '):null;
+    const selected=names(passing),rejected=names(failing),decisions=c.editorDecisions??[];
+    const passedVotes=passing.length&&passing.every(r=>decisions.some(d=>d.kind==='vote'&&d.status==='verified'&&d.fingerprint===c.fingerprint&&d.itemId===r.itemId&&d.vote==='YES'));
+    const published=passedVotes&&passing.every(r=>decisions.some(d=>d.kind==='vote'&&d.status==='verified'&&d.fingerprint===c.fingerprint&&d.itemId===r.itemId&&d.vote==='YES'&&d.executed===true));
+    const rejectedVotes=failing.length&&failing.every(r=>decisions.some(d=>d.kind==='vote'&&d.status==='verified'&&d.fingerprint===c.fingerprint&&d.itemId===r.itemId&&d.vote==='NO'));
+    acceptance=passing.length?(published?'Published: ':passedVotes?'Voted to accept; publication is pending: ':'Recommended for acceptance: ')+(selected??'the qualifying submissions')+'.':'None passed the selection review.';
+    rejection=failing.length?(rejectedVotes?'NO votes recorded: ':'Recommended for rejection: ')+(rejected??'the selections that did not meet the requirements')+'. See the findings for the reasons.':'None failed the selection review.';
+    const findings=c.review.findings??[],repairs=findings.some(f=>f.repairEligible===true);
+    feedback=!reviewReadiness(c).complete?'This review is still in progress.':findings.length?'Please check your work against the bounty requirements and the checks explained in the findings. Could you explain how these issues slipped through your checks? '+(repairs?'Please correct the eligible content issues, check for similar errors throughout this submission, and strengthen your checks to prevent these issues in future work.':'Please strengthen the checks described in the findings for future submissions; no repair is requested for independently rejected work.')+' Open each finding for details.':'No issues requiring correction were found in the reviewed scope.';
+  }
+  for(const text of [acceptance,rejection,feedback])if(typeof text!=='string'||!text.trim()||/[\r\n]/.test(text))throw Error('Routine introduction needs exactly three single-paragraph bullets');
+  return `- **Acceptance:** ${acceptance.trim()}\n- **Rejection:** ${rejection.trim()}\n- **Feedback:** ${feedback.trim()}\n`;
+}
 // Decision completeness, separate from exhaustive audits and payment-ledger reconciliation.
 export function reviewReadiness(c){
   const review=c.review,blockers=[];
@@ -223,10 +260,12 @@ export function reportDraft(c){
   if(!c.review||c.review.fingerprint!==c.fingerprint)throw Error('No current recorded review');
   const title=c.curatorName+' — '+c.bountyName+' — submission review · '+c.caseKey;
   const proposalLinks=c.proposalIds.map(id=>`- [Proposal ${id.slice(0,8)}](https://www.geobrowser.io/space/${c.proposalRefs[id].spaceId}/governance?proposalId=${id})`);
-  const rows=c.review.findings.map(f=>[f.itemUrl??f.itemId,f.originalRef?f.original:'Not supplied — '+f.missingRequirement,f.excerpt||'Not applicable — missing field',f.issue,f.citations.map(x=>`[${x.locator}](${x.url})`).join('<br>'),f.evidenceDetail]);
+  const rows=c.review.findings.map(f=>[f.itemUrl??f.itemId,f.originalRef?f.original:'Not supplied — '+f.missingRequirement,f.excerpt||'Not applicable — missing field',findingIssue(f),f.citations.map(x=>`[${x.locator}](${x.url})`).join('<br>'),f.evidenceDetail]);
   const table=rows.length?'| Entity | Full original statement | Exact excerpt under review | Issue | Citations for quality checks | Relevant quote or evidence detail |\n|---|---|---|---|---|---|\n'+rows.map(r=>'| '+r.map(esc).join(' | ')+' |').join('\n'):'No supported actionable issue was established in the recorded scope.';
+  const routine=usesRoutineIntroduction(c),introduction=routine?routineIntroduction(c):undefined;
   return {schemaVersion:1,caseId:c.id,fingerprint:c.fingerprint,targetSpaceId:SPACES[c.space].datasets,pageId:c.delivery?.reportId??stableId('submission-report:'+c.id),title,publicationStatus:'draft_only',reviewScope:{itemIds:c.itemIds,kind:c.kind,family:c.family},readiness:reviewReadiness(c),review:c.review,
-    markdown:`Bounty: [${c.bountyName}](https://www.geobrowser.io/space/${c.spec.spaceId}/${c.bountyId})\n\n${recipientAssessment(c.review)}\n\nLast reviewed: ${recipientDate(c.review.checkedAt)}.\n\n## Proposals reviewed\n\n${proposalLinks.join('\n')}\n\n## Review feedback\n\n${table}\n`,
+    introductionLayout:routine?'routine-three-bullets-v1':undefined,introduction,reviewDate:recipientDate(c.review.checkedAt),
+    markdown:routine?introduction+(rows.length?'\n## Review feedback\n\n'+table+'\n':''):`Bounty: [${c.bountyName}](https://www.geobrowser.io/space/${c.spec.spaceId}/${c.bountyId})\n\n${recipientAssessment(c.review)}\n\nLast reviewed: ${recipientDate(c.review.checkedAt)}.\n\n## Proposals reviewed\n\n${proposalLinks.join('\n')}\n\n## Review feedback\n\n${table}\n`,
     findings:rows,editorDecisions:c.editorDecisions};
 }
 
@@ -260,7 +299,7 @@ export function recordDelivery(state,delivery){
 // Renderer changes, evidence-check timestamps and private scoring do not constitute
 // a new recipient review. Track the actual findings/outcome and submission scope.
 export function reviewContentHash(c){
-  return hash({fingerprint:c.fingerprint,curatorName:c.curatorName,bountyName:c.bountyName,proposalIds:c.proposalIds,itemIds:c.itemIds,outcome:c.review?.outcome,findings:c.review?.findings?.map(f=>({...f,citations:f.citations?.map(({retrievedAt,...citation})=>citation)}))});
+  return hash({fingerprint:c.fingerprint,curatorName:c.curatorName,bountyName:c.bountyName,proposalIds:c.proposalIds,itemIds:c.itemIds,outcome:c.review?.outcome,findings:c.review?.findings?.map(f=>({...f,citations:f.citations?.map(({retrievedAt,...citation})=>citation)})),...(c.review?.recipientSummary?{recipientSummary:c.review.recipientSummary}:{})});
 }
 export function prepareReportDraft(c,draftFile){
   if(!reviewReadiness(c).complete)throw Error('Final report needs investigation before draft preparation');

@@ -81,7 +81,7 @@ A tidy answer means you are set up. If the assistant improvises instead, name th
 | [geo-query](skills/non-actionable/geo-query) | Query the graph via GraphQL: lookups, search by type, relations, schema | read-only | no |
 | [ontology-advisor](skills/non-actionable/ontology-advisor) | Modeling advice: reuse vs new types, properties, duplicates | read-only | no |
 | [geo-press-review](skills/non-actionable/geo-press-review) | Compare press coverage against Geo, recommend what to publish | read-only | no |
-| [geo-submission-review](skills/non-actionable/geo-submission-review) | Review submissions across spaces; save concise, evidence-backed feedback in Notion | read-only on Geo; Notion output | no |
+| [geo-submission-review](skills/actionable/geo-submission-review) | Discover and review bounty submissions; publish Geo datasets reports, draft feedback and keep review history | actionable; editor approvals | for Geo publishing |
 | [geo-describe](skills/non-actionable/geo-describe) | Verified, original entity descriptions at scale (emits drafts) | read-only | no |
 | [image-banner-recompose](skills/non-actionable/image-banner-recompose) | Recompose any image into a Geo banner | utility | no |
 | [daily-report](skills/non-actionable/daily-report) | Internal editor routine (Notion daily update) | internal | no |
@@ -98,13 +98,19 @@ Every write to Geo is a proposal that goes through space governance: skills dry-
 
 ## Try submission reviews
 
-`geo-submission-review` v0.4.0 is available on **`all-skills` for editor testing**. Copy the complete [`skills/non-actionable/geo-submission-review/`](https://github.com/geo-explorers/content-management/tree/all-skills/skills/non-actionable/geo-submission-review) folder, including `references/` and `evals/`, into your assistant's project skills directory. Preserve any local changes when updating an existing copy. Use the `all-skills` branch for this test release.
+`geo-submission-review` v0.7.2 is an editor testing release in this pull request, targeting `all-skills`. Until it merges, use the `codex/submission-review-routine-20261003` branch. Install the complete `skills/actionable/geo-submission-review/` folder, including `references/`, `assets/`, `scripts/`, `tests/` and `evals/`. Preserve local changes when updating an existing copy. Set `GEO_CM_DIR` to the absolute path of your content-management clone so the helpers can resolve its installed SDK/decoder.
 
-Give the agent the submission links, target space, applicable requirements and a Notion destination it can write to:
+For a specified submission:
 
-> Use geo-submission-review to review [submission links] for [space] against [requirements or review intent]. Save the review in [Notion destination] and return its link.
+> Use geo-submission-review to review [submission links] for [space] against [bounty requirements or review intent]. Publish the completed report in the matching Geo datasets space and return the private editor handoff.
 
-The skill covers news, source arguments, datasets, claims, X posts and other submissions across spaces. Its default output is a short Notion page with up to five supported issues, one example per recurring problem, and a four-column evidence table. It needs access to the submissions, relevant evidence and Notion; it does not need a Geo signing key. Geo lookups can use `geo-query`. Share feedback on whether the findings are clear, supported and ready to forward to the curator.
+For a configured recurring review:
+
+> Run geo-submission-review for [space] in scheduled-review mode. Publish completed review reports and return the standard private editor handoff, following the skill’s authorization and notification rules.
+
+The skill uses `geo-query` for graph retrieval and `geo-publish` for safeguarded report publication. Routine news, X and blog batches receive three introductory bullets with full linked findings beneath them. It also prepares linked Discord feedback drafts and records completed substantive reviews in a configured Notion history database. Scheduled-review mode scans both the main and datasets spaces without accessing Discord.
+
+Each editor must establish their own identity, applicable bounty/point rules, durable configuration/state and authorized Notion history destination. Read-only intake needs no signing key; Geo publication does. Report publication, curator votes, separate execution, awards and message sending retain their own authorization boundaries. Copying the skill does not transfer another editor’s approvals or activate a schedule. Read the skill’s runtime prerequisites and unattended checks before scheduling in a new environment; general onboarding is still a supervised pilot.
 
 ---
 
