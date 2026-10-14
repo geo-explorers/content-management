@@ -6,9 +6,9 @@
 
 | If the user wants to… | Use skill |
 |---|---|
-| **publish / create / update / delete** entities, relations, or content; "add X to Geo"; "publish…"; submit a proposal | **geo-publish** |
+| **publish / create / update** entities, relations, or content; "add X to Geo"; "publish…"; submit a proposal | **geo-publish** |
 | **look up / search / inspect / query** the graph; "what type is…"; "show relations"; review or fact-check a submission | **geo-query** |
-| find/merge **duplicates**, delete orphans, fix data types, move/copy entities, clean the graph | **geo-clean** |
+| **delete** entities; find/merge **duplicates**, delete orphans, fix data types, move/copy entities, clean the graph | **geo-clean** |
 | compare external press vs Geo — "what should we publish next" | **geo-press-review** |
 | write **claim-grouping results** (exact / semantic duplicates, related, supporting / opposing) into a **Notion Claims mirror** as review columns instead of Geo proposals; "claim grouping to Notion" | **geo-claim-grouping-notion** |
 
@@ -29,7 +29,7 @@ Two rules that come from those files and are easy to get wrong:
 
 ## Hard rules
 
-1. **Never write to Geo by hand.** Any publish/create/update/delete MUST go through **geo-publish** — never write or run a raw SDK/publish script yourself. geo-publish runs the mandatory safeguards (semantic-duplicate check, schema check, type-required check, dry-run → explicit confirm). A raw script skips all of them. **One exception:** changes an editor or agent made in a mirrored Notion table (any table with a `Geo ID` column) are published with **geo-mirror Part 2** (`plan-notion-changes.mjs` → `sync-to-geo.mjs`), which has its own approval, live-value checks and dry run. Creating entities and changing relations still go through geo-publish.
+1. **Never write to Geo by hand.** Every Geo write happens inside one of four gated skill flows, each with its own dry run and the editor's explicit approval: **geo-publish** (create / update), **geo-clean** (delete, merge, clean-up — rule 3), **geo-claim-grouping** (claim edges) or **geo-mirror Part 2** (reviewed edits from a mirrored Notion table). Outside those flows, never write or run a raw SDK/publish script yourself. geo-publish runs the mandatory safeguards (semantic-duplicate check, schema check, type-required check, dry-run → explicit confirm); a raw script skips all of them. geo-publish may remove values or relations as part of an update; deleting an entity, merging, or any bulk removal goes through geo-clean. geo-mirror Part 2 (`plan-notion-changes.mjs` → `sync-to-geo.mjs`) publishes changes an editor or agent made in a mirrored Notion table (any table with a `Geo ID` column), with its own approval, live-value checks and dry run; creating entities and changing relations still go through geo-publish.
 
 2. **If the matching skill's `SKILL.md` is missing, STOP — do not improvise, and do not download a replacement yourself.** Tell the user, verbatim:
    > "The **geo-publish** skill isn't available. Run `bash skill-dev/sync-skills.sh` from this folder, restart the app (or start a new chat), then try again."
