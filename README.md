@@ -132,7 +132,7 @@ Delete an entity and all its properties/relations from a space. Optionally perfo
 const ops = await deleteEntity({
   entityId: 'ENTITY_ID',
   spaceId: 'SPACE_ID',
-  // dryRun: true,           // preview without publishing
+  // dryRun: false,          // publish (default: preview)
   // skipOrphanCleanup: true, // skip recursive orphan deletion
 });
 ```
@@ -146,7 +146,7 @@ const ops = await changeEntityId({
   oldEntityId: 'OLD_ENTITY_ID',
   newEntityId: 'NEW_ENTITY_ID',
   spaceId: 'SPACE_ID',
-  // dryRun: true,
+  // dryRun: false,
 });
 ```
 
@@ -159,7 +159,7 @@ const { createOps, deleteOps } = await changeSpace({
   entityId: 'ENTITY_ID',
   fromSpaceId: 'FROM_SPACE_ID',
   toSpaceId: 'TO_SPACE_ID',
-  // dryRun: true,
+  // dryRun: false,
 });
 ```
 
@@ -190,7 +190,7 @@ const ops = await mergeEntities({
     { entityId: 'SECONDARY_1', spaceId: 'SPACE_A' },
     { entityId: 'SECONDARY_2', spaceId: 'SPACE_B' },
   ],
-  // dryRun: true,
+  // dryRun: false,
   // addPropertiesToMain: false, // skip copying properties/relations from secondaries
 });
 ```
