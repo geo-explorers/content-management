@@ -27,9 +27,9 @@
       "content_sha256": "023b001f49241841bf0a79ca36458cf2a4c9989deb97b28d900cc69ec4a36dc3"
     },
     "actionable/geo-publish": {
-      "version": "0.11.0",
-      "approved_commit": "a2f9a153565adb926cd4d280226f5a723b7e2601",
-      "content_sha256": "2411ac99c1460e3bd8be53fcde77056cbf2a3c2febf57f883c439d3ac50476bb"
+      "version": "0.12.0",
+      "approved_commit": "ee3d0ee0c6156325b8bd73e35b25819501169dd0",
+      "content_sha256": "762afe1abd35f6ee709c76b04ad0929bb3734848ef7be379bb8b85a24f82d133"
     },
     "non-actionable/daily-report": {
       "version": "0.1.0",
