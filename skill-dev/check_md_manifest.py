@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check agents/MD-FILES.md against the repository.
+"""Check MD-FILES.md against the repository.
 
 The manifest lists every Markdown file in the repo and, for skills, its version.
 Both go stale the moment someone adds a file or bumps a version, and a stale list
@@ -20,10 +20,10 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-MANIFEST = REPO / "agents" / "MD-FILES.md"
-# Listed by pattern, not one line per file: run outputs, and the migration working
-# notes in audit/ and audit-2/ (temporary; removed when the migration is finished).
-PATTERN_COVERED = re.compile(r"^(output/fix_properties/[^/]+/README\.md|audit(-2)?/.+\.md)$")
+MANIFEST = REPO / "MD-FILES.md"
+# Listed by pattern, not one line per file: the migration working notes in audit/
+# and audit-2/ (temporary; remove this pattern when those folders are deleted).
+PATTERN_COVERED = re.compile(r"^audit(-2)?/.+\.md$")
 
 
 def tracked_md() -> list[str]:
@@ -86,9 +86,9 @@ def main() -> int:
             print(f"     {f}: manifest says {listed_v}, file says {actual_v}")
 
     if ok:
-        print(f"✅ agents/MD-FILES.md matches the repo ({len(files)} tracked .md files)")
+        print(f"✅ MD-FILES.md matches the repo ({len(files)} tracked .md files)")
         return 0
-    print("\nFix: update agents/MD-FILES.md — add the file to the right section, "
+    print("\nFix: update MD-FILES.md — add the file to the right section, "
           "or correct the version — and update the counts in its footer.")
     return 1
 

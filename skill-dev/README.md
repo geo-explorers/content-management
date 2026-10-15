@@ -34,7 +34,7 @@ The full rule set is in `skill-quality-check/references/skill-quality-standard.m
 
 ## `check_md_manifest.py` — Markdown manifest verification
 
-Checks `agents/MD-FILES.md` against the repo: every tracked `.md` is listed, no listed file has been deleted, and each `SKILL.md` version matches the one recorded. Runs in CI on changes under `skills/` or `agents/`.
+Checks `MD-FILES.md` against the repo: every tracked `.md` is listed, no listed file has been deleted, and each `SKILL.md` version matches the one recorded. Runs in CI on changes under `skills/` or `agents/`.
 
 ```bash
 python3 skill-dev/check_md_manifest.py          # exit 0 = matches, 1 = drift

@@ -100,29 +100,13 @@ Every write to Geo is a proposal that goes through space governance: skills dry-
 
 ## Agents
 
-A **skill** is a capability (any agent can load and follow one). An **agent** is a configured worker that uses skills. Definitions and the operating contract live in [`agents/`](agents):
-
-| File | Read it when |
-|---|---|
-| [`agents/AGENT-WORKFLOW.md`](agents/AGENT-WORKFLOW.md) | **Always, before doing any work in the Agents flow Notion teamspace.** The operating contract: the mandatory task lifecycle (log the task → `In progress` → do the work → write the result **and a link to where it lives** → `Done`), the Work tracker and QA issue tracker schemas with their exact option values, the hard rules, and the known traps. |
-| [`agents/MD-FILES.md`](agents/MD-FILES.md) | To find the right document: every Markdown file in this repo, its contents, who reads it and when it loads. |
-| [`agents/README.md`](agents/README.md) | Before **creating or installing** an agent — file format, install paths, and the index of agents that already exist. Check whether one already covers the job before writing a new one. |
-
-Two rules that are easy to miss and cost real time:
-- **Log the task before you start**, with `Projects` set to **Agent flows** — every tracker view filters on it, so a task without it is created but invisible to the team.
-- **Problems go in the QA issue tracker** with severity, urgency and evidence — never buried in a task note.
-
-The agent definitions themselves (e.g. `agents/geo-research.md`) use Claude Code's `name` / `description` / `tools` frontmatter, but the **body is plain instructions** — any agent runtime can follow it. Port the frontmatter to your own format if you're not on Claude Code.
+A **skill** is a capability (any agent can load and follow one). An **agent** is a configured worker that uses skills. The agents, their operating contract for the Agents flow Notion teamspace, and the tracker ids live in [geo-explorers/geo-agents](https://github.com/geo-explorers/geo-agents). That repository carries a copy of these skills pinned to one release of this library, and checks the copy against a lock file at the start of every run.
 
 ---
 
-## Entity operations toolkit (engineering reference)
+## Shared code reference (engineering)
 
-All operations live in `01_entity_operations.ts`. Uncomment the operation you want, fill in the IDs, and run:
-
-```bash
-bun run 01_entity_operations.ts
-```
+The functions below live in `src/entity_ops.ts` and are what the **geo-clean** skill uses for deletes, ID changes, moves and merges. **Do not call them by hand:** every delete, merge or move goes through geo-clean, which runs the orphan check, the dry run and the human confirmation first (hard rule 3 in `CLAUDE.md`).
 
 ### 1. Delete Entity
 
@@ -195,43 +179,24 @@ const ops = await mergeEntities({
 });
 ```
 
-## Find Duplicates
-
-`02_find_duplicates.ts` scans a ranked list of spaces for Type and Property entities with duplicate names (case-insensitive). For each duplicate group it identifies a main entity (by space rank, then backlink count) and lists secondaries. For Property entities it also displays the data type and flags mismatches.
-
-```bash
-bun run 02_find_duplicates.ts
-```
-
-## Auto-Merge Duplicates
-
-`03_merge_duplicates.ts` combines duplicate detection with automatic merging. It finds all duplicate Type and Property entities, then calls `mergeEntities` for each group. Property duplicates with data type mismatches are skipped. All ops are batched and published once per space.
-
-```bash
-bun run 03_merge_duplicates.ts
-```
-
-Set `DRY_RUN = true` at the top of the file to preview without publishing.
-
 ## Project Structure
 
 ```
 CLAUDE.md                   # Skill routing + hard rules — applies to ANY agent, not just Claude
+MAINTAINERS.md              # What belongs here, how to change a skill, how to cut a release
+MD-FILES.md                 # Manifest of every .md file in this repo
 skills/
   actionable/               # Skills that write to Geo (need GEO_PRIVATE_KEY)
   non-actionable/           # Read-only skills (no key)
-agents/
-  MD-FILES.md               # Manifest of every .md file in this repo
-  AGENT-WORKFLOW.md         # Operating contract: task lifecycle, trackers, hard rules, traps
-  README.md                 # Agent format, install paths, index of existing agents
-01_entity_operations.ts     # Entry point — uncomment an operation and run
-02_find_duplicates.ts       # Find duplicate Type/Property entities across spaces
-03_merge_duplicates.ts      # Auto-merge detected duplicates
+  SKILL-VERSIONS.json       # Approved fingerprint of every skill, checked by CI
+skill-dev/                  # Linter, manifest tools, local install script
 lib/gql.mjs                 # Canonical zero-dependency GraphQL client
 src/
-  entity_ops.ts             # Core operation logic (delete, move, merge, migrate)
+  entity_ops.ts             # Core operation logic (delete, move, merge, migrate), used by geo-clean
   constants.ts              # Ontology IDs (types, properties, data types, views)
   functions.ts              # Shared helpers (GraphQL client, publishing, ops serialization)
+scripts/                    # Shared scripts that skills call
+validate_migration.ts       # Post-merge verification, used by geo-clean
 knowledge-graph-ontology.md # Full ontology specification
 ```
 
