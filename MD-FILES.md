@@ -86,12 +86,6 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 | `MD-FILES.md` | This manifest |
 | `skill-dev/skill-quality-check/SKILL.md` | The linter itself, packaged as a skill |
 
-## 5. Not distributed — temporary
-
-| File | Why it is excluded |
-|---|---|
-| `audit/` and `audit-2/` (46 files, listed by pattern) | Working notes behind the migration to `geo-agents`. Temporary: removed when the migration is finished |
-
 ---
 
 ## Keeping this current
@@ -101,4 +95,4 @@ Each skill is one `SKILL.md` with YAML frontmatter (`name`, `version`, `descript
 - **Changing a skill:** bump `version` in its `SKILL.md`, add a line to `skills/versions.md`, regenerate `skills/SKILL-VERSIONS.json`, and update the version in section 3.
 - **Before trusting an install:** compare the installed `SKILL.md` version with this file. A mismatch means the install is stale — run `bash skill-dev/sync-skills.sh` and restart the host. Two agents running different versions of the same skill will overwrite each other's work.
 
-*Counts on 14 October 2026: **93** tracked `.md` files — 2 entry points, 15 skills, 21 skill reference files, 3 ontology/standard documents, 6 maintainer documents and 46 migration working notes. Every tracked file appears in exactly one section above. The agents, their workflow guide and the research documents moved to `geo-agents` in migration step 6.*
+*Counts on 15 October 2026: **47** tracked `.md` files — 2 entry points, 15 skills, 21 skill reference files, 3 ontology/standard documents and 6 maintainer documents. Every tracked file appears in exactly one section above. The agents, their workflow guide and the research documents moved to `geo-agents` in migration step 6; the migration's working notes were removed when it finished.*
