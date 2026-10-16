@@ -32,7 +32,7 @@ Two rules from that guide that are easy to get wrong:
 
 3. **Deletion is the highest-risk operation — treat it as a red line.** NEVER hand-write a delete, and NEVER write a loop that deletes many entities (an improvised script once mass-deleted an entire personal space). Any delete/merge/cleanup MUST go through **geo-clean**, which runs an orphan check + explicit human confirmation first. As a backstop, `publishOps` refuses any batch that removes data from more than ~50 relations/values unless `CONFIRM_DESTRUCTIVE=1` is set — **do not set that flag to route around the skill.** If a user asks to "clear/delete/reset my space", route to geo-clean; do not build it yourself.
 
-4. **Secrets:** never read, print, or accept the user's private key — see the security contract in `README.md`.
+4. **Secrets:** never read, print, or accept the user's private key — see the security contract in `README.md`. `.claude/settings.json` blocks reading `.env`, so a blocked `.env` check does not mean the key is missing: say the check was blocked and carry on. The publish itself is the real test.
 
 ## Changing, adding or releasing a skill
 
